@@ -1,0 +1,456 @@
+You are a Senior Product Manager, Solutions Architect, AI Product Designer, UX Expert, and OpenClaw Multi-Agent Systems Architect.
+
+Your task is NOT to write source code.
+
+Your task is to create the official Product Requirements Document (PRD) for the AI ecosystem of FreelancifyHub.
+
+Project Name:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+Marketplace Type:
+AI-powered Freelance Marketplace
+
+Existing Marketplace Flow:
+
+1. User signs up.
+2. User selects one role:
+   - Client
+   - Freelancer
+
+CLIENT FLOW
+
+- Create profile
+- Post project
+- AI improves project description
+- AI suggests budget
+- AI suggests required skills
+- AI estimates timeline
+- AI calculates Project Success Score
+- Receive bids
+- Review freelancer profiles
+- Accept or reject bids
+- Pay using Stripe
+- Funds remain in escrow
+- Chat with freelancer
+- Review submitted work
+- Release payment
+- Platform fee deducted
+- Leave review
+
+FREELANCER FLOW
+
+- Create profile
+- Complete portfolio
+- Upload skills
+- AI optimizes profile
+- AI recommends projects
+- Submit proposal
+- AI generates proposal
+- Chat with client
+- Deliver project
+- Receive released payment
+- View earnings analytics
+- Receive AI career recommendations
+
+ADMIN FLOW
+
+- Manage users
+- Manage projects
+- Manage payments
+- Manage disputes
+- Review fraud alerts
+- Review analytics
+- Manage AI agents
+- View platform insights
+
+----------------------------------------------------
+
+YOUR TASK
+
+Create a production-grade PRD.
+
+DO NOT WRITE CODE.
+
+Use Markdown.
+
+Create diagrams using Mermaid.
+
+The PRD must become the official functional specification for the project.
+
+----------------------------------------------------
+
+Include ALL of the following sections.
+
+# Executive Summary
+
+# Vision
+
+# Business Goals
+
+# User Personas
+
+- Client
+- Freelancer
+- Admin
+
+# Marketplace Journey
+
+Detailed end-to-end flow.
+
+# Client Journey
+
+Describe every page.
+
+For every page include:
+
+Purpose
+
+User Goals
+
+Business Goals
+
+AI Features
+
+UI Components
+
+Validation
+
+Success Criteria
+
+Edge Cases
+
+Errors
+
+Future Enhancements
+
+----------------------------------------------------
+
+Pages include:
+
+Landing Page
+
+Signup
+
+Login
+
+Client Dashboard
+
+Create Project
+
+Project Details
+
+Edit Project
+
+Bids
+
+Hire Freelancer
+
+Payments
+
+Messages
+
+Reviews
+
+Settings
+
+Notifications
+
+Analytics
+
+----------------------------------------------------
+
+# Freelancer Journey
+
+Describe every page.
+
+Include:
+
+Purpose
+
+AI Features
+
+Business Rules
+
+Success Criteria
+
+Validation
+
+Errors
+
+Future Features
+
+Pages:
+
+Dashboard
+
+Profile
+
+Portfolio
+
+Skills
+
+Projects
+
+Project Details
+
+Proposal
+
+Messages
+
+Payments
+
+Analytics
+
+Reviews
+
+Settings
+
+Notifications
+
+----------------------------------------------------
+
+# Admin Journey
+
+Describe:
+
+Dashboard
+
+User Management
+
+Project Management
+
+Payment Management
+
+Dispute Center
+
+Fraud Center
+
+AI Management
+
+Analytics
+
+Reports
+
+System Settings
+
+----------------------------------------------------
+
+# AI Features
+
+For every feature include:
+
+Purpose
+
+Inputs
+
+Outputs
+
+Trigger
+
+Business Rules
+
+Permissions
+
+Limitations
+
+Future Ideas
+
+----------------------------------------------------
+
+Features include:
+
+Project Description AI
+
+Budget Estimator
+
+Timeline Estimator
+
+Skill Suggestions
+
+Project Success Score
+
+Proposal Writer
+
+Profile Optimizer
+
+Portfolio Generator
+
+Resume Builder
+
+Cover Letter Generator
+
+Project Matching
+
+Review Generator
+
+Contract Generator
+
+Milestone Generator
+
+Scam Detection
+
+Dispute Assistant
+
+Support Assistant
+
+Marketing Assistant
+
+SEO Assistant
+
+Email Assistant
+
+Analytics Assistant
+
+Career Advisor
+
+----------------------------------------------------
+
+# Business Rules
+
+Define every important marketplace rule.
+
+Projects
+
+Bids
+
+Payments
+
+Escrow
+
+Refunds
+
+Disputes
+
+Reviews
+
+Ratings
+
+Messaging
+
+Notifications
+
+AI Usage
+
+Rate Limits
+
+Premium Features
+
+Free Plan
+
+Pro Plan
+
+Admin Permissions
+
+----------------------------------------------------
+
+# Functional Requirements
+
+Use MoSCoW Prioritization.
+
+Must Have
+
+Should Have
+
+Could Have
+
+Won't Have (v1)
+
+----------------------------------------------------
+
+# Non Functional Requirements
+
+Performance
+
+Security
+
+Scalability
+
+Reliability
+
+Availability
+
+Maintainability
+
+Accessibility
+
+Localization
+
+Monitoring
+
+Observability
+
+----------------------------------------------------
+
+# Success Metrics
+
+Business KPIs
+
+AI KPIs
+
+Marketplace KPIs
+
+User KPIs
+
+----------------------------------------------------
+
+# Risks
+
+Technical Risks
+
+Business Risks
+
+Security Risks
+
+Legal Risks
+
+Mitigation Plans
+
+----------------------------------------------------
+
+# Roadmap
+
+Phase 1
+
+Phase 2
+
+Phase 3
+
+Phase 4
+
+Phase 5
+
+----------------------------------------------------
+
+# Acceptance Criteria
+
+Write measurable acceptance criteria for every major feature.
+
+----------------------------------------------------
+
+# Glossary
+
+----------------------------------------------------
+
+Formatting Requirements
+
+- Professional Markdown
+- Mermaid diagrams
+- Tables where useful
+- Callout blocks
+- Best Practices
+- Future Recommendations
+
+The output must be production-ready documentation.
+
+Create the file:
+
+docs/product-requirements-v1.md
+
+Update README if needed.
+
+Do not generate implementation code.
+
+Only create the official PRD.

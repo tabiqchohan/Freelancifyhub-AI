@@ -1,0 +1,572 @@
+You are a Principal AI Systems Architect, Enterprise Integration Architect, OpenClaw Multi-Agent Expert, Platform Engineer, API Architect, Security Architect, and Technical Documentation Specialist.
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+====================================================================
+
+SOURCE OF TRUTH
+
+Read and follow these documents before making any decisions.
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+
+These documents are authoritative.
+
+Never contradict them.
+
+Never invent business logic.
+
+Never redesign the architecture.
+
+If information is missing:
+
+Document assumptions.
+
+Never guess.
+
+====================================================================
+
+YOUR TASK
+
+Create
+
+docs/tool-registry-architecture-v1.md
+
+This is NOT implementation.
+
+This is NOT code.
+
+This is the official engineering specification for
+
+AG-004 Tool Manager
+
+and the complete Tool Registry.
+
+====================================================================
+
+OBJECTIVE
+
+Design the complete tool ecosystem used by every AI agent.
+
+This document becomes the implementation contract.
+
+====================================================================
+
+Include ALL sections below.
+
+# Executive Summary
+
+Purpose
+
+Scope
+
+Business Value
+
+Responsibilities
+
+Non Responsibilities
+
+====================================================================
+
+# Tool Philosophy
+
+Explain:
+
+Why tools exist
+
+Tool isolation
+
+Least privilege
+
+Safety
+
+Reliability
+
+Versioning
+
+====================================================================
+
+# High-Level Architecture
+
+Use Mermaid.
+
+Show
+
+User
+
+↓
+
+Master Orchestrator
+
+↓
+
+Tool Manager
+
+↓
+
+Tool Registry
+
+↓
+
+External Services
+
+====================================================================
+
+# Tool Categories
+
+Define all categories.
+
+Core Tools
+
+Memory Tools
+
+Knowledge Tools
+
+Database Tools
+
+Payment Tools
+
+Messaging Tools
+
+Notification Tools
+
+Analytics Tools
+
+Storage Tools
+
+Search Tools
+
+Security Tools
+
+Monitoring Tools
+
+Admin Tools
+
+Future Tools
+
+====================================================================
+
+For EVERY tool category include:
+
+Purpose
+
+Responsibilities
+
+Business Value
+
+Supported Operations
+
+Dependencies
+
+Failure Modes
+
+Security Requirements
+
+Performance Requirements
+
+====================================================================
+
+# Official Tool Registry
+
+Create an official registry.
+
+Each tool must include:
+
+Tool ID
+
+Tool Name
+
+Version
+
+Owner
+
+Status
+
+Category
+
+Purpose
+
+Capabilities
+
+Inputs
+
+Outputs
+
+Permissions
+
+Dependencies
+
+Authentication
+
+Authorization
+
+Rate Limits
+
+Timeouts
+
+Retry Policy
+
+Circuit Breaker
+
+Caching
+
+Logging
+
+Monitoring
+
+Audit Requirements
+
+Error Codes
+
+Cost Considerations
+
+KPIs
+
+Future Roadmap
+
+====================================================================
+
+Initial registry should include at minimum:
+
+TL-001 Database
+
+TL-002 Memory
+
+TL-003 Knowledge
+
+TL-004 Stripe
+
+TL-005 Email
+
+TL-006 Notifications
+
+TL-007 Search
+
+TL-008 Analytics
+
+TL-009 Logging
+
+TL-010 File Storage
+
+TL-011 Vector Search
+
+TL-012 Web Search
+
+TL-013 Scheduler
+
+TL-014 Secrets Manager
+
+TL-015 Configuration
+
+TL-016 Feature Flags
+
+TL-017 Audit
+
+TL-018 Health Check
+
+TL-019 Metrics
+
+TL-020 Cache
+
+====================================================================
+
+# Tool Access Matrix
+
+Show which agent can access which tools.
+
+Read
+
+Write
+
+Execute
+
+Admin
+
+====================================================================
+
+# Tool Discovery
+
+Registration
+
+Discovery
+
+Versioning
+
+Deprecation
+
+Lifecycle
+
+====================================================================
+
+# Tool Execution Lifecycle
+
+Validation
+
+Authorization
+
+Execution
+
+Response
+
+Logging
+
+Metrics
+
+Cleanup
+
+Use Mermaid.
+
+====================================================================
+
+# Security
+
+Authentication
+
+Authorization
+
+Secrets Management
+
+API Keys
+
+Token Rotation
+
+Least Privilege
+
+Sandboxing
+
+Prompt Injection Protection
+
+Output Validation
+
+====================================================================
+
+# Integration Patterns
+
+Synchronous
+
+Asynchronous
+
+Event Driven
+
+Queue Based
+
+Webhook
+
+Streaming
+
+====================================================================
+
+# Error Handling
+
+Timeout
+
+Dependency Failure
+
+Retry
+
+Fallback
+
+Circuit Breaker
+
+Dead Letter Queue
+
+Partial Success
+
+====================================================================
+
+# Performance
+
+Latency
+
+Concurrency
+
+Throughput
+
+Caching
+
+Connection Pooling
+
+====================================================================
+
+# Observability
+
+Logs
+
+Metrics
+
+Tracing
+
+Alerts
+
+Dashboards
+
+====================================================================
+
+# APIs
+
+Logical interfaces only.
+
+Register Tool
+
+Remove Tool
+
+Execute Tool
+
+Search Tool
+
+List Tools
+
+Validate Tool
+
+====================================================================
+
+# Events
+
+ToolRegistered
+
+ToolRemoved
+
+ToolExecuted
+
+ToolFailed
+
+ToolTimedOut
+
+ToolRetried
+
+ToolDeprecated
+
+====================================================================
+
+# Configuration
+
+Timeouts
+
+Rate Limits
+
+Retries
+
+Feature Flags
+
+Environment Profiles
+
+====================================================================
+
+# Testing Strategy
+
+Unit
+
+Integration
+
+Contract
+
+Load
+
+Security
+
+Chaos
+
+Acceptance
+
+====================================================================
+
+# Risks
+
+Technical
+
+Operational
+
+Security
+
+Business
+
+Mitigations
+
+====================================================================
+
+# Future Roadmap
+
+v1
+
+v2
+
+v3
+
+====================================================================
+
+# Acceptance Criteria
+
+Provide measurable acceptance criteria.
+
+====================================================================
+
+# Open Questions
+
+====================================================================
+
+# Architecture Decision Records (ADR)
+
+Provide at least 10 ADRs covering:
+
+- Tool abstraction
+- Registry ownership
+- Permission model
+- Versioning
+- Retry strategy
+- Secret management
+- External APIs
+- Tool isolation
+- Observability
+- Future extensibility
+
+====================================================================
+
+Formatting Requirements
+
+Professional Markdown
+
+Enterprise Documentation Style
+
+Mermaid Diagrams
+
+Architecture Tables
+
+Decision Tables
+
+Callout Blocks
+
+Examples
+
+Best Practices
+
+Cross-reference ALL previous documents.
+
+====================================================================
+
+Validation Requirements
+
+Before completing:
+
+1. Verify consistency with Blueprint.
+2. Verify consistency with PRD.
+3. Verify consistency with Agent Catalog.
+4. Verify consistency with Master Orchestrator Specification.
+5. Verify consistency with Shared Memory Architecture.
+6. Generate a Consistency Report.
+7. Generate an Assumptions Report.
+8. Generate a Missing Decisions Report.
+9. Update README and documentation index if necessary.
+
+====================================================================
+
+DO NOT WRITE IMPLEMENTATION CODE.
+
+ONLY CREATE THE OFFICIAL TOOL REGISTRY & INTEGRATION ARCHITECTURE.

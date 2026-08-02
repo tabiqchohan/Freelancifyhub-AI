@@ -1,0 +1,40 @@
+{
+  // Freelancify AI — OpenClaw gateway integration config.
+  // JSON5: comments and trailing commas are allowed.
+  //
+  // Point the OpenClaw gateway at this file with:
+  //   OPENCLAW_CONFIG_PATH=./clawd.json openclaw gateway start
+  // Validate with: `openclaw config validate`
+  //
+  // The agents/, prompts/, workflows/, knowledge/, memory/ and tools/
+  // directories are consumed by the gateway at runtime.
+  "identity": {
+    "name": "Freelancify",
+    "theme": "AI ecosystem operator for FreelancifyHub freelance marketplace",
+    "emoji": "🤖"
+  },
+  "agents": {
+    "defaults": {
+      "workspace": "./workspace",
+      "sandbox": {
+        "mode": "non-main",
+        "scope": "session"
+      }
+    },
+    "list": [
+      {
+        "id": "freelancify-core",
+        "agentDir": "./agents/freelancify-core",
+        "name": "Freelancify Core",
+        "description": "Orchestrates the FreelancifyHub AI ecosystem (matching, screening, QA)",
+        "workspace": "./workspace"
+      }
+    ]
+  },
+  "gateway": {
+    "port": 18789
+  },
+  "logs": {
+    "path": "./logs"
+  }
+}

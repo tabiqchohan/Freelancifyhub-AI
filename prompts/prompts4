@@ -1,0 +1,476 @@
+You are a Principal AI Systems Architect, Enterprise Solutions Architect, OpenClaw Multi-Agent Expert, Product Architect, and Technical Documentation Specialist.
+
+You are working on the official AI system for:
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+The following documents already exist and MUST be treated as the single source of truth.
+
+Read and follow them before making any decisions.
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+
+Never contradict these documents.
+
+Never invent business logic.
+
+Never create workflows that conflict with them.
+
+If information is missing, document assumptions instead of guessing.
+
+------------------------------------------------------------
+
+YOUR TASK
+
+Create the official
+
+# Agent Catalog & Registry v1.0
+
+This is NOT implementation.
+
+This is NOT code.
+
+This is the complete registry of every AI agent in the ecosystem.
+
+Write professional Markdown.
+
+Create
+
+docs/agent-catalog-v1.md
+
+------------------------------------------------------------
+
+The catalog must define every AI agent.
+
+Each agent becomes an official product component.
+
+------------------------------------------------------------
+
+For EVERY AGENT include ALL sections below.
+
+------------------------------------------------------------
+
+Agent ID
+
+Example
+
+AG-001
+
+------------------------------------------------------------
+
+Agent Name
+
+------------------------------------------------------------
+
+Version
+
+------------------------------------------------------------
+
+Status
+
+Draft
+
+Planned
+
+In Development
+
+Production
+
+Deprecated
+
+------------------------------------------------------------
+
+Priority
+
+Critical
+
+High
+
+Medium
+
+Low
+
+------------------------------------------------------------
+
+Category
+
+Core
+
+Marketplace
+
+Client
+
+Freelancer
+
+Marketing
+
+Admin
+
+Analytics
+
+Knowledge
+
+Memory
+
+Security
+
+Communication
+
+------------------------------------------------------------
+
+Purpose
+
+------------------------------------------------------------
+
+Responsibilities
+
+------------------------------------------------------------
+
+Business Value
+
+------------------------------------------------------------
+
+User Types
+
+Client
+
+Freelancer
+
+Admin
+
+Guest
+
+------------------------------------------------------------
+
+Inputs
+
+------------------------------------------------------------
+
+Outputs
+
+------------------------------------------------------------
+
+Triggers
+
+Manual
+
+Automatic
+
+Scheduled
+
+Webhook
+
+API
+
+------------------------------------------------------------
+
+Dependencies
+
+Other agents
+
+Memory
+
+Knowledge
+
+Tools
+
+Database
+
+Stripe
+
+Email
+
+Search
+
+------------------------------------------------------------
+
+Permissions
+
+------------------------------------------------------------
+
+Context Requirements
+
+------------------------------------------------------------
+
+Memory Usage
+
+Short-term
+
+Long-term
+
+Project Memory
+
+User Memory
+
+------------------------------------------------------------
+
+Knowledge Sources
+
+------------------------------------------------------------
+
+LLM Requirements
+
+Preferred Model
+
+Fallback Model
+
+Reasoning Level
+
+Temperature Guidance
+
+Token Limits
+
+------------------------------------------------------------
+
+Tool Access
+
+------------------------------------------------------------
+
+Failure Handling
+
+------------------------------------------------------------
+
+Retry Policy
+
+------------------------------------------------------------
+
+Logging Requirements
+
+------------------------------------------------------------
+
+Observability
+
+------------------------------------------------------------
+
+Security Considerations
+
+------------------------------------------------------------
+
+Privacy Considerations
+
+------------------------------------------------------------
+
+Rate Limits
+
+------------------------------------------------------------
+
+Cost Considerations
+
+------------------------------------------------------------
+
+KPIs
+
+------------------------------------------------------------
+
+Success Metrics
+
+------------------------------------------------------------
+
+Acceptance Criteria
+
+------------------------------------------------------------
+
+Future Roadmap
+
+------------------------------------------------------------
+
+Required Agents
+
+------------------------------------------------------------
+
+CORE
+
+AG-001 Master Orchestrator
+
+AG-002 Memory Manager
+
+AG-003 Knowledge Manager
+
+AG-004 Tool Manager
+
+------------------------------------------------------------
+
+CLIENT TEAM
+
+AG-101 Project Description Agent
+
+AG-102 Budget Estimator
+
+AG-103 Timeline Estimator
+
+AG-104 Skills Recommendation
+
+AG-105 Project Success Score
+
+------------------------------------------------------------
+
+FREELANCER TEAM
+
+AG-201 Proposal Writer
+
+AG-202 Profile Optimizer
+
+AG-203 Portfolio Builder
+
+AG-204 Resume Builder
+
+AG-205 Cover Letter Generator
+
+AG-206 Project Recommendation
+
+AG-207 Career Advisor
+
+------------------------------------------------------------
+
+MARKETPLACE TEAM
+
+AG-301 Contract Generator
+
+AG-302 Milestone Planner
+
+AG-303 Review Generator
+
+AG-304 Scam Detection
+
+AG-305 Dispute Assistant
+
+AG-306 Messaging Assistant
+
+------------------------------------------------------------
+
+MARKETING TEAM
+
+AG-401 Research Agent
+
+AG-402 Social Media Manager
+
+AG-403 Blog Writer
+
+AG-404 SEO Specialist
+
+AG-405 Email Marketing
+
+------------------------------------------------------------
+
+ADMIN TEAM
+
+AG-501 Analytics Agent
+
+AG-502 Fraud Monitoring
+
+AG-503 Platform Health
+
+AG-504 AI Operations
+
+AG-505 Executive Insights
+
+------------------------------------------------------------
+
+Also include
+
+# Agent Dependency Graph
+
+Use Mermaid.
+
+------------------------------------------------------------
+
+Include
+
+# Team Architecture
+
+------------------------------------------------------------
+
+Include
+
+# Communication Matrix
+
+Show which agents communicate with which agents.
+
+------------------------------------------------------------
+
+Include
+
+# Escalation Flow
+
+------------------------------------------------------------
+
+Include
+
+# Agent Lifecycle
+
+Draft
+
+Development
+
+Testing
+
+Production
+
+Maintenance
+
+Retirement
+
+------------------------------------------------------------
+
+Include
+
+# Versioning Strategy
+
+------------------------------------------------------------
+
+Include
+
+# Naming Convention
+
+------------------------------------------------------------
+
+Include
+
+# Folder Convention
+
+------------------------------------------------------------
+
+Include
+
+# Documentation Convention
+
+------------------------------------------------------------
+
+Include
+
+# Quality Gates
+
+------------------------------------------------------------
+
+Include
+
+# Definition of Done
+
+------------------------------------------------------------
+
+Formatting
+
+Professional Markdown
+
+Mermaid Diagrams
+
+Tables
+
+Callout Blocks
+
+Best Practices
+
+Enterprise Documentation Style
+
+------------------------------------------------------------
+
+Do NOT generate implementation code.
+
+Only generate the official Agent Catalog.
+
+Update README if appropriate.

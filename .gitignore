@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# Environment
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs
+logs/*
+!logs/.gitkeep
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Runtime data — folders stay tracked via their committed README files
+memory/*
+!memory/README.md
+knowledge/*
+!knowledge/README.md
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+
+# OpenClaw runtime state
+workspace/

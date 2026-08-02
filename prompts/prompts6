@@ -1,0 +1,543 @@
+You are a Principal AI Architect, Memory Systems Architect, Enterprise Solutions Architect, OpenClaw Multi-Agent Systems Expert, RAG Specialist, and Technical Documentation Specialist.
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+====================================================
+
+SOURCE OF TRUTH
+
+Before writing anything, read and follow these documents.
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+
+Never contradict them.
+
+Never invent business logic.
+
+Never redesign the architecture.
+
+If information is missing:
+
+Document assumptions.
+
+Never guess.
+
+====================================================
+
+YOUR TASK
+
+Create
+
+docs/shared-memory-architecture-v1.md
+
+This is NOT implementation.
+
+This is NOT code.
+
+This is the official engineering specification for the complete AI Memory System.
+
+====================================================
+
+OBJECTIVE
+
+Design the shared memory architecture used by every AI agent.
+
+This document becomes the implementation contract for AG-002 Memory Manager.
+
+====================================================
+
+Include ALL sections below.
+
+# Executive Summary
+
+Purpose
+
+Scope
+
+Business Value
+
+Responsibilities
+
+Non Responsibilities
+
+====================================================
+
+# Memory Philosophy
+
+Explain why memory exists.
+
+Memory principles.
+
+Consistency principles.
+
+Privacy principles.
+
+====================================================
+
+# Memory Architecture
+
+Use Mermaid.
+
+Show
+
+Users
+
+↓
+
+Master Orchestrator
+
+↓
+
+Memory Manager
+
+↓
+
+Memory Stores
+
+↓
+
+Retrieval
+
+↓
+
+Context Builder
+
+====================================================
+
+# Memory Types
+
+Define every memory.
+
+Short-Term Memory
+
+Conversation Memory
+
+User Memory
+
+Project Memory
+
+Workspace Memory
+
+Organization Memory
+
+Knowledge References
+
+Temporary Memory
+
+Session Memory
+
+Long-Term Memory
+
+Archived Memory
+
+====================================================
+
+For EVERY memory include:
+
+Purpose
+
+Owner
+
+Lifetime
+
+TTL
+
+Retention Policy
+
+Size Limits
+
+Priority
+
+Security Level
+
+Encryption Requirements
+
+Deletion Policy
+
+====================================================
+
+# Memory Lifecycle
+
+Creation
+
+Update
+
+Read
+
+Summarization
+
+Compression
+
+Archiving
+
+Deletion
+
+Recovery
+
+Use Mermaid.
+
+====================================================
+
+# Memory Ownership
+
+Which agent owns which memory.
+
+AG-001
+
+AG-002
+
+Client Agents
+
+Freelancer Agents
+
+Admin Agents
+
+====================================================
+
+# Memory Access Matrix
+
+Table
+
+Agents
+
+↓
+
+Memory Types
+
+Permissions
+
+Read
+
+Write
+
+Update
+
+Delete
+
+====================================================
+
+# Memory Retrieval Strategy
+
+Similarity Search
+
+Keyword Search
+
+Hybrid Search
+
+Recency
+
+Importance
+
+Confidence
+
+Ranking
+
+Filtering
+
+====================================================
+
+# Context Builder
+
+How context is assembled.
+
+Ordering
+
+Prioritization
+
+Compression
+
+Deduplication
+
+Token Budget
+
+Context Window Management
+
+====================================================
+
+# Summarization Strategy
+
+Conversation summaries
+
+Project summaries
+
+User summaries
+
+Long-term summaries
+
+Incremental summaries
+
+====================================================
+
+# Memory Consolidation
+
+Merge duplicate memories
+
+Conflict Resolution
+
+Canonical Records
+
+====================================================
+
+# Memory Quality
+
+Freshness
+
+Accuracy
+
+Completeness
+
+Consistency
+
+Confidence
+
+====================================================
+
+# Memory Security
+
+Encryption
+
+PII Protection
+
+Access Control
+
+Audit Logs
+
+Secrets
+
+Compliance
+
+====================================================
+
+# Privacy
+
+User deletion
+
+Right to forget
+
+Retention
+
+Consent
+
+====================================================
+
+# Performance
+
+Latency
+
+Throughput
+
+Scalability
+
+Caching
+
+====================================================
+
+# Storage Strategy
+
+Logical architecture only.
+
+Hot Storage
+
+Warm Storage
+
+Cold Storage
+
+Archive
+
+Vector Store
+
+Metadata Store
+
+====================================================
+
+# Retrieval Pipeline
+
+Use Mermaid.
+
+====================================================
+
+# APIs
+
+Logical interfaces only.
+
+Save Memory
+
+Load Memory
+
+Search Memory
+
+Update Memory
+
+Delete Memory
+
+Archive Memory
+
+Summarize Memory
+
+====================================================
+
+# Events
+
+MemoryCreated
+
+MemoryUpdated
+
+MemoryArchived
+
+MemoryDeleted
+
+MemoryRetrieved
+
+MemorySummarized
+
+====================================================
+
+# Configuration
+
+Retention
+
+TTL
+
+Compression
+
+Summarization
+
+Limits
+
+Feature Flags
+
+====================================================
+
+# Failure Handling
+
+Store unavailable
+
+Corruption
+
+Duplicate records
+
+Timeout
+
+Partial failures
+
+Recovery
+
+====================================================
+
+# Observability
+
+Logs
+
+Metrics
+
+Tracing
+
+Alerts
+
+Dashboards
+
+====================================================
+
+# Testing Strategy
+
+Unit
+
+Integration
+
+Load
+
+Chaos
+
+Recovery
+
+Security
+
+====================================================
+
+# Risks
+
+Technical
+
+Operational
+
+Security
+
+Business
+
+Mitigations
+
+====================================================
+
+# Future Roadmap
+
+v1
+
+v2
+
+v3
+
+====================================================
+
+# Acceptance Criteria
+
+Provide measurable acceptance criteria.
+
+====================================================
+
+# Open Questions
+
+====================================================
+
+# Architecture Decision Records (ADR)
+
+At least 8 ADRs explaining major design decisions.
+
+====================================================
+
+Formatting Requirements
+
+Professional Markdown
+
+Enterprise Documentation Style
+
+Mermaid Diagrams
+
+Architecture Tables
+
+Decision Tables
+
+Callout Blocks
+
+Examples
+
+Best Practices
+
+Cross-reference all previous documents.
+
+====================================================
+
+Validation Requirements
+
+Before completing:
+
+1. Verify consistency with Blueprint.
+2. Verify consistency with PRD.
+3. Verify consistency with Agent Catalog.
+4. Verify consistency with Master Orchestrator Specification.
+5. Generate a Consistency Report.
+6. Generate an Assumptions Report.
+7. Generate a Missing Decisions Report.
+8. Update README and documentation index if necessary.
+
+====================================================
+
+DO NOT WRITE IMPLEMENTATION CODE.
+
+ONLY CREATE THE OFFICIAL SHARED MEMORY ARCHITECTURE SPECIFICATION.

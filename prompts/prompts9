@@ -1,0 +1,503 @@
+You are a Principal AI Systems Architect, OpenClaw Multi-Agent Framework Architect, Software Platform Architect, Engineering Standards Lead, and Technical Documentation Specialist.
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+====================================================================
+
+SOURCE OF TRUTH
+
+Read and follow ALL existing architecture documents.
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+- docs/tool-registry-architecture-v1.md
+- docs/knowledge-base-architecture-v1.md
+
+Never contradict existing documents.
+
+Never redesign architecture.
+
+Never invent business logic.
+
+If information is missing:
+
+Document assumptions.
+
+Never guess.
+
+====================================================================
+
+YOUR TASK
+
+Create
+
+docs/agent-development-kit-v1.md
+
+This is NOT implementation.
+
+This is NOT code.
+
+This is the official engineering standard for developing every AI agent in Freelancify AI.
+
+====================================================================
+
+OBJECTIVE
+
+Define the complete Agent Development Kit (ADK).
+
+Every present and future AI agent MUST follow this standard.
+
+====================================================================
+
+Include ALL sections below.
+
+# Executive Summary
+
+Purpose
+
+Scope
+
+Business Value
+
+Responsibilities
+
+Non Responsibilities
+
+====================================================================
+
+# ADK Philosophy
+
+Design Principles
+
+SOLID Principles
+
+Single Responsibility
+
+Least Privilege
+
+Stateless by Default
+
+Shared Memory Usage
+
+Tool Isolation
+
+Observability
+
+Security First
+
+====================================================================
+
+# Standard Agent Architecture
+
+Use Mermaid.
+
+Agent
+
+↓
+
+Input Validator
+
+↓
+
+Context Builder
+
+↓
+
+Memory Client
+
+↓
+
+Knowledge Client
+
+↓
+
+Tool Client
+
+↓
+
+Reasoning Engine
+
+↓
+
+Response Builder
+
+↓
+
+Logger
+
+====================================================================
+
+# Standard Folder Structure
+
+Define the official folder layout.
+
+Example:
+
+agents/
+  ag-001-master-orchestrator/
+  ag-101-project-description/
+  ag-201-proposal-writer/
+
+For each agent define:
+
+docs/
+
+prompts/
+
+schemas/
+
+tests/
+
+examples/
+
+config/
+
+README.md
+
+====================================================================
+
+# Required Files
+
+agent.md
+
+manifest.json
+
+config.json
+
+README.md
+
+prompt.md
+
+system-prompt.md
+
+user-prompt.md
+
+tools.md
+
+memory.md
+
+knowledge.md
+
+tests.md
+
+changelog.md
+
+====================================================================
+
+# Agent Manifest Specification
+
+Define every manifest field.
+
+Agent ID
+
+Name
+
+Version
+
+Owner
+
+Status
+
+Category
+
+Capabilities
+
+Dependencies
+
+Memory
+
+Knowledge
+
+Tools
+
+Permissions
+
+Limits
+
+Models
+
+Timeouts
+
+Retries
+
+Feature Flags
+
+====================================================================
+
+# Prompt Standards
+
+System Prompt
+
+Developer Prompt
+
+User Prompt
+
+Guardrails
+
+Output Style
+
+Tone
+
+Safety
+
+Formatting
+
+Variables
+
+Templates
+
+====================================================================
+
+# Input Contracts
+
+Validation
+
+Schemas
+
+Required Fields
+
+Optional Fields
+
+Errors
+
+====================================================================
+
+# Output Contracts
+
+Response Schema
+
+Confidence
+
+Citations
+
+Metadata
+
+Errors
+
+Warnings
+
+====================================================================
+
+# Memory Integration
+
+How every agent communicates with AG-002.
+
+====================================================================
+
+# Knowledge Integration
+
+How every agent communicates with AG-003.
+
+====================================================================
+
+# Tool Integration
+
+How every agent communicates with AG-004.
+
+====================================================================
+
+# Logging Standards
+
+Request IDs
+
+Correlation IDs
+
+Structured Logs
+
+Audit Logs
+
+====================================================================
+
+# Error Standards
+
+Validation Errors
+
+Tool Errors
+
+Memory Errors
+
+Knowledge Errors
+
+Timeouts
+
+Fallbacks
+
+====================================================================
+
+# Security Standards
+
+Authentication
+
+Authorization
+
+PII
+
+Secrets
+
+Prompt Injection
+
+Output Validation
+
+====================================================================
+
+# Testing Standards
+
+Unit
+
+Integration
+
+Contract
+
+Prompt Tests
+
+Regression
+
+Performance
+
+Security
+
+Acceptance
+
+====================================================================
+
+# Versioning
+
+Semantic Versioning
+
+Breaking Changes
+
+Migration Rules
+
+Deprecation
+
+====================================================================
+
+# Quality Gates
+
+Lint
+
+Typecheck
+
+Tests
+
+Coverage
+
+Documentation
+
+Security
+
+====================================================================
+
+# Agent Lifecycle
+
+Draft
+
+Development
+
+Review
+
+Testing
+
+Production
+
+Maintenance
+
+Retirement
+
+====================================================================
+
+# Templates
+
+Provide logical templates (documentation only) for:
+
+New Agent
+
+Prompt
+
+Manifest
+
+README
+
+Test Plan
+
+====================================================================
+
+# Checklists
+
+Agent Creation Checklist
+
+Review Checklist
+
+Release Checklist
+
+====================================================================
+
+# Acceptance Criteria
+
+Provide measurable acceptance criteria.
+
+====================================================================
+
+# Open Questions
+
+====================================================================
+
+# Architecture Decision Records (ADR)
+
+Provide at least 12 ADRs covering:
+
+- Agent boundaries
+- Prompt strategy
+- Memory integration
+- Knowledge integration
+- Tool integration
+- Logging
+- Testing
+- Security
+- Versioning
+- Templates
+- Manifest
+- Future extensibility
+
+====================================================================
+
+Formatting Requirements
+
+Professional Markdown
+
+Enterprise Documentation
+
+Mermaid Diagrams
+
+Architecture Tables
+
+Decision Tables
+
+Callout Blocks
+
+Examples
+
+Cross-reference ALL previous documents.
+
+====================================================================
+
+Validation Requirements
+
+1. Verify consistency with every previous architecture document.
+2. Generate Consistency Report.
+3. Generate Assumptions Report.
+4. Generate Missing Decisions Report.
+5. Update README and documentation index if necessary.
+
+====================================================================
+
+DO NOT WRITE IMPLEMENTATION CODE.
+
+ONLY CREATE THE OFFICIAL AGENT DEVELOPMENT KIT SPECIFICATION.

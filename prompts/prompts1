@@ -1,0 +1,52 @@
+Create a production-ready repository for a project named "Freelancify AI".
+
+Purpose:
+This project will contain the complete AI ecosystem for FreelancifyHub, an AI-powered freelance marketplace.
+
+Requirements:
+
+- TypeScript
+- Node.js 22+
+- OpenClaw integration ready
+- Docker ready
+- ESLint
+- Prettier
+- Husky
+- GitHub Actions
+- Environment configuration
+- Logging
+- Configuration management
+- Testing setup (Vitest)
+- Documentation folder
+
+Create the following structure:
+
+docs/
+agents/
+prompts/
+workflows/
+knowledge/
+memory/
+tools/
+logs/
+scripts/
+config/
+tests/
+
+Do NOT implement business logic.
+
+Only create a clean production-ready project foundation.
+
+Include README.md explaining architecture.
+
+Include .env.example.
+
+Include Dockerfile.
+
+Include docker-compose.yml.
+
+Include package.json.
+
+Include tsconfig.
+
+Use latest stable best practices.

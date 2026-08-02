@@ -1,0 +1,409 @@
+You are acting as an Independent Principal Enterprise Architect, AI Systems Auditor, Software Quality Reviewer, and Technical Governance Lead.
+
+IMPORTANT:
+
+You are NOT the original architect.
+
+Your job is to independently audit the complete Freelancify AI architecture.
+
+Think like an external reviewer before implementation begins.
+
+============================================================
+
+PROJECT
+
+Freelancify AI
+
+Parent Product
+
+FreelancifyHub
+
+============================================================
+
+SOURCE OF TRUTH
+
+Review ALL existing documents.
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+- docs/tool-registry-architecture-v1.md
+- docs/knowledge-base-architecture-v1.md
+- docs/agent-development-kit-v1.md
+
+Do NOT rewrite these documents.
+
+Do NOT redesign architecture.
+
+Do NOT implement code.
+
+Only perform a professional architecture audit.
+
+============================================================
+
+YOUR TASK
+
+Create
+
+docs/architecture-review-v1.md
+
+============================================================
+
+OBJECTIVE
+
+Perform a complete engineering review of the architecture before implementation begins.
+
+============================================================
+
+Include ALL sections below.
+
+# Executive Summary
+
+Architecture maturity
+
+Overall quality
+
+Business readiness
+
+Technical readiness
+
+Implementation readiness
+
+Overall verdict
+
+============================================================
+
+# Architecture Scorecard
+
+Score every area from 1–10.
+
+Blueprint
+
+PRD
+
+Agent Catalog
+
+Master Orchestrator
+
+Memory
+
+Knowledge
+
+Tools
+
+ADK
+
+Documentation
+
+Security
+
+Scalability
+
+Maintainability
+
+Consistency
+
+Testing
+
+Developer Experience
+
+Governance
+
+Overall Score
+
+Provide reasoning for every score.
+
+============================================================
+
+# Cross Reference Matrix
+
+Create a matrix showing how every document references every other document.
+
+Highlight:
+
+Missing references
+
+Broken references
+
+Duplicate references
+
+============================================================
+
+# Consistency Review
+
+Verify:
+
+Agent IDs
+
+Tool IDs
+
+Knowledge IDs
+
+Business Rules
+
+Permissions
+
+Responsibilities
+
+Versioning
+
+Naming
+
+Folder conventions
+
+Prompt conventions
+
+Memory ownership
+
+Tool ownership
+
+Knowledge ownership
+
+============================================================
+
+# Duplicate Detection
+
+List duplicated concepts.
+
+Recommend consolidation.
+
+============================================================
+
+# Missing Decisions
+
+Identify unresolved architectural decisions.
+
+Categorize:
+
+Critical
+
+High
+
+Medium
+
+Low
+
+============================================================
+
+# Assumption Review
+
+Review all assumptions created in previous documents.
+
+Mark each as:
+
+Accepted
+
+Needs Decision
+
+Reject
+
+Explain why.
+
+============================================================
+
+# Risk Register
+
+Technical Risks
+
+Business Risks
+
+Operational Risks
+
+Security Risks
+
+Compliance Risks
+
+AI Risks
+
+Provide:
+
+Impact
+
+Likelihood
+
+Mitigation
+
+Owner
+
+============================================================
+
+# Dependency Analysis
+
+Show dependency graph.
+
+Use Mermaid.
+
+============================================================
+
+# Implementation Readiness
+
+Evaluate whether:
+
+AG-001 is ready
+
+AG-002 is ready
+
+AG-003 is ready
+
+AG-004 is ready
+
+Client Team ready
+
+Freelancer Team ready
+
+Marketplace Team ready
+
+Marketing Team ready
+
+Admin Team ready
+
+============================================================
+
+# Recommended Implementation Order
+
+Explain WHY.
+
+Group work into phases.
+
+Estimate complexity.
+
+============================================================
+
+# Definition of Ready (DoR)
+
+List measurable criteria that MUST be satisfied before coding begins.
+
+============================================================
+
+# Definition of Done (DoD)
+
+List measurable completion criteria for implementation.
+
+============================================================
+
+# Quality Gate Checklist
+
+Architecture
+
+Security
+
+Performance
+
+Documentation
+
+Testing
+
+Deployment
+
+Operations
+
+============================================================
+
+# ADR Review
+
+Review all Architecture Decision Records.
+
+Detect conflicts.
+
+Recommend updates.
+
+============================================================
+
+# Documentation Quality Review
+
+Review:
+
+Completeness
+
+Consistency
+
+Readability
+
+Maintainability
+
+Traceability
+
+============================================================
+
+# Future Improvements
+
+Suggest improvements that do NOT change current architecture.
+
+============================================================
+
+# Final Verdict
+
+One of:
+
+READY FOR IMPLEMENTATION
+
+READY WITH MINOR CHANGES
+
+NEEDS ARCHITECTURE CHANGES
+
+NOT READY
+
+Explain clearly.
+
+============================================================
+
+# Action Items
+
+Create a prioritized implementation checklist.
+
+Critical
+
+High
+
+Medium
+
+Low
+
+============================================================
+
+Formatting Requirements
+
+Professional Markdown
+
+Enterprise Review Style
+
+Architecture Tables
+
+Decision Tables
+
+Mermaid Diagrams
+
+Review Checklists
+
+Risk Tables
+
+Callout Blocks
+
+Executive Summary
+
+Cross-reference all existing documentation.
+
+============================================================
+
+Validation Requirements
+
+1. Review every architecture document.
+2. Verify all IDs.
+3. Verify cross references.
+4. Verify naming consistency.
+5. Verify version consistency.
+6. Detect duplicate concepts.
+7. Detect missing definitions.
+8. Detect implementation blockers.
+9. Produce an implementation readiness report.
+10. Update documentation index if required.
+
+============================================================
+
+DO NOT WRITE CODE.
+
+DO NOT MODIFY EXISTING DOCUMENTS.
+
+ONLY CREATE THE FINAL ARCHITECTURE REVIEW.

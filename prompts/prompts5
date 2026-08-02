@@ -1,0 +1,529 @@
+You are a Principal AI Architect, Enterprise Software Architect, OpenClaw Multi-Agent Systems Expert, Distributed Systems Engineer, and Technical Documentation Specialist.
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+Existing Documents (SOURCE OF TRUTH)
+
+Before writing anything, treat these documents as authoritative.
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+
+Never contradict them.
+
+Never invent business logic.
+
+Never rename agents.
+
+Never redesign architecture.
+
+If information is missing:
+
+Document assumptions.
+
+Never guess.
+
+------------------------------------------------------------
+
+YOUR TASK
+
+Create
+
+docs/master-orchestrator-specification-v1.md
+
+This is NOT implementation.
+
+This is NOT code.
+
+This is the official engineering specification for
+
+AG-001 Master Orchestrator.
+
+------------------------------------------------------------
+
+OBJECTIVE
+
+Describe exactly how the Master Orchestrator operates.
+
+This document becomes the implementation guide.
+
+------------------------------------------------------------
+
+Include ALL sections below.
+
+# Executive Summary
+
+Purpose
+
+Scope
+
+Responsibilities
+
+Non Responsibilities
+
+Business Value
+
+------------------------------------------------------------
+
+# System Context
+
+Explain where the Master Orchestrator sits.
+
+Use Mermaid.
+
+------------------------------------------------------------
+
+# Responsibilities
+
+Intent Detection
+
+Request Classification
+
+Agent Selection
+
+Context Assembly
+
+Memory Coordination
+
+Knowledge Coordination
+
+Tool Coordination
+
+Execution Planning
+
+Response Aggregation
+
+Error Recovery
+
+Observability
+
+Cost Control
+
+Security
+
+------------------------------------------------------------
+
+# Request Lifecycle
+
+Describe complete lifecycle.
+
+User Request
+
+↓
+
+Validation
+
+↓
+
+Authentication
+
+↓
+
+Authorization
+
+↓
+
+Intent Analysis
+
+↓
+
+Context Loading
+
+↓
+
+Memory Loading
+
+↓
+
+Knowledge Retrieval
+
+↓
+
+Tool Discovery
+
+↓
+
+Agent Selection
+
+↓
+
+Execution
+
+↓
+
+Aggregation
+
+↓
+
+Validation
+
+↓
+
+Response
+
+↓
+
+Logging
+
+↓
+
+Metrics
+
+Use Mermaid.
+
+------------------------------------------------------------
+
+# Intent Classification
+
+Supported intents
+
+Confidence thresholds
+
+Fallback rules
+
+Ambiguous requests
+
+Multi-intent handling
+
+------------------------------------------------------------
+
+# Agent Routing Engine
+
+Routing Strategy
+
+Priority Rules
+
+Capability Matching
+
+Load Distribution
+
+Fallback Agents
+
+Escalation Rules
+
+------------------------------------------------------------
+
+# Context Engine
+
+Describe
+
+Context Assembly
+
+Context Compression
+
+Context Prioritization
+
+Token Budget Management
+
+------------------------------------------------------------
+
+# Memory Coordination
+
+Interaction with
+
+AG-002 Memory Manager
+
+Short-term
+
+Long-term
+
+Conversation
+
+Project
+
+User
+
+------------------------------------------------------------
+
+# Knowledge Coordination
+
+Interaction with
+
+AG-003 Knowledge Manager
+
+Policies
+
+FAQs
+
+Platform Docs
+
+External Knowledge
+
+Caching
+
+------------------------------------------------------------
+
+# Tool Coordination
+
+Interaction with
+
+AG-004 Tool Manager
+
+Tool Discovery
+
+Tool Selection
+
+Permission Validation
+
+Execution
+
+Timeouts
+
+Retries
+
+------------------------------------------------------------
+
+# Execution Planner
+
+Single Agent Execution
+
+Parallel Execution
+
+Sequential Execution
+
+Conditional Execution
+
+Hybrid Execution
+
+------------------------------------------------------------
+
+# Response Aggregation
+
+Merge responses
+
+Conflict resolution
+
+Ranking
+
+Confidence scoring
+
+Formatting
+
+------------------------------------------------------------
+
+# Error Handling
+
+Agent failure
+
+Timeout
+
+Tool failure
+
+Memory failure
+
+Knowledge failure
+
+LLM failure
+
+Partial success
+
+Retry matrix
+
+Circuit breaker strategy
+
+------------------------------------------------------------
+
+# Security
+
+Authentication
+
+Authorization
+
+Prompt Injection Defense
+
+Data Leakage Prevention
+
+PII Protection
+
+Secrets Handling
+
+Audit Logging
+
+------------------------------------------------------------
+
+# Observability
+
+Logs
+
+Metrics
+
+Tracing
+
+Alerts
+
+Dashboards
+
+Health Checks
+
+------------------------------------------------------------
+
+# Cost Management
+
+Model selection
+
+Token budgets
+
+Caching strategy
+
+Response reuse
+
+Rate limiting
+
+Cost monitoring
+
+------------------------------------------------------------
+
+# Performance Targets
+
+Latency targets
+
+Availability
+
+Scalability
+
+Concurrency
+
+------------------------------------------------------------
+
+# APIs
+
+Logical interfaces only.
+
+No implementation.
+
+Input Contracts
+
+Output Contracts
+
+Error Contracts
+
+------------------------------------------------------------
+
+# Events
+
+RequestReceived
+
+IntentDetected
+
+AgentSelected
+
+ExecutionStarted
+
+ExecutionCompleted
+
+ExecutionFailed
+
+ResponseGenerated
+
+------------------------------------------------------------
+
+# State Machine
+
+Use Mermaid.
+
+------------------------------------------------------------
+
+# Sequence Diagrams
+
+Single Agent Request
+
+Multi-Agent Request
+
+Failure Recovery
+
+------------------------------------------------------------
+
+# Configuration
+
+Supported configuration values
+
+Feature flags
+
+Limits
+
+------------------------------------------------------------
+
+# Testing Strategy
+
+Unit
+
+Integration
+
+Contract
+
+Load
+
+Chaos
+
+Security
+
+Acceptance
+
+------------------------------------------------------------
+
+# Risks
+
+Technical
+
+Operational
+
+Business
+
+Mitigations
+
+------------------------------------------------------------
+
+# Future Roadmap
+
+v1
+
+v2
+
+v3
+
+------------------------------------------------------------
+
+# Acceptance Criteria
+
+Provide measurable acceptance criteria.
+
+------------------------------------------------------------
+
+# Open Questions
+
+List unresolved decisions.
+
+------------------------------------------------------------
+
+Formatting Requirements
+
+Professional Markdown
+
+Enterprise Style
+
+Mermaid Diagrams
+
+Architecture Tables
+
+Callout Blocks
+
+Decision Records (ADR style)
+
+Examples
+
+Best Practices
+
+Cross-reference existing documents.
+
+------------------------------------------------------------
+
+DO NOT WRITE IMPLEMENTATION CODE.
+
+ONLY CREATE THE OFFICIAL ENGINEERING SPECIFICATION.
+
+Update README and document index if necessary.
