@@ -1,0 +1,311 @@
+You are a Senior TypeScript Architect, OpenClaw Framework Engineer, Backend Engineer, Test Engineer, and Enterprise Software Developer.
+
+Project
+
+Freelancify AI
+
+Parent Product
+
+FreelancifyHub
+
+====================================================================
+
+SOURCE OF TRUTH
+
+Read ALL architecture documents before writing code.
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+- docs/tool-registry-architecture-v1.md
+- docs/knowledge-base-architecture-v1.md
+- docs/agent-development-kit-v1.md
+- docs/architecture-review-v1.md
+
+Architecture is FINAL.
+
+Never redesign.
+
+Never invent business logic.
+
+Never skip tests.
+
+====================================================================
+
+TASK
+
+Implement ONLY
+
+AG-001 Sprint 1 Foundation
+
+Nothing else.
+
+====================================================================
+
+GOALS
+
+Create the production-ready foundation for the Master Orchestrator.
+
+DO NOT implement:
+
+❌ Intent Detection
+
+❌ Routing
+
+❌ Memory
+
+❌ Knowledge
+
+❌ Tool Calls
+
+❌ LLM Calls
+
+❌ Business Logic
+
+Those belong to future sprints.
+
+====================================================================
+
+Create the following structure if missing:
+
+src/agents/ag-001-master-orchestrator/
+
+Inside:
+
+interfaces/
+
+types/
+
+errors/
+
+config/
+
+services/
+
+builders/
+
+schemas/
+
+validators/
+
+utils/
+
+tests/
+
+README.md
+
+====================================================================
+
+Implement ONLY foundational code.
+
+====================================================================
+
+Create strongly typed interfaces for:
+
+RequestContext
+
+ExecutionContext
+
+AgentRequest
+
+AgentResponse
+
+AgentMetadata
+
+ExecutionPlan
+
+ExecutionResult
+
+PipelineStage
+
+PipelineResult
+
+AgentCapability
+
+AgentDependency
+
+AgentConfiguration
+
+====================================================================
+
+Create shared TypeScript types.
+
+Use strict typing.
+
+Avoid "any".
+
+====================================================================
+
+Create custom error classes.
+
+ValidationError
+
+ConfigurationError
+
+PipelineError
+
+DependencyError
+
+TimeoutError
+
+====================================================================
+
+Create configuration module.
+
+Typed config.
+
+Environment validation.
+
+Default values.
+
+No secrets hardcoded.
+
+====================================================================
+
+Create validators.
+
+Schema validation.
+
+Input validation.
+
+Configuration validation.
+
+====================================================================
+
+Create builder classes.
+
+RequestContextBuilder
+
+ExecutionContextBuilder
+
+ResponseBuilder
+
+====================================================================
+
+Create logger integration.
+
+Reuse existing logging infrastructure.
+
+No duplicate logger.
+
+====================================================================
+
+Create dependency injection interfaces.
+
+No implementation.
+
+Interfaces only.
+
+====================================================================
+
+Create pipeline abstractions.
+
+PipelineStep
+
+PipelineStage
+
+PipelineExecutor
+
+Interface only.
+
+====================================================================
+
+Testing
+
+Write unit tests for:
+
+Types
+
+Builders
+
+Validators
+
+Errors
+
+Configuration
+
+Target:
+
+100% passing.
+
+====================================================================
+
+Documentation
+
+Create README for AG-001.
+
+Explain:
+
+Purpose
+
+Responsibilities
+
+Current Sprint
+
+Future Sprints
+
+Folder Structure
+
+====================================================================
+
+Quality Requirements
+
+Strict TypeScript
+
+ESLint clean
+
+Prettier clean
+
+No dead code
+
+No TODO comments
+
+No business logic
+
+No mock AI
+
+====================================================================
+
+Validation Before Finish
+
+Run:
+
+lint
+
+typecheck
+
+tests
+
+build
+
+Verify:
+
+No architecture violations.
+
+No duplicated types.
+
+No circular dependencies.
+
+No broken imports.
+
+====================================================================
+
+OUTPUT
+
+Provide:
+
+Files created
+
+Files modified
+
+Tests passed
+
+Coverage summary
+
+Architecture compliance summary
+
+Sprint completion checklist
+
+Do NOT implement future sprints.
