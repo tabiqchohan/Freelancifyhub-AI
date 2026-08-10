@@ -1,0 +1,441 @@
+You are a Senior TypeScript Architect, AI Systems Engineer, OpenClaw Framework Engineer, Backend Engineer, and Test Engineer.
+
+Project
+
+Freelancify AI
+
+Parent Product
+
+FreelancifyHub
+
+====================================================================
+
+SOURCE OF TRUTH
+
+Read ALL architecture documents before writing code.
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+- docs/tool-registry-architecture-v1.md
+- docs/knowledge-base-architecture-v1.md
+- docs/agent-development-kit-v1.md
+- docs/architecture-review-v1.md
+
+Also preserve everything implemented in Sprint 1.
+
+Do NOT modify Sprint 1 architecture unless absolutely required.
+
+====================================================================
+
+TASK
+
+Implement ONLY
+
+AG-001 Sprint 2
+
+Intent Detection Engine
+
+Nothing else.
+
+====================================================================
+
+DO NOT IMPLEMENT
+
+❌ Routing
+
+❌ Memory
+
+❌ Knowledge
+
+❌ Tool execution
+
+❌ LLM integration
+
+❌ Agent execution
+
+❌ Context builder
+
+❌ Response generation
+
+====================================================================
+
+OBJECTIVE
+
+Create a production-ready intent detection module that is fully replaceable in future by an AI-powered classifier.
+
+The implementation must be interface-driven.
+
+====================================================================
+
+Create folders if missing
+
+src/agents/ag-001-master-orchestrator/
+
+intent/
+
+registry/
+
+classifiers/
+
+matchers/
+
+rules/
+
+constants/
+
+====================================================================
+
+Implement
+
+1.
+
+Intent Registry
+
+Create the official registry using IDs from the architecture.
+
+Each intent must contain:
+
+Intent ID
+
+Intent Name
+
+Description
+
+Category
+
+Priority
+
+Allowed User Roles
+
+Confidence Threshold
+
+Supported Agents
+
+Status
+
+====================================================================
+
+2.
+
+Intent Types
+
+Create strongly typed enums.
+
+Include at minimum:
+
+UNKNOWN
+
+CREATE_PROJECT
+
+UPDATE_PROJECT
+
+DELETE_PROJECT
+
+VIEW_PROJECT
+
+SEARCH_PROJECTS
+
+SUBMIT_PROPOSAL
+
+GENERATE_PROPOSAL
+
+OPTIMIZE_PROFILE
+
+BUILD_PORTFOLIO
+
+BUILD_RESUME
+
+GENERATE_COVER_LETTER
+
+MATCH_PROJECT
+
+CAREER_ADVICE
+
+GENERATE_CONTRACT
+
+PLAN_MILESTONES
+
+GENERATE_REVIEW
+
+REPORT_SCAM
+
+OPEN_DISPUTE
+
+SEND_MESSAGE
+
+SEARCH_KNOWLEDGE
+
+PLATFORM_HELP
+
+ADMIN_ACTION
+
+SYSTEM
+
+====================================================================
+
+3.
+
+Interfaces
+
+IntentClassifier
+
+IntentMatcher
+
+IntentRule
+
+IntentResult
+
+IntentCandidate
+
+IntentMetadata
+
+====================================================================
+
+4.
+
+Rule-Based Classifier
+
+Implement a deterministic classifier.
+
+No AI.
+
+No LLM.
+
+No API.
+
+Use configurable keyword matching.
+
+The implementation must support future replacement.
+
+====================================================================
+
+5.
+
+Keyword Registry
+
+Create categorized keyword groups.
+
+Projects
+
+Proposals
+
+Profiles
+
+Payments
+
+Messages
+
+Contracts
+
+Reviews
+
+Admin
+
+Help
+
+Knowledge
+
+====================================================================
+
+6.
+
+Confidence Scoring
+
+Implement deterministic scoring.
+
+Return
+
+confidence
+
+matched keywords
+
+matched rules
+
+candidate list
+
+primary intent
+
+secondary intents
+
+====================================================================
+
+7.
+
+Fallback Handling
+
+UNKNOWN intent
+
+Low confidence
+
+Multiple intents
+
+Empty request
+
+Invalid request
+
+====================================================================
+
+8.
+
+Validation
+
+Validate:
+
+Input
+
+Output
+
+Registry
+
+Duplicate IDs
+
+Duplicate keywords
+
+====================================================================
+
+9.
+
+Configuration
+
+Thresholds
+
+Maximum candidates
+
+Fallback confidence
+
+Feature flags
+
+====================================================================
+
+10.
+
+Errors
+
+IntentClassificationError
+
+IntentRegistryError
+
+IntentValidationError
+
+====================================================================
+
+11.
+
+Documentation
+
+Create
+
+intent/README.md
+
+Explain:
+
+Architecture
+
+How classifier works
+
+How to add new intents
+
+How to add keywords
+
+Future AI replacement strategy
+
+====================================================================
+
+Testing
+
+Write comprehensive tests.
+
+Registry validation
+
+Classifier
+
+Confidence
+
+Fallback
+
+Unknown
+
+Multi-intent
+
+Configuration
+
+Validation
+
+Edge cases
+
+Duplicate detection
+
+Target
+
+100% passing.
+
+====================================================================
+
+Quality
+
+Strict TypeScript
+
+ESLint clean
+
+Prettier clean
+
+No any
+
+No dead code
+
+No business logic
+
+No AI
+
+No TODO
+
+====================================================================
+
+Validation Before Finish
+
+Run
+
+lint
+
+typecheck
+
+tests
+
+build
+
+Verify
+
+No architecture violations
+
+No circular dependencies
+
+No duplicated intent IDs
+
+No duplicated keywords
+
+Sprint 1 remains compatible
+
+====================================================================
+
+OUTPUT
+
+Provide
+
+Files created
+
+Files modified
+
+Tests passed
+
+Coverage summary
+
+Architecture compliance summary
+
+Sprint completion checklist
+
+Explicitly confirm
+
+"No routing, memory, knowledge, tool execution, or AI model integration was implemented in this sprint."
