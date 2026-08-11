@@ -1,0 +1,845 @@
+You are a Senior TypeScript Architect, AI Systems Engineer, OpenClaw Multi-Agent Systems Engineer, Backend Engineer, Workflow/Execution Planner Engineer, and Test Engineer.
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+====================================================================
+SOURCE OF TRUTH
+====================================================================
+
+Before writing code, read ALL of these:
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+- docs/tool-registry-architecture-v1.md
+- docs/knowledge-base-architecture-v1.md
+- docs/agent-development-kit-v1.md
+- docs/architecture-review-v1.md
+
+Also inspect the existing implementation:
+
+- src/agents/ag-001-master-orchestrator/
+- Sprint 1 Foundation
+- Sprint 2 Intent Detection Engine
+- Sprint 3 Context Builder Engine
+- Sprint 4 Agent Routing Engine
+
+IMPORTANT:
+
+Sprints 1–4 are already implemented, tested, and pushed.
+
+Preserve all existing public contracts and behavior.
+
+Do not rewrite working modules unnecessarily.
+
+====================================================================
+TASK
+====================================================================
+
+Implement ONLY:
+
+AG-001 Master Orchestrator
+Sprint 5 — Execution Planner
+
+Nothing else.
+
+====================================================================
+CORE OBJECTIVE
+====================================================================
+
+Create a production-ready deterministic Execution Planner.
+
+The planner receives:
+
+- AgentRequest
+- IntentResult
+- ContextSnapshot
+- RouteDecision
+
+and produces:
+
+ExecutionPlan
+
+The planner must describe HOW the selected route should be executed later.
+
+The planner must NOT execute anything.
+
+====================================================================
+STRICT NON-GOALS
+====================================================================
+
+DO NOT implement:
+
+❌ Agent execution
+❌ Agent-to-agent communication
+❌ LLM calls
+❌ API calls
+❌ Tool execution
+❌ Memory retrieval
+❌ Knowledge retrieval
+❌ External service calls
+❌ Queue workers
+❌ Background workers
+❌ Response generation
+❌ Actual workflow execution
+❌ Business logic
+
+This sprint is planning only.
+
+====================================================================
+FOLDER STRUCTURE
+====================================================================
+
+Create:
+
+src/agents/ag-001-master-orchestrator/planning/
+
+Recommended structure:
+
+planning/
+  types/
+  interfaces/
+  builders/
+  strategies/
+  validators/
+  errors/
+  config/
+  optimizers/
+  dependencies/
+  utils/
+  index.ts
+  README.md
+
+Follow existing AG-001 conventions.
+
+====================================================================
+1. EXECUTION PLAN TYPES
+====================================================================
+
+Create or extend strongly typed contracts for:
+
+ExecutionPlan
+
+ExecutionStep
+
+ExecutionMode
+
+ExecutionStatus
+
+ExecutionDependency
+
+ExecutionCondition
+
+ExecutionBranch
+
+ExecutionPolicy
+
+ExecutionConstraints
+
+ExecutionMetadata
+
+ExecutionPlanResult
+
+PlanningWarning
+
+PlanningStatistics
+
+Do NOT duplicate existing compatible types.
+
+If Sprint 1 already contains these contracts:
+
+reuse or minimally extend them.
+
+====================================================================
+2. EXECUTION MODES
+====================================================================
+
+Support the architecture-defined execution modes:
+
+SINGLE
+
+SEQUENTIAL
+
+PARALLEL
+
+CONDITIONAL
+
+HYBRID
+
+Important:
+
+These modes describe a future execution plan.
+
+They do NOT execute anything in this sprint.
+
+====================================================================
+3. SINGLE MODE
+====================================================================
+
+For a single-agent route:
+
+Create a plan containing:
+
+- one execution step
+- selected agent
+- input reference
+- required capabilities
+- dependencies
+- timeout metadata
+- retry policy metadata
+- execution constraints
+
+Do not actually call the agent.
+
+====================================================================
+4. SEQUENTIAL MODE
+====================================================================
+
+Support ordered execution steps.
+
+Example logical structure:
+
+Step 1
+  ↓
+Step 2
+  ↓
+Step 3
+
+Each step must contain:
+
+step ID
+
+agent ID
+
+order
+
+dependencies
+
+input references
+
+output references
+
+conditions if applicable
+
+policy metadata
+
+Do not execute the steps.
+
+====================================================================
+5. PARALLEL MODE
+====================================================================
+
+Support independent steps that may run concurrently.
+
+Example:
+
+Step A ─┐
+        ├──> Step C
+Step B ─┘
+
+The planner must ensure that parallel steps do not have unresolved dependencies on each other.
+
+Do not implement actual concurrency.
+
+====================================================================
+6. CONDITIONAL MODE
+====================================================================
+
+Support conditional branches.
+
+Example:
+
+IF condition A
+    → Agent A
+
+ELSE
+    → Agent B
+
+Conditions must be represented as structured data.
+
+Do not evaluate external conditions.
+
+Do not execute branches.
+
+====================================================================
+7. HYBRID MODE
+====================================================================
+
+Support combinations such as:
+
+Sequential
+  ↓
+Parallel
+  ↓
+Conditional
+
+The plan must remain acyclic and valid.
+
+Do not implement an execution engine.
+
+====================================================================
+8. DEPENDENCY GRAPH
+====================================================================
+
+Build a deterministic dependency graph for execution steps.
+
+Validate:
+
+- missing dependency
+- duplicate step IDs
+- self dependency
+- circular dependency
+- invalid dependency
+- impossible ordering
+
+Use a deterministic topological validation algorithm.
+
+If a cycle exists:
+
+return a structured planning error.
+
+====================================================================
+9. PLAN VALIDATION
+====================================================================
+
+Validate:
+
+RouteDecision
+
+Primary agent
+
+Candidate agents
+
+Execution mode
+
+Step IDs
+
+Agent IDs
+
+Dependencies
+
+Conditions
+
+Input references
+
+Output references
+
+Constraints
+
+Timeout values
+
+Retry policy metadata
+
+Maximum steps
+
+====================================================================
+10. ROUTE → PLAN TRANSFORMATION
+====================================================================
+
+Transform Sprint 4 RouteDecision into ExecutionPlan.
+
+Examples:
+
+DIRECT route
+
+→ SINGLE execution plan
+
+Multiple ordered routes
+
+→ SEQUENTIAL plan
+
+Independent routes
+
+→ PARALLEL plan
+
+Conditional routes
+
+→ CONDITIONAL plan
+
+Mixed route
+
+→ HYBRID plan
+
+Do not invent routes that are not present in RouteDecision.
+
+====================================================================
+11. PLAN BUILDER
+====================================================================
+
+Implement:
+
+ExecutionPlanBuilder
+
+Responsibilities:
+
+- validate route
+- determine execution mode
+- create steps
+- assign dependencies
+- assign IDs
+- create conditions
+- apply constraints
+- calculate metadata
+- validate final plan
+
+The builder must be deterministic.
+
+Same input + same configuration = same plan.
+
+====================================================================
+12. PLANNING STRATEGIES
+====================================================================
+
+Create interface-driven strategy abstractions.
+
+Examples:
+
+ExecutionPlanningStrategy
+
+SinglePlanningStrategy
+
+SequentialPlanningStrategy
+
+ParallelPlanningStrategy
+
+ConditionalPlanningStrategy
+
+HybridPlanningStrategy
+
+Strategies should produce plan structures.
+
+They must NOT execute agents.
+
+====================================================================
+13. EXECUTION POLICY
+====================================================================
+
+Create metadata/configuration for:
+
+timeout
+
+retry count
+
+retryable flag
+
+failure behavior
+
+continue-on-failure
+
+stop-on-failure
+
+fallback allowed
+
+max steps
+
+max total execution time
+
+IMPORTANT:
+
+These are planning policies only.
+
+Do not implement retry loops or execution.
+
+====================================================================
+14. FAILURE POLICIES
+====================================================================
+
+Support structured planning metadata for:
+
+FAIL_FAST
+
+CONTINUE
+
+FALLBACK
+
+ESCALATE
+
+The planner only describes the policy.
+
+Actual behavior belongs to future execution engine.
+
+====================================================================
+15. INPUT / OUTPUT REFERENCES
+====================================================================
+
+Execution steps should support structured references.
+
+Examples:
+
+request.input
+
+context.user
+
+context.project
+
+previous.step.output
+
+route.metadata
+
+Do not resolve or retrieve these values.
+
+Only represent references.
+
+====================================================================
+16. CONDITIONS
+
+Create typed conditions.
+
+Examples:
+
+EQUALS
+
+NOT_EQUALS
+
+GREATER_THAN
+
+LESS_THAN
+
+EXISTS
+
+NOT_EXISTS
+
+MATCHES
+
+AND
+
+OR
+
+NOT
+
+Conditions must be declarative.
+
+Do not execute them.
+
+====================================================================
+17. PLAN OPTIMIZATION
+
+Implement only safe deterministic optimizations.
+
+Examples:
+
+Remove duplicate steps.
+
+Remove unreachable steps.
+
+Merge identical metadata where safe.
+
+Preserve dependency ordering.
+
+Do NOT perform aggressive optimization.
+
+Never change business meaning.
+
+====================================================================
+18. CONFIGURATION
+
+Create typed planning configuration.
+
+Include:
+
+maximum steps
+
+maximum plan depth
+
+maximum parallel branches
+
+default timeout
+
+default retry count
+
+default failure policy
+
+conditional planning enabled
+
+parallel planning enabled
+
+hybrid planning enabled
+
+feature flags
+
+Use existing AG-001 configuration conventions.
+
+No secrets.
+
+====================================================================
+19. ERRORS
+
+Create typed errors following AG-001 conventions.
+
+At minimum:
+
+ExecutionPlanningError
+
+ExecutionPlanValidationError
+
+ExecutionDependencyError
+
+ExecutionCycleError
+
+ExecutionConstraintError
+
+UnsupportedExecutionModeError
+
+ExecutionPlanLimitError
+
+Errors must include:
+
+code
+
+message
+
+retryable
+
+metadata where appropriate
+
+====================================================================
+20. LOGGING
+
+Reuse existing AG-001 logger.
+
+Log only metadata:
+
+request ID
+
+correlation ID
+
+plan ID
+
+route ID if available
+
+execution mode
+
+step count
+
+dependency count
+
+planning status
+
+warnings
+
+Do NOT log sensitive context content.
+
+====================================================================
+21. PLAN STATISTICS
+
+Return deterministic statistics.
+
+Include:
+
+step count
+
+agent count
+
+dependency count
+
+parallel branch count
+
+conditional branch count
+
+maximum depth
+
+estimated execution stages
+
+warnings
+
+optimization count
+
+====================================================================
+22. TESTING
+
+Create comprehensive unit tests.
+
+Test at minimum:
+
+- Single plan
+- Sequential plan
+- Parallel plan
+- Conditional plan
+- Hybrid plan
+- Route-to-plan transformation
+- Dependency validation
+- Missing dependency
+- Duplicate step ID
+- Self dependency
+- Circular dependency
+- Invalid agent
+- Invalid route
+- Invalid mode
+- Invalid condition
+- Maximum steps
+- Maximum depth
+- Parallel branch limit
+- Failure policies
+- Input references
+- Output references
+- Deterministic plan generation
+- Safe optimization
+- Unreachable step removal
+- Duplicate step handling
+- Configuration
+- Errors
+- Sprint 1 compatibility
+- Sprint 2 compatibility
+- Sprint 3 compatibility
+- Sprint 4 compatibility
+
+Mandatory determinism test:
+
+Same RouteDecision
++
+same IntentResult
++
+same ContextSnapshot
++
+same configuration
+
+=
+
+identical ExecutionPlan
+
+Target:
+
+100% passing.
+
+====================================================================
+23. DOCUMENTATION
+
+Create:
+
+src/agents/ag-001-master-orchestrator/planning/README.md
+
+Document:
+
+Purpose
+
+Responsibilities
+
+Non-responsibilities
+
+Architecture
+
+Route → Plan transformation
+
+Execution modes
+
+Dependency graph
+
+Conditions
+
+Policies
+
+Optimization
+
+Validation
+
+Failure policies
+
+Future execution engine integration
+
+Testing
+
+Examples
+
+====================================================================
+24. ARCHITECTURE COMPLIANCE
+
+Verify:
+
+- No agent execution
+- No agent-to-agent communication
+- No memory retrieval
+- No knowledge retrieval
+- No tool execution
+- No LLM/API
+- No external calls
+- No queue
+- No worker
+- No response generation
+- No business logic
+- No circular dependencies
+- No duplicated contracts
+- Sprint 1 unchanged
+- Sprint 2 unchanged
+- Sprint 3 unchanged
+- Sprint 4 unchanged
+
+====================================================================
+25. QUALITY GATES
+
+Before finishing run:
+
+lint
+
+typecheck
+
+tests
+
+build
+
+Also inspect:
+
+unused exports
+
+dead code
+
+duplicate types
+
+broken imports
+
+circular dependencies
+
+architecture violations
+
+====================================================================
+26. CHANGE CONTROL
+
+Do NOT modify unrelated files.
+
+Do NOT rewrite existing working modules.
+
+Do NOT implement Sprint 6+.
+
+Do NOT modify architecture documents unless project convention requires a link/index update.
+
+If you discover an architectural contradiction:
+
+STOP.
+
+Report it.
+
+Do not silently redesign the architecture.
+
+====================================================================
+27. FINAL OUTPUT
+
+Provide an implementation report:
+
+1. Files created
+2. Files modified
+3. Planning architecture
+4. Route-to-plan transformation
+5. Execution modes
+6. Dependency graph implementation
+7. Condition model
+8. Failure policies
+9. Optimization strategy
+10. Determinism verification
+11. Tests passed
+12. Coverage summary
+13. Lint result
+14. Typecheck result
+15. Build result
+16. Architecture compliance
+17. Sprint completion checklist
+
+Explicitly confirm:
+
+"No agent execution, agent-to-agent communication, memory retrieval, knowledge retrieval, tool execution, LLM/API integration, external service calls, or workflow execution was implemented in Sprint 5."
+
+Do NOT implement Sprint 6 or any future sprint.
