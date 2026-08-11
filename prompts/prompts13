@@ -1,0 +1,712 @@
+You are a Senior TypeScript Architect, AI Systems Engineer, OpenClaw Framework Engineer, Backend Engineer, and Test Engineer.
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+====================================================================
+SOURCE OF TRUTH
+====================================================================
+
+Read ALL architecture documents before writing code:
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+- docs/tool-registry-architecture-v1.md
+- docs/knowledge-base-architecture-v1.md
+- docs/agent-development-kit-v1.md
+- docs/architecture-review-v1.md
+
+Also inspect the existing AG-001 Sprint 1 and Sprint 2 implementation.
+
+IMPORTANT:
+
+Sprint 1 and Sprint 2 are already implemented and verified.
+
+Preserve their public contracts and behavior.
+
+Do NOT redesign existing architecture unless absolutely necessary.
+
+If an existing type/interface must be extended, make the smallest compatible change and document it.
+
+====================================================================
+TASK
+====================================================================
+
+Implement ONLY:
+
+AG-001 Master Orchestrator
+Sprint 3 — Context Builder Engine
+
+Nothing outside this sprint.
+
+====================================================================
+STRICT NON-GOALS
+====================================================================
+
+DO NOT implement:
+
+❌ Routing Engine
+❌ Execution Planner
+❌ Agent Execution
+❌ Memory Retrieval
+❌ Knowledge Retrieval
+❌ Tool Execution
+❌ LLM/API calls
+❌ Response Generation
+❌ Business Logic
+❌ External service integrations
+
+AG-002, AG-003 and AG-004 must NOT be called.
+
+Create interfaces/adapters where future integration is required, but do not implement those integrations.
+
+====================================================================
+OBJECTIVE
+====================================================================
+
+Create a production-ready, deterministic Context Builder Engine.
+
+The Context Builder receives the normalized request and available context inputs and produces a validated, prioritized, token-budget-aware execution context.
+
+The design must be compatible with future:
+
+AG-002 Memory Manager
+
+AG-003 Knowledge Manager
+
+AG-004 Tool Manager
+
+without directly depending on their implementations.
+
+====================================================================
+FOLDER STRUCTURE
+====================================================================
+
+Create/update only the required AG-001 Sprint 3 structure:
+
+src/agents/ag-001-master-orchestrator/context/
+
+Recommended structure:
+
+context/
+  types/
+  interfaces/
+  config/
+  builders/
+  prioritizers/
+  compressors/
+  budget/
+  validators/
+  errors/
+  utils/
+  index.ts
+  README.md
+
+Keep the structure consistent with the existing project conventions.
+
+====================================================================
+1. CONTEXT TYPES
+====================================================================
+
+Create strongly typed types/interfaces for:
+
+ContextItem
+
+ContextSource
+
+ContextSourceType
+
+ContextPriority
+
+ContextMetadata
+
+ContextBudget
+
+ContextSection
+
+ContextSnapshot
+
+ContextBuildRequest
+
+ContextBuildResult
+
+ContextBuildWarning
+
+ContextBuildError
+
+ContextStatistics
+
+Use strict TypeScript.
+
+Avoid any.
+
+====================================================================
+2. CONTEXT SOURCE TYPES
+====================================================================
+
+Support logical future sources such as:
+
+REQUEST
+
+SESSION
+
+USER
+
+PROJECT
+
+WORKSPACE
+
+MEMORY
+
+KNOWLEDGE
+
+TOOL
+
+SYSTEM
+
+AGENT
+
+Do NOT retrieve data from these sources in this sprint.
+
+The engine should only accept supplied context items.
+
+====================================================================
+3. CONTEXT PRIORITY
+====================================================================
+
+Implement deterministic priority handling.
+
+At minimum support:
+
+CRITICAL
+
+HIGH
+
+NORMAL
+
+LOW
+
+OPTIONAL
+
+Define deterministic ordering rules.
+
+Higher-priority context must be preserved before lower-priority context when budget constraints require trimming.
+
+====================================================================
+4. CONTEXT BUILDER
+====================================================================
+
+Implement:
+
+ContextBuilder
+
+It should:
+
+1. Validate input
+2. Normalize context items
+3. Remove invalid items
+4. Deduplicate equivalent items
+5. Assign priority
+6. Group items by section/source
+7. Apply deterministic ordering
+8. Apply token budget
+9. Produce ContextSnapshot
+10. Produce statistics
+11. Produce warnings where appropriate
+
+The builder must be deterministic.
+
+Same input + same configuration = same output.
+
+====================================================================
+5. CONTEXT ASSEMBLY
+====================================================================
+
+Implement logical sections such as:
+
+System Context
+
+Request Context
+
+User Context
+
+Project Context
+
+Conversation Context
+
+Memory Context
+
+Knowledge Context
+
+Tool Context
+
+Agent Context
+
+Only supplied items should be included.
+
+Empty sections should be handled cleanly.
+
+Do NOT fetch anything externally.
+
+====================================================================
+6. NORMALIZATION
+====================================================================
+
+Normalize:
+
+Whitespace
+
+Empty strings
+
+Metadata
+
+Source identifiers
+
+Priority
+
+Section
+
+Ordering
+
+Do not alter the semantic content unnecessarily.
+
+====================================================================
+7. DEDUPLICATION
+====================================================================
+
+Implement deterministic deduplication.
+
+Consider:
+
+Source
+
+Content identity
+
+Metadata
+
+Priority
+
+Avoid duplicate context entries.
+
+Do not perform expensive semantic similarity or embeddings.
+
+====================================================================
+8. CONTEXT PRIORITIZATION
+====================================================================
+
+Implement a deterministic prioritization strategy.
+
+Suggested ordering:
+
+CRITICAL
+HIGH
+NORMAL
+LOW
+OPTIONAL
+
+Within the same priority:
+
+- Explicit order if provided
+- Source priority
+- Stable insertion order
+
+Never use randomness.
+
+====================================================================
+9. TOKEN BUDGET
+====================================================================
+
+Implement a configurable ContextBudget.
+
+Support:
+
+Maximum total tokens
+
+Maximum tokens per section
+
+Reserved tokens
+
+Minimum tokens
+
+Warning threshold
+
+Overflow behavior
+
+IMPORTANT:
+
+If the project does not already have a tokenizer dependency, DO NOT add a heavyweight tokenizer just for this sprint.
+
+Create a deterministic token-estimation abstraction/interface.
+
+Use a documented approximation implementation if necessary.
+
+The estimator must be replaceable later with a model-specific tokenizer.
+
+====================================================================
+10. BUDGET STRATEGY
+====================================================================
+
+When context exceeds the budget:
+
+1. Preserve CRITICAL
+2. Preserve HIGH where possible
+3. Preserve NORMAL according to priority
+4. Trim LOW
+5. Remove OPTIONAL first
+
+Never silently remove CRITICAL context.
+
+If CRITICAL context alone exceeds the maximum budget:
+
+Return a structured overflow warning/error according to the architecture.
+
+Do not silently truncate critical information.
+
+====================================================================
+11. CONTEXT COMPRESSION
+====================================================================
+
+Create a compression abstraction/interface.
+
+Example:
+
+ContextCompressor
+
+But DO NOT implement LLM-based summarization.
+
+For this sprint only provide:
+
+- interface
+- deterministic basic compaction if useful
+- configuration
+- tests
+
+Future compression can be provided by an AI/LLM implementation.
+
+====================================================================
+12. CONTEXT SECTIONS
+====================================================================
+
+Implement a stable section ordering.
+
+The order must be configurable but deterministic.
+
+Document the default ordering.
+
+====================================================================
+13. CONTEXT VALIDATION
+====================================================================
+
+Validate:
+
+Missing request
+
+Invalid content
+
+Invalid priority
+
+Invalid source
+
+Invalid section
+
+Invalid budget
+
+Duplicate IDs
+
+Oversized context
+
+Critical overflow
+
+Invalid metadata
+
+====================================================================
+14. ERRORS
+
+Create appropriate typed errors.
+
+At minimum:
+
+ContextBuildError
+
+ContextValidationError
+
+ContextBudgetError
+
+ContextOverflowError
+
+ContextNormalizationError
+
+Follow the existing AG-001 error conventions.
+
+====================================================================
+15. CONFIGURATION
+====================================================================
+
+Create typed configuration for:
+
+Default maximum tokens
+
+Per-section limits
+
+Reserved tokens
+
+Warning threshold
+
+Priority behavior
+
+Deduplication behavior
+
+Overflow behavior
+
+Compression feature flag
+
+Keep configuration environment-safe.
+
+No hardcoded secrets.
+
+====================================================================
+16. FUTURE INTEGRATION INTERFACES
+====================================================================
+
+Define interfaces only for future providers where appropriate.
+
+Examples:
+
+MemoryContextProvider
+
+KnowledgeContextProvider
+
+ToolContextProvider
+
+UserContextProvider
+
+ProjectContextProvider
+
+These interfaces must NOT execute anything in Sprint 3.
+
+The Context Builder should be able to receive provider results through dependency injection in the future.
+
+Do NOT import AG-002, AG-003, or AG-004 implementation modules.
+
+====================================================================
+17. CONTEXT STATISTICS
+====================================================================
+
+Return useful deterministic statistics.
+
+For example:
+
+Total items
+
+Included items
+
+Excluded items
+
+Items by source
+
+Items by priority
+
+Items by section
+
+Estimated tokens
+
+Budget utilization
+
+Deduplicated count
+
+Overflow count
+
+Warnings count
+
+====================================================================
+18. LOGGING
+====================================================================
+
+Reuse the existing AG-001 logging infrastructure.
+
+Log only appropriate metadata.
+
+Do NOT log sensitive context content.
+
+Include correlation/request identifiers where already supported.
+
+Avoid excessive logging.
+
+====================================================================
+19. TESTING
+====================================================================
+
+Create comprehensive unit tests.
+
+Test at minimum:
+
+- Empty context
+- Single item
+- Multiple items
+- Priority ordering
+- Section ordering
+- Duplicate removal
+- Invalid input
+- Invalid metadata
+- Token estimation
+- Total budget
+- Per-section budget
+- Reserved budget
+- Warning threshold
+- LOW/OPTIONAL trimming
+- HIGH/CRITICAL preservation
+- Critical overflow
+- Deterministic output
+- Provider interface compatibility
+- Compression interface
+- Statistics
+- Configuration
+- Error handling
+
+Tests must prove:
+
+Same input + same configuration
+=
+same output
+
+Target:
+
+100% passing.
+
+====================================================================
+20. ARCHITECTURE COMPLIANCE
+====================================================================
+
+Verify:
+
+- No routing
+- No execution
+- No memory retrieval
+- No knowledge retrieval
+- No tool execution
+- No LLM/API
+- No business logic
+- No circular dependencies
+- No duplicated contracts
+- Sprint 1 remains compatible
+- Sprint 2 remains compatible
+
+====================================================================
+21. DOCUMENTATION
+====================================================================
+
+Create:
+
+src/agents/ag-001-master-orchestrator/context/README.md
+
+Document:
+
+Purpose
+
+Responsibilities
+
+Non-responsibilities
+
+Architecture
+
+Input
+
+Output
+
+Priority model
+
+Budget model
+
+Deduplication
+
+Overflow behavior
+
+Future Memory integration
+
+Future Knowledge integration
+
+Future Tool integration
+
+Future compression
+
+Testing
+
+Examples
+
+====================================================================
+22. QUALITY GATES
+====================================================================
+
+Before finishing run:
+
+lint
+
+typecheck
+
+tests
+
+build
+
+Also inspect:
+
+circular dependencies
+
+unused exports
+
+dead code
+
+duplicate types
+
+broken imports
+
+architecture violations
+
+====================================================================
+23. CHANGE CONTROL
+====================================================================
+
+Do NOT modify unrelated project files.
+
+Do NOT modify Sprint 2 behavior.
+
+Do NOT modify architecture documents unless a generated documentation link is required by project convention.
+
+If an architecture contradiction is discovered:
+
+STOP and document it.
+
+Do not silently redesign the architecture.
+
+====================================================================
+OUTPUT
+====================================================================
+
+Provide a final implementation report containing:
+
+1. Files created
+2. Files modified
+3. Context architecture summary
+4. Token-budget strategy
+5. Priority strategy
+6. Deduplication strategy
+7. Overflow strategy
+8. Future integration interfaces
+9. Tests passed
+10. Coverage summary
+11. lint result
+12. typecheck result
+13. build result
+14. Architecture compliance
+15. Sprint completion checklist
+
+Explicitly confirm:
+
+"No routing, execution, memory retrieval, knowledge retrieval, tool execution, LLM/API integration, or business logic was implemented in Sprint 3."
+
+Do not implement Sprint 4 or any future sprint.
