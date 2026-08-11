@@ -1,0 +1,830 @@
+You are a Senior TypeScript Architect, AI Systems Engineer, OpenClaw Multi-Agent Systems Engineer, Backend Engineer, and Test Engineer.
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+====================================================================
+SOURCE OF TRUTH
+====================================================================
+
+Before writing code, read ALL of these:
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+- docs/tool-registry-architecture-v1.md
+- docs/knowledge-base-architecture-v1.md
+- docs/agent-development-kit-v1.md
+- docs/architecture-review-v1.md
+
+Also inspect the existing implementation:
+
+- src/agents/ag-001-master-orchestrator/
+- Sprint 1 Foundation
+- Sprint 2 Intent Detection Engine
+- Sprint 3 Context Builder Engine
+
+IMPORTANT:
+
+Sprint 1, Sprint 2 and Sprint 3 are already implemented and verified.
+
+Preserve their public contracts and behavior.
+
+Do not rewrite working code unnecessarily.
+
+====================================================================
+TASK
+====================================================================
+
+Implement ONLY:
+
+AG-001 Master Orchestrator
+Sprint 4 — Agent Routing Engine
+
+Nothing else.
+
+====================================================================
+STRICT NON-GOALS
+====================================================================
+
+DO NOT implement:
+
+❌ Agent execution
+❌ Execution planner
+❌ Memory retrieval
+❌ Knowledge retrieval
+❌ Tool execution
+❌ LLM/API calls
+❌ Response generation
+❌ Business logic
+❌ Actual external agent communication
+❌ Queue implementation
+❌ Load-balancing infrastructure
+
+The routing engine must ONLY produce a deterministic routing decision.
+
+====================================================================
+OBJECTIVE
+====================================================================
+
+Build a production-ready Agent Routing Engine that takes:
+
+- AgentRequest
+- IntentResult
+- ContextSnapshot
+
+and produces a validated:
+
+RouteDecision
+
+The routing engine must determine:
+
+1. Which agent(s) are eligible
+2. Which agent should be selected
+3. Why it was selected
+4. Confidence
+5. Fallback agents
+6. Escalation information
+7. Routing metadata
+
+The result will be consumed by future execution/planning sprints.
+
+====================================================================
+FOLDER STRUCTURE
+====================================================================
+
+Create/update only the required AG-001 routing structure:
+
+src/agents/ag-001-master-orchestrator/routing/
+
+Recommended:
+
+routing/
+  types/
+  interfaces/
+  registry/
+  matchers/
+  scorers/
+  strategies/
+  fallback/
+  validators/
+  errors/
+  config/
+  utils/
+  index.ts
+  README.md
+
+Follow existing project conventions.
+
+====================================================================
+1. ROUTING TYPES
+====================================================================
+
+Create strongly typed types/interfaces for:
+
+RouteRequest
+
+RouteDecision
+
+RouteCandidate
+
+RouteScore
+
+RouteReason
+
+RouteFallback
+
+RouteEscalation
+
+RoutingMetadata
+
+RoutingConstraints
+
+RoutingResult
+
+AgentRoute
+
+RoutingStrategy
+
+RoutingStatus
+
+Do not use any.
+
+====================================================================
+2. AGENT CAPABILITY MODEL
+====================================================================
+
+Use the existing AgentCapability / AgentMetadata contracts wherever possible.
+
+Do NOT duplicate existing agent contracts.
+
+Routing must support matching based on:
+
+Agent ID
+
+Capabilities
+
+Supported intents
+
+User role
+
+Agent status
+
+Permissions
+
+Dependencies
+
+Priority
+
+Cost
+
+Availability metadata
+
+Constraints
+
+Only use data actually available in the existing contracts.
+
+If an architectural field does not currently exist:
+
+Create the smallest compatible abstraction/interface.
+
+Do not redesign the entire Agent Catalog.
+
+====================================================================
+3. ROUTING REGISTRY
+====================================================================
+
+Create a routing registry/adapter that can provide eligible agents.
+
+The registry must support:
+
+Register
+
+Unregister
+
+Get agent
+
+List agents
+
+Find candidates
+
+Validate agent
+
+IMPORTANT:
+
+Do not create a second source of truth for the full Agent Catalog.
+
+If the Agent Catalog already defines agent metadata, create an adapter/interface around it.
+
+The routing layer must remain compatible with the existing Agent Catalog.
+
+====================================================================
+4. INTENT → AGENT MATCHING
+====================================================================
+
+Use the Sprint 2 IntentResult.
+
+Create deterministic matching logic.
+
+Example:
+
+CREATE_PROJECT
+
+→ candidate agents capable of project creation
+
+GENERATE_PROPOSAL
+
+→ proposal-capable agent
+
+OPTIMIZE_PROFILE
+
+→ profile optimization agent
+
+SEARCH_PROJECTS
+
+→ project discovery/matching agent
+
+Do NOT invent new agent IDs.
+
+Read the Agent Catalog and use the actual existing IDs.
+
+If an intent has no matching agent:
+
+return a structured routing failure.
+
+Do NOT silently invent a fallback agent.
+
+====================================================================
+5. CAPABILITY MATCHING
+====================================================================
+
+Candidate eligibility should consider:
+
+Intent support
+
+Required capability
+
+Agent status
+
+User role
+
+Permissions
+
+Constraints
+
+Agent availability metadata
+
+Do not call actual agents.
+
+====================================================================
+6. ROUTING SCORING
+====================================================================
+
+Implement a deterministic scoring model.
+
+Possible factors:
+
+Intent match
+
+Capability match
+
+User-role compatibility
+
+Priority
+
+Agent status
+
+Constraint compatibility
+
+Cost metadata
+
+Availability metadata
+
+Use explicit weights/configuration.
+
+Do not use randomness.
+
+Same input must always produce the same ranking.
+
+Document the scoring formula.
+
+IMPORTANT:
+
+Do not override business rules from the PRD or Agent Catalog.
+
+====================================================================
+7. ROUTING STRATEGIES
+====================================================================
+
+Support the architecture-defined strategies where applicable.
+
+At minimum:
+
+DIRECT
+
+CAPABILITY_MATCH
+
+PRIORITY
+
+FALLBACK
+
+ESCALATION
+
+If the Master Orchestrator specification defines additional strategies, implement their abstractions without inventing behavior.
+
+Strategies should be interface-driven.
+
+====================================================================
+8. SINGLE AGENT ROUTING
+====================================================================
+
+Support:
+
+One primary agent
+
+Multiple ranked candidates
+
+Fallback agents
+
+The primary route must be deterministic.
+
+Return:
+
+selected agent
+
+candidate list
+
+scores
+
+reasons
+
+confidence
+
+====================================================================
+9. MULTI-AGENT ROUTING
+
+Do NOT implement execution.
+
+But create routing support for future:
+
+PARALLEL
+
+SEQUENTIAL
+
+CONDITIONAL
+
+HYBRID
+
+The routing result may describe the intended execution mode.
+
+Actual execution belongs to a future sprint.
+
+====================================================================
+10. FALLBACK ROUTING
+====================================================================
+
+Implement deterministic fallback handling.
+
+Cases:
+
+Primary agent unavailable
+
+Primary agent disabled
+
+No capability match
+
+Low routing confidence
+
+Invalid route
+
+Dependency unavailable metadata
+
+For every fallback:
+
+Record why fallback occurred.
+
+Never silently route somewhere else.
+
+====================================================================
+11. ESCALATION
+====================================================================
+
+Implement routing-level escalation metadata.
+
+Examples:
+
+NO_MATCH
+
+LOW_CONFIDENCE
+
+PERMISSION_DENIED
+
+AGENT_UNAVAILABLE
+
+SYSTEM_CONSTRAINT
+
+Escalation must return structured information.
+
+Do not implement actual escalation execution.
+
+====================================================================
+12. ROUTING CONFIDENCE
+====================================================================
+
+Return:
+
+routing confidence
+
+candidate scores
+
+confidence threshold
+
+confidence status
+
+Support configuration such as:
+
+HIGH
+
+MEDIUM
+
+LOW
+
+Do not invent thresholds if the Master Orchestrator specification already defines them.
+
+Reuse existing architecture thresholds.
+
+====================================================================
+13. ROUTING CONSTRAINTS
+====================================================================
+
+Support logical constraints:
+
+User role
+
+Required permissions
+
+Required capability
+
+Excluded agents
+
+Maximum candidates
+
+Maximum routing cost
+
+Minimum confidence
+
+Agent status
+
+Do not implement business-specific restrictions that are not already documented.
+
+====================================================================
+14. ROUTING VALIDATION
+====================================================================
+
+Validate:
+
+Missing intent
+
+Invalid intent
+
+Missing request
+
+Invalid agent
+
+Duplicate agent IDs
+
+Invalid capability
+
+Invalid score
+
+Invalid confidence
+
+Invalid routing strategy
+
+Invalid constraints
+
+No eligible candidates
+
+====================================================================
+15. ERRORS
+
+Create typed errors following existing AG-001 error conventions.
+
+At minimum:
+
+RoutingError
+
+RoutingValidationError
+
+RoutingRegistryError
+
+NoRouteError
+
+LowConfidenceRouteError
+
+AgentUnavailableError
+
+RoutingConstraintError
+
+Errors must include:
+
+code
+
+message
+
+retryable
+
+metadata where appropriate
+
+====================================================================
+16. CONFIGURATION
+====================================================================
+
+Create typed routing configuration.
+
+Include:
+
+Confidence thresholds
+
+Maximum candidates
+
+Scoring weights
+
+Fallback enabled
+
+Escalation enabled
+
+Default strategy
+
+Maximum routing cost
+
+Feature flags
+
+Do not hardcode secrets.
+
+Use the project's existing configuration patterns.
+
+====================================================================
+17. LOGGING
+
+Reuse the existing AG-001 logger.
+
+Log:
+
+request ID
+
+correlation ID
+
+intent
+
+candidate count
+
+selected agent
+
+routing strategy
+
+confidence
+
+fallback status
+
+escalation status
+
+Do NOT log sensitive request/context content.
+
+====================================================================
+18. ROUTING RESULT
+
+The result should contain enough information for Sprint 5 Execution Planner.
+
+Include:
+
+RouteDecision
+
+Primary route
+
+Candidate routes
+
+Fallback routes
+
+Execution mode
+
+Confidence
+
+Reasons
+
+Escalation
+
+Routing metadata
+
+Do not execute anything.
+
+====================================================================
+19. DETERMINISM
+
+This is mandatory.
+
+Given:
+
+Same request
+
+Same intent
+
+Same context
+
+Same registry
+
+Same configuration
+
+the routing result MUST be identical.
+
+No random selection.
+
+No time-dependent selection.
+
+No hidden mutable global state.
+
+====================================================================
+20. TESTING
+
+Create comprehensive tests.
+
+At minimum test:
+
+- Direct intent match
+- Capability match
+- Multiple candidates
+- Ranking
+- Priority
+- User-role compatibility
+- Permission mismatch
+- Disabled agent
+- Unavailable agent
+- No candidate
+- Low confidence
+- Fallback
+- Escalation
+- Excluded agents
+- Maximum candidate limit
+- Invalid intent
+- Invalid registry
+- Invalid configuration
+- Deterministic routing
+- Multi-agent route description
+- Routing errors
+- Existing Sprint 1 compatibility
+- Existing Sprint 2 compatibility
+- Existing Sprint 3 compatibility
+
+Test that:
+
+Same input
++
+same configuration
++
+same registry
+=
+same RouteDecision
+
+Target:
+
+100% passing.
+
+====================================================================
+21. DOCUMENTATION
+
+Create:
+
+src/agents/ag-001-master-orchestrator/routing/README.md
+
+Document:
+
+Purpose
+
+Responsibilities
+
+Non-responsibilities
+
+Architecture
+
+Input
+
+Output
+
+Candidate selection
+
+Scoring
+
+Routing strategies
+
+Fallback
+
+Escalation
+
+Confidence
+
+Determinism
+
+Future Execution Planner integration
+
+Testing
+
+Examples
+
+====================================================================
+22. ARCHITECTURE COMPLIANCE
+
+Verify:
+
+- No agent execution
+- No memory retrieval
+- No knowledge retrieval
+- No tool execution
+- No LLM/API
+- No external calls
+- No business logic
+- No duplicated Agent Catalog
+- No circular dependencies
+- Sprint 1 unchanged
+- Sprint 2 unchanged
+- Sprint 3 unchanged
+
+====================================================================
+23. QUALITY GATES
+
+Run:
+
+lint
+
+typecheck
+
+tests
+
+build
+
+Also check:
+
+unused exports
+
+dead code
+
+duplicate types
+
+broken imports
+
+circular dependencies
+
+architecture violations
+
+====================================================================
+24. CHANGE CONTROL
+
+Do NOT modify unrelated files.
+
+Do NOT rewrite Sprint 1.
+
+Do NOT rewrite Sprint 2.
+
+Do NOT rewrite Sprint 3.
+
+Do NOT modify architecture documents unless project convention requires a link/index update.
+
+If a conflict exists between the architecture documents and implementation:
+
+STOP.
+
+Report the conflict.
+
+Do not silently choose a new architecture.
+
+====================================================================
+25. FINAL OUTPUT
+
+Provide an implementation report containing:
+
+1. Files created
+2. Files modified
+3. Routing architecture summary
+4. Candidate selection strategy
+5. Scoring model
+6. Routing strategies implemented
+7. Fallback strategy
+8. Escalation strategy
+9. Determinism verification
+10. Tests passed
+11. Coverage summary
+12. Lint result
+13. Typecheck result
+14. Build result
+15. Architecture compliance
+16. Sprint completion checklist
+
+Explicitly confirm:
+
+"No agent execution, memory retrieval, knowledge retrieval, tool execution, LLM/API integration, or external service calls were implemented in Sprint 4."
+
+Do NOT implement Sprint 5 or any future sprint.
