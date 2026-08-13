@@ -1,0 +1,984 @@
+You are a Senior TypeScript Architect, AI Systems Engineer, OpenClaw Multi-Agent Systems Engineer, Distributed Systems Engineer, Backend Engineer, and Test Engineer.
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+====================================================================
+SOURCE OF TRUTH
+====================================================================
+
+Before writing code, read:
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+- docs/tool-registry-architecture-v1.md
+- docs/knowledge-base-architecture-v1.md
+- docs/agent-development-kit-v1.md
+- docs/architecture-review-v1.md
+
+Also inspect:
+
+- src/agents/ag-001-master-orchestrator/
+- Sprint 1 Foundation
+- Sprint 2 Intent Detection
+- Sprint 3 Context Builder
+- Sprint 4 Routing Engine
+- Sprint 5 Execution Planner
+
+IMPORTANT:
+
+Sprints 1–5 are already implemented, tested, committed, and pushed.
+
+Preserve existing public contracts and behavior.
+
+Do not rewrite working modules unnecessarily.
+
+====================================================================
+TASK
+====================================================================
+
+Implement ONLY:
+
+AG-001 Master Orchestrator
+Sprint 6 — Execution Engine
+
+This sprint introduces the first controlled execution layer.
+
+The Execution Engine receives a validated ExecutionPlan and executes it through an abstract AgentExecutor interface.
+
+====================================================================
+STRICT NON-GOALS
+====================================================================
+
+DO NOT implement:
+
+❌ Memory integration
+❌ Knowledge integration
+❌ Tool Registry integration
+❌ Tool execution
+❌ LLM integration
+❌ External API integrations
+❌ Real OpenClaw network calls
+❌ Database integration
+❌ Queue workers
+❌ Background workers
+❌ Business logic
+❌ Social media integrations
+❌ Payment integrations
+❌ Actual production agent implementations
+
+The engine must use dependency-injected abstractions.
+
+For tests, use mock/fake executors only.
+
+====================================================================
+OBJECTIVE
+====================================================================
+
+Build a production-ready execution lifecycle that converts:
+
+ExecutionPlan
+        ↓
+ExecutionEngine
+        ↓
+AgentExecutor
+        ↓
+ExecutionResult
+
+The engine must support:
+
+- plan validation
+- execution lifecycle
+- single execution
+- sequential execution
+- parallel execution
+- conditional execution
+- hybrid execution
+- timeout
+- retry
+- cancellation
+- failure handling
+- fallback metadata
+- result collection
+- execution state tracking
+- observability
+- deterministic behavior where applicable
+
+====================================================================
+FOLDER STRUCTURE
+====================================================================
+
+Create:
+
+src/agents/ag-001-master-orchestrator/execution/
+
+Recommended:
+
+execution/
+  types/
+  interfaces/
+  engine/
+  executors/
+  strategies/
+  lifecycle/
+  state/
+  retry/
+  timeout/
+  cancellation/
+  validators/
+  errors/
+  config/
+  results/
+  utils/
+  index.ts
+  README.md
+
+Follow existing AG-001 project conventions.
+
+====================================================================
+1. EXECUTION TYPES
+====================================================================
+
+Create or reuse strongly typed contracts for:
+
+ExecutionRequest
+
+ExecutionRun
+
+ExecutionState
+
+ExecutionStepState
+
+ExecutionResult
+
+ExecutionStepResult
+
+ExecutionError
+
+ExecutionEvent
+
+ExecutionProgress
+
+ExecutionMetrics
+
+ExecutionCancellation
+
+ExecutionTimeout
+
+ExecutionRetry
+
+ExecutionPolicy
+
+ExecutionContext
+
+Do NOT duplicate types already defined by Sprint 1 or Sprint 5.
+
+Reuse and minimally extend existing contracts.
+
+====================================================================
+2. EXECUTION STATES
+====================================================================
+
+Support a clear lifecycle.
+
+At minimum:
+
+PENDING
+PLANNING
+READY
+RUNNING
+PAUSED
+COMPLETED
+PARTIAL
+FAILED
+CANCELLED
+TIMED_OUT
+
+If the existing architecture defines different states, preserve those contracts and extend only where required.
+
+State transitions must be validated.
+
+Invalid transitions must produce structured errors.
+
+====================================================================
+3. AGENT EXECUTOR INTERFACE
+====================================================================
+
+Create an abstraction:
+
+AgentExecutor
+
+The engine must NOT know how an individual agent is implemented.
+
+Example logical contract:
+
+execute(request): Promise<AgentExecutionResult>
+
+Also support:
+
+canExecute(agentId)
+
+cancel(executionId)
+
+health/status metadata where appropriate
+
+Do not implement real agents.
+
+Create test-only fake/mock executors.
+
+====================================================================
+4. EXECUTION ENGINE
+====================================================================
+
+Implement:
+
+ExecutionEngine
+
+Responsibilities:
+
+1. Validate ExecutionPlan
+2. Create execution run
+3. Initialize state
+4. Execute according to mode
+5. Track step state
+6. Handle timeout
+7. Handle retry
+8. Handle failure policy
+9. Support cancellation
+10. Collect results
+11. Produce final ExecutionResult
+12. Emit execution events
+13. Produce execution metrics
+
+====================================================================
+5. SINGLE EXECUTION
+====================================================================
+
+For SINGLE mode:
+
+1. Validate step
+2. Resolve executor
+3. Mark RUNNING
+4. Execute
+5. Capture result
+6. Apply timeout/retry policy
+7. Mark COMPLETED or FAILED
+
+Do not call external services.
+
+====================================================================
+6. SEQUENTIAL EXECUTION
+====================================================================
+
+Execute steps according to dependency/order.
+
+Example:
+
+Step A
+ ↓
+Step B
+ ↓
+Step C
+
+A must complete successfully before B when dependency requires it.
+
+Respect failure policy:
+
+FAIL_FAST
+
+CONTINUE
+
+FALLBACK
+
+ESCALATE
+
+The engine must not invent policies.
+
+====================================================================
+7. PARALLEL EXECUTION
+====================================================================
+
+Execute independent steps concurrently where the ExecutionPlan explicitly allows parallelism.
+
+Before execution:
+
+Validate that no unresolved dependency exists between concurrently scheduled steps.
+
+Collect all results.
+
+If one step fails:
+
+Follow the plan's failure policy.
+
+Do not automatically cancel other steps unless the policy explicitly requires it.
+
+====================================================================
+8. CONDITIONAL EXECUTION
+====================================================================
+
+Evaluate only the declarative conditions that are already represented in the ExecutionPlan.
+
+Do not make external calls to determine conditions.
+
+Create an interface:
+
+ConditionEvaluator
+
+It must be dependency-injected.
+
+Implement a deterministic basic evaluator for supported condition types.
+
+Do not use LLMs for conditions.
+
+====================================================================
+9. HYBRID EXECUTION
+====================================================================
+
+Support plans containing combinations of:
+
+Sequential
+
+Parallel
+
+Conditional
+
+Execution must respect dependency graph and plan constraints.
+
+Do not bypass the ExecutionPlan.
+
+====================================================================
+10. INPUT RESOLUTION
+====================================================================
+
+Support structured references from the ExecutionPlan.
+
+Examples:
+
+request.input
+
+context.*
+
+previous.step.output
+
+route.metadata
+
+Only resolve data already present in the ExecutionContext.
+
+Do NOT retrieve Memory, Knowledge, Tools, or external data.
+
+If a reference cannot be resolved:
+
+return a structured execution error.
+
+====================================================================
+11. OUTPUT HANDLING
+====================================================================
+
+Store step outputs in an execution-local result store.
+
+Support:
+
+step output
+
+step status
+
+step error
+
+timestamps
+
+metadata
+
+Do not persist results externally in this sprint.
+
+Use in-memory execution state.
+
+====================================================================
+12. RETRY
+
+Implement bounded retry behavior according to ExecutionPolicy.
+
+Support:
+
+maximum attempts
+
+retryable errors
+
+backoff strategy
+
+minimum delay
+
+maximum delay
+
+Do not retry non-retryable errors.
+
+Use deterministic backoff calculation.
+
+Do not introduce random jitter unless explicitly required by architecture.
+
+No infinite retries.
+
+====================================================================
+13. TIMEOUT
+
+Implement timeout handling.
+
+Support:
+
+step timeout
+
+overall execution timeout
+
+Timeout must produce a structured error.
+
+A timed-out step must not remain in RUNNING state.
+
+Ensure timers are cleaned up.
+
+Avoid timer leaks.
+
+====================================================================
+14. CANCELLATION
+
+Implement:
+
+CancellationToken / CancellationController abstraction.
+
+Support:
+
+cancel pending execution
+
+cancel running execution when executor supports cancellation
+
+stop scheduling new dependent steps
+
+clean up timers/resources
+
+Final state must be:
+
+CANCELLED
+
+or the architecture-defined equivalent.
+
+Cancellation must be idempotent.
+
+====================================================================
+15. FAILURE HANDLING
+
+Support:
+
+FAIL_FAST
+
+CONTINUE
+
+FALLBACK
+
+ESCALATE
+
+The engine must follow the policy specified in the plan.
+
+Do not invent fallback agents.
+
+If fallback metadata exists:
+
+create the appropriate execution event/result state.
+
+Actual routing changes belong to routing/orchestration layers unless explicitly represented in the plan.
+
+====================================================================
+16. EXECUTION EVENTS
+
+Create typed events.
+
+At minimum:
+
+EXECUTION_CREATED
+
+EXECUTION_STARTED
+
+STEP_STARTED
+
+STEP_COMPLETED
+
+STEP_FAILED
+
+STEP_RETRYING
+
+STEP_TIMED_OUT
+
+STEP_CANCELLED
+
+EXECUTION_COMPLETED
+
+EXECUTION_FAILED
+
+EXECUTION_CANCELLED
+
+EXECUTION_TIMED_OUT
+
+Events should contain safe metadata.
+
+Do NOT include sensitive context content.
+
+====================================================================
+17. EVENT EMITTER
+
+Create an interface:
+
+ExecutionEventEmitter
+
+The engine should emit events through dependency injection.
+
+Provide:
+
+- in-memory implementation for tests
+- no external event broker in this sprint
+
+Events must be ordered deterministically per execution.
+
+====================================================================
+18. STATE MANAGEMENT
+
+Create an execution-local state manager.
+
+Responsibilities:
+
+get execution state
+
+update execution state
+
+get step state
+
+update step state
+
+record result
+
+record error
+
+record event
+
+State transitions must be validated.
+
+Do not use global mutable state.
+
+====================================================================
+19. EXECUTION METRICS
+
+Track:
+
+execution ID
+
+plan ID
+
+start time
+
+end time
+
+duration
+
+total steps
+
+completed steps
+
+failed steps
+
+cancelled steps
+
+timed-out steps
+
+retry count
+
+parallel branches
+
+final status
+
+Do not expose sensitive request content.
+
+====================================================================
+20. CONCURRENCY CONTROL
+
+Implement safe concurrency limits.
+
+Configuration should support:
+
+maximum concurrent steps
+
+maximum execution duration
+
+maximum total steps
+
+Do not create worker queues.
+
+Use controlled Promise-based execution where appropriate.
+
+Ensure no step executes more than once unless retry policy explicitly allows retry.
+
+====================================================================
+21. IDEMPOTENCY
+
+Execution requests should have an execution ID.
+
+Within the same execution:
+
+A step must not accidentally execute twice.
+
+Retries must be distinguishable from duplicate scheduling.
+
+Document the behavior.
+
+====================================================================
+22. CONFIGURATION
+
+Create typed execution configuration.
+
+Include:
+
+max concurrent steps
+
+default timeout
+
+max timeout
+
+default retry attempts
+
+max retry attempts
+
+backoff settings
+
+cancellation enabled
+
+parallel execution enabled
+
+conditional execution enabled
+
+event emission enabled
+
+feature flags
+
+Use existing AG-001 config conventions.
+
+No secrets.
+
+====================================================================
+23. ERRORS
+
+Create typed errors following AG-001 conventions.
+
+At minimum:
+
+ExecutionEngineError
+
+ExecutionValidationError
+
+ExecutionStateError
+
+AgentExecutorError
+
+ExecutionTimeoutError
+
+ExecutionCancelledError
+
+ExecutionRetryError
+
+ExecutionInputResolutionError
+
+ExecutionConcurrencyError
+
+ExecutionLimitError
+
+Errors must include:
+
+code
+
+message
+
+retryable
+
+metadata where appropriate
+
+====================================================================
+24. LOGGING
+
+Reuse existing AG-001 logger.
+
+Log safe metadata only:
+
+execution ID
+
+plan ID
+
+step ID
+
+agent ID
+
+state transition
+
+attempt number
+
+duration
+
+error code
+
+final status
+
+Do NOT log:
+
+passwords
+
+tokens
+
+private context
+
+payment data
+
+full user messages
+
+sensitive project data
+
+====================================================================
+25. TESTING
+
+Create comprehensive unit tests.
+
+At minimum test:
+
+- Single execution
+- Sequential execution
+- Parallel execution
+- Conditional execution
+- Hybrid execution
+- Successful execution
+- Failed execution
+- Partial execution
+- Fail-fast
+- Continue-on-failure
+- Fallback policy metadata
+- Escalation policy metadata
+- Retry
+- Non-retryable error
+- Retry limit
+- Timeout
+- Overall timeout
+- Cancellation before execution
+- Cancellation during execution
+- Repeated cancellation
+- Dependency ordering
+- Input resolution
+- Missing input reference
+- Output propagation
+- Concurrency limit
+- Duplicate execution prevention
+- State transitions
+- Invalid state transition
+- Event emission
+- Event ordering
+- Metrics
+- Executor failure
+- Executor unavailable
+- Invalid plan
+- Empty plan
+- Maximum step limit
+- Configuration validation
+- Existing Sprint 1 compatibility
+- Existing Sprint 2 compatibility
+- Existing Sprint 3 compatibility
+- Existing Sprint 4 compatibility
+- Existing Sprint 5 compatibility
+
+Use fake/mock AgentExecutor implementations.
+
+Do NOT use real external agents.
+
+====================================================================
+26. DETERMINISM
+
+Execution result timing is naturally runtime-dependent.
+
+However, the following must remain deterministic:
+
+- step selection
+- dependency ordering
+- retry eligibility
+- retry count
+- failure policy
+- condition evaluation
+- event type ordering
+- state transition rules
+
+Do not use randomness.
+
+====================================================================
+27. DOCUMENTATION
+
+Create:
+
+src/agents/ag-001-master-orchestrator/execution/README.md
+
+Document:
+
+Purpose
+
+Responsibilities
+
+Non-responsibilities
+
+Architecture
+
+AgentExecutor abstraction
+
+Execution lifecycle
+
+States
+
+Single mode
+
+Sequential mode
+
+Parallel mode
+
+Conditional mode
+
+Hybrid mode
+
+Retry
+
+Timeout
+
+Cancellation
+
+Failure policies
+
+Events
+
+Metrics
+
+Concurrency
+
+Idempotency
+
+Testing
+
+Future integrations
+
+====================================================================
+28. ARCHITECTURE COMPLIANCE
+
+Verify:
+
+- No Memory Manager integration
+- No Knowledge Manager integration
+- No Tool Manager integration
+- No external APIs
+- No LLM
+- No database
+- No queue
+- No background worker
+- No real production agents
+- No business logic
+- No social media integrations
+- No payment integrations
+- No circular dependencies
+- No duplicated contracts
+- Sprint 1 unchanged
+- Sprint 2 unchanged
+- Sprint 3 unchanged
+- Sprint 4 unchanged
+- Sprint 5 unchanged
+
+====================================================================
+29. QUALITY GATES
+
+Before finishing run:
+
+lint
+
+typecheck
+
+tests
+
+build
+
+Also inspect:
+
+unused exports
+
+dead code
+
+duplicate types
+
+broken imports
+
+circular dependencies
+
+timer leaks
+
+Promise rejection handling
+
+race conditions
+
+state transition bugs
+
+architecture violations
+
+====================================================================
+30. CHANGE CONTROL
+
+Do NOT modify unrelated project files.
+
+Do NOT rewrite existing working modules.
+
+Do NOT implement Sprint 7+.
+
+Do NOT integrate AG-002, AG-003, or AG-004.
+
+Do NOT add production external integrations.
+
+If an architectural contradiction is discovered:
+
+STOP.
+
+Document the contradiction.
+
+Do not silently redesign the architecture.
+
+====================================================================
+31. FINAL OUTPUT
+
+Provide an implementation report containing:
+
+1. Files created
+2. Files modified
+3. Execution architecture
+4. AgentExecutor interface
+5. Execution lifecycle
+6. State machine
+7. Single execution
+8. Sequential execution
+9. Parallel execution
+10. Conditional execution
+11. Hybrid execution
+12. Retry strategy
+13. Timeout strategy
+14. Cancellation strategy
+15. Failure handling
+16. Event system
+17. Concurrency control
+18. Idempotency strategy
+19. Tests passed
+20. Coverage summary
+21. Lint result
+22. Typecheck result
+23. Build result
+24. Architecture compliance
+25. Sprint completion checklist
+
+Explicitly confirm:
+
+"No Memory Manager integration, Knowledge Manager integration, Tool Manager integration, LLM/API integration, external service calls, database integration, queue workers, or production agent implementations were added in Sprint 6."
+
+Do NOT implement Sprint 7 or any future sprint.
