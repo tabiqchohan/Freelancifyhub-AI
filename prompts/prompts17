@@ -1,0 +1,950 @@
+You are a Senior TypeScript Architect, AI Systems Engineer, OpenClaw Multi-Agent Systems Engineer, Backend Engineer, Distributed Systems Engineer, and Test Engineer.
+
+Project:
+Freelancify AI
+
+Parent Product:
+FreelancifyHub
+
+====================================================================
+SOURCE OF TRUTH
+====================================================================
+
+Before writing code, read:
+
+- docs/freelancify-ai-blueprint-v1.0.md
+- docs/product-requirements-v1.md
+- docs/agent-catalog-v1.md
+- docs/master-orchestrator-specification-v1.md
+- docs/shared-memory-architecture-v1.md
+- docs/tool-registry-architecture-v1.md
+- docs/knowledge-base-architecture-v1.md
+- docs/agent-development-kit-v1.md
+- docs/architecture-review-v1.md
+
+Also inspect the existing implementation:
+
+- src/agents/ag-001-master-orchestrator/
+- Sprint 1 Foundation
+- Sprint 2 Intent Detection
+- Sprint 3 Context Builder
+- Sprint 4 Routing Engine
+- Sprint 5 Execution Planner
+- Sprint 6 Execution Engine
+
+IMPORTANT:
+
+Sprints 1–6 are already implemented, tested, committed, and pushed.
+
+Preserve all existing public contracts and behavior.
+
+Do NOT rewrite working modules unnecessarily.
+
+====================================================================
+TASK
+====================================================================
+
+Implement ONLY:
+
+AG-001 Master Orchestrator
+Sprint 7 — Response Aggregation & Result Processing
+
+The purpose of this sprint is to transform one or more execution results into a single normalized, validated, deterministic orchestration result.
+
+====================================================================
+STRICT NON-GOALS
+====================================================================
+
+DO NOT implement:
+
+❌ Memory Manager integration
+❌ Knowledge Manager integration
+❌ Tool Manager integration
+❌ LLM calls
+❌ External API calls
+❌ Database persistence
+❌ Social media integrations
+❌ Payment integrations
+❌ Notification integrations
+❌ New agent implementations
+❌ Agent execution
+❌ Workflow execution
+❌ Business-specific response generation
+❌ AI summarization
+
+This sprint is ONLY about processing and aggregating already-produced execution results.
+
+====================================================================
+OBJECTIVE
+====================================================================
+
+Build a production-ready Result Processing and Response Aggregation layer.
+
+Input:
+
+ExecutionResult / ExecutionResults
+IntentResult
+RouteDecision
+ExecutionPlan
+ExecutionContext
+
+Output:
+
+AggregatedResponse
+
+The aggregator must:
+
+1. Validate execution results
+2. Normalize result structures
+3. Order results deterministically
+4. Separate successful/failed/partial/cancelled results
+5. Resolve step dependencies
+6. Aggregate outputs
+7. Preserve errors
+8. Generate warnings
+9. Calculate final status
+10. Generate safe metadata/statistics
+11. Produce a final orchestration result
+
+No LLM should be used to rewrite or summarize the response.
+
+====================================================================
+FOLDER STRUCTURE
+====================================================================
+
+Create:
+
+src/agents/ag-001-master-orchestrator/aggregation/
+
+Recommended:
+
+aggregation/
+  types/
+  interfaces/
+  validators/
+  normalizers/
+  aggregators/
+  status/
+  errors/
+  config/
+  formatters/
+  statistics/
+  utils/
+  index.ts
+  README.md
+
+Follow existing AG-001 conventions.
+
+====================================================================
+1. RESULT TYPES
+====================================================================
+
+Create or reuse strongly typed contracts for:
+
+ResultInput
+
+NormalizedResult
+
+AggregatedResponse
+
+AggregatedOutput
+
+ResultGroup
+
+ResultError
+
+ResultWarning
+
+ResultMetadata
+
+AggregationStatistics
+
+AggregationPolicy
+
+AggregationStatus
+
+Do NOT duplicate existing compatible types.
+
+Reuse Sprint 1 and Sprint 6 contracts wherever possible.
+
+====================================================================
+2. RESULT NORMALIZATION
+====================================================================
+
+Normalize execution results into a common internal representation.
+
+Normalize:
+
+execution ID
+
+plan ID
+
+step ID
+
+agent ID
+
+status
+
+output
+
+error
+
+warnings
+
+timestamps
+
+duration
+
+metadata
+
+attempt count
+
+Do not modify the original result.
+
+Aggregation must be non-destructive.
+
+====================================================================
+3. RESULT ORDERING
+====================================================================
+
+Results must be ordered deterministically.
+
+Default ordering:
+
+1. Execution plan dependency/order
+2. Step order
+3. Execution timestamp where appropriate
+4. Stable step ID as final deterministic tie-breaker
+
+Never use randomness.
+
+Same input must produce the same aggregation structure.
+
+====================================================================
+4. RESULT GROUPING
+====================================================================
+
+Group results into:
+
+SUCCESSFUL
+
+FAILED
+
+PARTIAL
+
+CANCELLED
+
+TIMED_OUT
+
+SKIPPED
+
+PENDING
+
+Use existing status definitions where available.
+
+Do not invent incompatible statuses.
+
+====================================================================
+5. OUTPUT AGGREGATION
+====================================================================
+
+Aggregate outputs from successful and partial steps.
+
+Preserve:
+
+source agent
+
+step ID
+
+execution ID
+
+output
+
+status
+
+metadata
+
+Do NOT merge arbitrary outputs into an opaque string.
+
+Use structured output.
+
+The final consumer must be able to identify exactly where every output originated.
+
+====================================================================
+6. DUPLICATE RESULTS
+====================================================================
+
+Detect duplicate results.
+
+Use stable identifiers such as:
+
+execution ID
+
+step ID
+
+attempt
+
+Do not accidentally discard legitimate retries.
+
+A retry attempt must remain distinguishable from a duplicate result.
+
+====================================================================
+7. RETRY RESULT HANDLING
+====================================================================
+
+If multiple attempts exist:
+
+Identify:
+
+successful attempt
+
+failed attempts
+
+final attempt
+
+retry count
+
+The final aggregate should clearly indicate the final outcome.
+
+Do not hide retry history.
+
+====================================================================
+8. DEPENDENCY-AWARE AGGREGATION
+====================================================================
+
+Use the ExecutionPlan dependency graph.
+
+Ensure dependent results are represented after their prerequisites.
+
+If a dependent step failed because a prerequisite failed:
+
+represent that relationship explicitly.
+
+Do not invent a new execution.
+
+====================================================================
+9. FINAL STATUS
+
+Implement deterministic final-status calculation.
+
+Possible outcomes should include the architecture-defined statuses such as:
+
+SUCCESS
+
+PARTIAL
+
+FAILED
+
+CANCELLED
+
+TIMED_OUT
+
+Do not invent statuses if existing contracts already define them.
+
+Rules should consider:
+
+all steps successful
+
+some steps successful
+
+critical step failure
+
+non-critical failure
+
+cancellation
+
+timeout
+
+skipped steps
+
+failure policy
+
+The final status must be explainable.
+
+====================================================================
+10. FAILURE POLICY AWARENESS
+
+Respect the policy already contained in ExecutionPlan / ExecutionResult.
+
+Examples:
+
+FAIL_FAST
+
+CONTINUE
+
+FALLBACK
+
+ESCALATE
+
+The aggregator must not execute fallback or escalation.
+
+It only represents the outcome that actually occurred.
+
+====================================================================
+11. ERROR AGGREGATION
+
+Aggregate errors into structured objects.
+
+For each error preserve:
+
+code
+
+message
+
+step ID
+
+agent ID
+
+execution ID
+
+retryable
+
+attempt
+
+metadata
+
+Do not expose secrets or sensitive context.
+
+Do not silently discard errors.
+
+====================================================================
+12. WARNING AGGREGATION
+
+Aggregate warnings such as:
+
+partial execution
+
+retry occurred
+
+fallback used
+
+step skipped
+
+timeout
+
+non-critical failure
+
+truncated metadata
+
+Warnings must be deterministic and deduplicated where appropriate.
+
+====================================================================
+13. RESPONSE STRUCTURE
+
+AggregatedResponse should contain at minimum:
+
+response ID
+
+execution ID
+
+plan ID
+
+status
+
+outputs
+
+errors
+
+warnings
+
+statistics
+
+metadata
+
+completed timestamp
+
+Do not include raw sensitive context.
+
+====================================================================
+14. RESPONSE FORMATTERS
+
+Create interface-driven formatters where useful.
+
+Examples:
+
+StructuredResponseFormatter
+
+But do NOT implement:
+
+❌ AI-generated natural language responses
+❌ LLM summarization
+❌ Markdown generation based on AI
+❌ User-facing business copy
+
+The output should remain structured and machine-readable.
+
+====================================================================
+15. AGGREGATION STRATEGIES
+
+Create interface-driven strategies.
+
+Examples:
+
+SingleResultAggregator
+
+SequentialResultAggregator
+
+ParallelResultAggregator
+
+ConditionalResultAggregator
+
+HybridResultAggregator
+
+All strategies must produce compatible AggregatedResponse structures.
+
+Avoid unnecessary duplication.
+
+Shared aggregation logic should live in reusable services.
+
+====================================================================
+16. PARTIAL RESULTS
+
+Support partial completion.
+
+Example:
+
+Step A → SUCCESS
+Step B → SUCCESS
+Step C → FAILED
+Step D → SKIPPED
+
+The aggregator should represent:
+
+status = PARTIAL
+
+with clear step-level details.
+
+Do not pretend the whole execution succeeded.
+
+====================================================================
+17. EMPTY RESULTS
+
+Handle:
+
+no results
+
+empty execution plan
+
+all steps skipped
+
+execution cancelled before steps
+
+execution timed out before steps
+
+Return structured results rather than throwing unexpected errors.
+
+====================================================================
+18. STATISTICS
+
+Calculate deterministic statistics.
+
+At minimum:
+
+total executions
+
+total steps
+
+successful steps
+
+failed steps
+
+partial steps
+
+cancelled steps
+
+timed-out steps
+
+skipped steps
+
+retry count
+
+successful attempts
+
+failed attempts
+
+duration where available
+
+agent count
+
+warning count
+
+error count
+
+parallel branches if available
+
+====================================================================
+19. METADATA
+
+Safe metadata may include:
+
+response ID
+
+execution ID
+
+plan ID
+
+agent IDs
+
+step IDs
+
+status
+
+counts
+
+durations
+
+timestamps
+
+Do NOT include:
+
+passwords
+
+tokens
+
+private keys
+
+payment information
+
+private user data
+
+full sensitive context
+
+====================================================================
+20. CONFIGURATION
+
+Create typed aggregation configuration.
+
+Include:
+
+deduplication enabled
+
+strict validation enabled
+
+include retry history
+
+include warnings
+
+include errors
+
+maximum result count
+
+maximum metadata size
+
+feature flags
+
+Use existing AG-001 configuration conventions.
+
+No secrets.
+
+====================================================================
+21. VALIDATION
+
+Validate:
+
+missing result
+
+invalid result
+
+invalid execution ID
+
+invalid step ID
+
+invalid agent ID
+
+invalid status
+
+invalid output
+
+duplicate identifiers
+
+invalid plan reference
+
+invalid dependency reference
+
+invalid metadata
+
+result count limits
+
+====================================================================
+22. ERRORS
+
+Create typed errors following AG-001 conventions.
+
+At minimum:
+
+AggregationError
+
+AggregationValidationError
+
+ResultNormalizationError
+
+DuplicateResultError
+
+ResultLimitError
+
+InvalidResultReferenceError
+
+AggregationConflictError
+
+Errors must contain:
+
+code
+
+message
+
+retryable
+
+metadata where appropriate
+
+====================================================================
+23. LOGGING
+
+Reuse existing AG-001 logging.
+
+Log only safe metadata:
+
+response ID
+
+execution ID
+
+plan ID
+
+result count
+
+success count
+
+failure count
+
+final status
+
+warning count
+
+error count
+
+Do NOT log full outputs.
+
+Do NOT log sensitive context.
+
+====================================================================
+24. TESTING
+
+Create comprehensive tests.
+
+Test at minimum:
+
+- Single successful result
+- Multiple successful results
+- Sequential aggregation
+- Parallel aggregation
+- Conditional aggregation
+- Hybrid aggregation
+- Failed result
+- Partial result
+- Cancelled result
+- Timed-out result
+- Skipped result
+- Empty results
+- Duplicate results
+- Retry history
+- Successful retry
+- Failed retry
+- Dependency ordering
+- Dependency failure
+- Final status calculation
+- Failure policy handling
+- Error aggregation
+- Warning aggregation
+- Statistics
+- Metadata
+- Validation
+- Result limits
+- Deterministic ordering
+- Deterministic aggregation
+- Security/sensitive-data protection
+- Sprint 1 compatibility
+- Sprint 2 compatibility
+- Sprint 3 compatibility
+- Sprint 4 compatibility
+- Sprint 5 compatibility
+- Sprint 6 compatibility
+
+Mandatory determinism test:
+
+Same:
+
+ExecutionResults
++
+ExecutionPlan
++
+configuration
+
+must produce equivalent:
+
+AggregatedResponse
+
+====================================================================
+25. SECURITY TESTING
+
+Explicitly test that:
+
+- passwords are not included
+- tokens are not included
+- secrets are not included
+- sensitive context is not copied
+- raw internal errors are not leaked when sanitization is required
+
+Use structured safe metadata.
+
+====================================================================
+26. DOCUMENTATION
+
+Create:
+
+src/agents/ag-001-master-orchestrator/aggregation/README.md
+
+Document:
+
+Purpose
+
+Responsibilities
+
+Non-responsibilities
+
+Architecture
+
+Input
+
+Output
+
+Normalization
+
+Ordering
+
+Grouping
+
+Retry handling
+
+Dependency handling
+
+Status calculation
+
+Error handling
+
+Warning handling
+
+Statistics
+
+Security
+
+Future response generation
+
+Testing
+
+Examples
+
+====================================================================
+27. ARCHITECTURE COMPLIANCE
+
+Verify:
+
+- No Memory integration
+- No Knowledge integration
+- No Tool integration
+- No LLM
+- No external APIs
+- No database
+- No new agents
+- No agent execution
+- No business logic
+- No AI summarization
+- No response generation
+- No circular dependencies
+- No duplicated contracts
+- Sprint 1 unchanged
+- Sprint 2 unchanged
+- Sprint 3 unchanged
+- Sprint 4 unchanged
+- Sprint 5 unchanged
+- Sprint 6 unchanged
+
+====================================================================
+28. QUALITY GATES
+
+Run:
+
+lint
+
+typecheck
+
+tests
+
+build
+
+Also inspect:
+
+unused exports
+
+dead code
+
+duplicate types
+
+broken imports
+
+circular dependencies
+
+unsafe logging
+
+sensitive-data leakage
+
+architecture violations
+
+====================================================================
+29. CHANGE CONTROL
+
+Do NOT modify unrelated files.
+
+Do NOT rewrite Sprints 1–6.
+
+Do NOT implement Sprint 8+.
+
+Do NOT integrate AG-002, AG-003, or AG-004.
+
+If an architecture conflict is discovered:
+
+STOP.
+
+Document the conflict.
+
+Do not silently redesign the system.
+
+====================================================================
+30. FINAL OUTPUT
+
+Provide an implementation report:
+
+1. Files created
+2. Files modified
+3. Aggregation architecture
+4. Normalization strategy
+5. Ordering strategy
+6. Duplicate/retry handling
+7. Dependency-aware aggregation
+8. Final status calculation
+9. Error handling
+10. Warning handling
+11. Statistics
+12. Security/sanitization
+13. Determinism verification
+14. Tests passed
+15. Coverage summary
+16. Lint result
+17. Typecheck result
+18. Build result
+19. Architecture compliance
+20. Sprint completion checklist
+
+Explicitly confirm:
+
+"No Memory Manager integration, Knowledge Manager integration, Tool Manager integration, LLM/API integration, external service calls, database integration, new agents, or AI-generated response processing was implemented in Sprint 7."
+
+Do NOT implement Sprint 8 or any future sprint.
