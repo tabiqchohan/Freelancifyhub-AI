@@ -1,0 +1,940 @@
+You are a Senior TypeScript Architect, AI Systems Engineer, Distributed Systems Engineer, and Multi-Agent Orchestration Engineer.
+
+Project:
+Freelancify AI
+
+Parent Platform:
+FreelancifyHub
+
+============================================================
+TASK
+============================================================
+
+Implement:
+
+AG-001 Master Orchestrator
+End-to-End Integration Sprint
+
+Goal:
+
+Connect the already implemented AG-001 components into one
+real, interface-driven MasterOrchestratorService.
+
+Existing completed work:
+
+Sprint 1 — Foundation
+Sprint 2 — Intent Detection
+Sprint 3 — Context Builder
+Sprint 4 — Routing Engine
+Sprint 5 — Execution Planner
+Sprint 6 — Execution Engine
+Sprint 7 — Result Aggregation
+Sprint 8 — Hardening
+
+Current baseline:
+
+540 tests passing
+Typecheck clean
+Lint clean
+Build clean
+
+IMPORTANT:
+
+Do NOT rewrite existing Sprint 1–8 implementations.
+
+Do NOT redesign the architecture.
+
+Do NOT implement AG-002, AG-003, or AG-004.
+
+Do NOT integrate real LLMs.
+
+Do NOT integrate OpenClaw Gateway.
+
+Do NOT integrate FreelancifyHub production APIs.
+
+Do NOT integrate Stripe.
+
+Do NOT integrate databases.
+
+Do NOT create business-specific agents.
+
+Do NOT create the Social Media Agent yet.
+
+This sprint is ONLY about creating the orchestration layer that connects
+the existing AG-001 engines.
+
+============================================================
+SOURCE OF TRUTH
+============================================================
+
+Read first:
+
+docs/master-orchestrator-specification-v1.md
+
+Then:
+
+docs/ag-001-sprints-1-7-audit-v1.md
+docs/ag-001-hardening-sprint-v1.md
+docs/freelancify-ai-blueprint-v1.0.md
+docs/product-requirements-v1.md
+docs/agent-catalog-v1.md
+docs/agent-development-kit-v1.md
+
+Also inspect the actual implementation under:
+
+src/agents/ag-001-master-orchestrator/
+
+Do not rely only on previous implementation summaries.
+
+============================================================
+ARCHITECTURAL GOAL
+============================================================
+
+Create a MasterOrchestratorService responsible for coordinating:
+
+Request
+  ↓
+Validation
+  ↓
+Intent Detection
+  ↓
+Context Building
+  ↓
+Agent Routing
+  ↓
+Execution Planning
+  ↓
+Execution
+  ↓
+Result Aggregation
+  ↓
+Final Response
+
+The service is an ORCHESTRATOR.
+
+It must NOT duplicate the logic already implemented inside
+the individual engines.
+
+Each existing engine must remain responsible for its own domain.
+
+============================================================
+1. MASTER ORCHESTRATOR SERVICE
+============================================================
+
+Create an appropriate module under:
+
+src/agents/ag-001-master-orchestrator/
+
+Use the existing folder conventions.
+
+Recommended conceptual structure:
+
+orchestrator/
+  interfaces/
+  types/
+  errors/
+  config/
+  services/
+  builders/
+  validators/
+  index.ts
+  README.md
+
+Do not blindly copy this structure if the existing project conventions
+suggest a better location.
+
+The main service should be conceptually:
+
+MasterOrchestratorService
+
+It should expose an interface-driven API.
+
+Example conceptual contract:
+
+execute(request): Promise<OrchestratorResponse>
+
+Do NOT copy this example blindly.
+
+Use the existing project types and conventions.
+
+============================================================
+2. DEPENDENCY INJECTION
+============================================================
+
+MasterOrchestratorService MUST NOT instantiate concrete engines internally
+when those engines can be injected.
+
+Use dependency injection.
+
+Conceptually:
+
+MasterOrchestratorService
+  ├── IntentClassifier
+  ├── ContextBuilder
+  ├── RoutingEngine
+  ├── ExecutionPlanBuilder
+  ├── ExecutionEngine
+  └── AggregationService
+
+Use existing interfaces wherever available.
+
+If an interface is missing:
+
+Create the smallest appropriate interface.
+
+Do not create duplicate contracts.
+
+============================================================
+3. END-TO-END REQUEST LIFECYCLE
+============================================================
+
+Implement the actual orchestration lifecycle.
+
+Conceptually:
+
+1. Receive request
+2. Validate request
+3. Create/request correlation ID
+4. Detect intent
+5. Build context
+6. Route to agent(s)
+7. Build execution plan
+8. Validate execution plan
+9. Execute plan
+10. Aggregate results
+11. Build final response
+12. Return response
+
+Every stage must preserve required information.
+
+No silent data loss.
+
+No accidental mutation of request state.
+
+============================================================
+4. STAGE CONTEXT
+============================================================
+
+Each stage should receive only the context it needs.
+
+Do not pass an enormous mutable object everywhere.
+
+Use the existing:
+
+RequestContext
+ExecutionContext
+AgentRequest
+AgentResponse
+ExecutionPlan
+ExecutionResult
+AggregatedResponse
+
+where appropriate.
+
+If a new orchestration context is needed:
+
+Create a strongly typed immutable/interface-driven structure.
+
+Avoid `any`.
+
+============================================================
+5. INTENT INTEGRATION
+============================================================
+
+Connect the existing Intent Detection Engine.
+
+Requirements:
+
+- use existing IntentClassifier contract
+- preserve confidence
+- preserve ambiguity
+- preserve unknown intent
+- do not add LLM classification
+- do not bypass validation
+
+If intent is invalid/unknown/ambiguous according to existing rules:
+
+Use the existing architecture's fallback/escalation behavior.
+
+Do not invent new business behavior.
+
+============================================================
+6. CONTEXT INTEGRATION
+============================================================
+
+Connect the existing ContextBuilder.
+
+Pass:
+
+- request context
+- intent information
+- available routing information when appropriate
+- configured context budget
+
+Do not implement Memory Manager.
+
+Do not implement Knowledge Manager.
+
+Do not implement Tool Manager.
+
+Use interfaces/placeholders where the architecture already expects those
+future dependencies.
+
+============================================================
+7. ROUTING INTEGRATION
+============================================================
+
+Connect the existing Routing Engine.
+
+Requirements:
+
+- respect routable agent status
+- respect availability
+- respect capabilities
+- respect permissions
+- respect roles
+- respect cost constraints
+- respect confidence constraints
+- preserve selectedAgent
+- correctly handle escalation
+- correctly handle fallback
+
+Do not duplicate routing logic inside MasterOrchestratorService.
+
+The service should call the routing engine.
+
+============================================================
+8. PLANNING INTEGRATION
+============================================================
+
+Connect Routing → Execution Planner.
+
+Important:
+
+The audit identified that some dependency information could be lost
+between routing and planning.
+
+Verify the actual contracts.
+
+Required information must survive:
+
+Routing
+  ↓
+Planning
+
+including:
+
+- selected agents
+- agent capabilities
+- dependencies
+- execution mode
+- constraints
+- conditions
+- permissions
+- cost limits
+
+Do not invent fields that are not required.
+
+If an existing contract is insufficient, make the smallest compatible
+contract change and add regression tests.
+
+============================================================
+9. EXECUTION INTEGRATION
+============================================================
+
+Connect Execution Planner → Execution Engine.
+
+The orchestrator must submit a validated ExecutionPlan.
+
+The orchestration layer must NOT implement execution itself.
+
+The existing Execution Engine remains responsible for:
+
+- execution
+- concurrency
+- retries
+- timeout
+- cancellation
+- state
+- failure policies
+
+Preserve Sprint 8 hardening behavior.
+
+============================================================
+10. AGENT EXECUTOR BOUNDARY
+============================================================
+
+At this stage we do NOT have production Freelancify agents.
+
+Therefore:
+
+Do NOT invent fake external agents.
+
+Do NOT connect real AI APIs.
+
+Use the existing AgentExecutor abstraction.
+
+If a deterministic test executor is needed:
+
+Create it ONLY inside test utilities or an explicitly test-only location.
+
+Production orchestration code must remain agent-runtime agnostic.
+
+============================================================
+11. AGGREGATION INTEGRATION
+============================================================
+
+Connect:
+
+Execution Engine
+      ↓
+Aggregation Service
+      ↓
+Final Orchestrator Response
+
+The aggregator remains responsible for:
+
+- normalization
+- ordering
+- deduplication
+- status
+- statistics
+- retries
+- sanitization
+- formatting
+
+Do NOT duplicate aggregation logic.
+
+Sensitive data must remain sanitized.
+
+Regression-test the Sprint 8 security guarantees.
+
+============================================================
+12. ERROR HANDLING
+============================================================
+
+Implement orchestration-level error handling.
+
+Every stage must have deterministic behavior.
+
+Handle:
+
+- validation errors
+- intent errors
+- context errors
+- routing errors
+- planning errors
+- execution errors
+- aggregation errors
+- timeout
+- cancellation
+
+Do NOT swallow errors.
+
+Do NOT expose sensitive internal details.
+
+Preserve:
+
+- error code
+- retryable state
+- correlation ID
+- stage information where appropriate
+
+Use existing error hierarchy.
+
+Create an orchestration-specific error only if necessary.
+
+============================================================
+13. TERMINAL STATE
+============================================================
+
+MasterOrchestratorService must not overwrite terminal execution states.
+
+Respect Sprint 8 behavior:
+
+COMPLETED
+FAILED
+CANCELLED
+TIMED_OUT
+
+Once the underlying execution reaches a terminal state:
+
+No later orchestration step may incorrectly convert it.
+
+============================================================
+14. CANCELLATION
+============================================================
+
+The orchestrator must support cancellation propagation.
+
+Conceptually:
+
+caller cancellation
+      ↓
+orchestrator
+      ↓
+execution engine
+      ↓
+running/pending work
+
+Do not implement a new cancellation system.
+
+Use the existing execution cancellation mechanism.
+
+Test:
+
+- cancellation before execution
+- cancellation during execution
+- cancellation during parallel execution
+- cancellation during retry
+- cancellation after completion
+
+============================================================
+15. TIMEOUT
+============================================================
+
+Do not create a second competing timeout system unless the architecture
+explicitly requires it.
+
+The Sprint 8 execution timeout remains authoritative.
+
+The orchestrator may enforce a request-level timeout only if the existing
+specification requires one.
+
+Avoid timeout races.
+
+Add integration tests proving that:
+
+execution timeout
+→ final orchestrator response is TIMED_OUT
+
+and never incorrectly COMPLETED.
+
+============================================================
+16. OBSERVABILITY
+============================================================
+
+The orchestrator must provide correlation across the lifecycle.
+
+Where supported by existing infrastructure, preserve:
+
+- request ID
+- correlation ID
+- execution ID
+- plan ID
+- step ID
+- agent ID
+
+Log lifecycle events without secrets.
+
+Do NOT log:
+
+password
+token
+apiKey
+secret
+authorization
+credentials
+private_key
+cookies
+etc.
+
+Use existing logger infrastructure.
+
+Do not introduce a new logging library.
+
+============================================================
+17. EVENTS
+============================================================
+
+Inspect the existing event contracts.
+
+If orchestration events already exist:
+
+Use them.
+
+If missing:
+
+Create only the minimum required events.
+
+Conceptually:
+
+orchestration.started
+intent.detected
+context.built
+routing.completed
+plan.created
+execution.started
+execution.completed
+aggregation.completed
+orchestration.completed
+orchestration.failed
+
+Do not blindly implement every event listed above if the existing
+architecture uses different names.
+
+Preserve existing naming conventions.
+
+============================================================
+18. CONFIGURATION
+============================================================
+
+Use existing AG-001 configuration.
+
+Do not duplicate:
+
+timeouts
+retry limits
+routing limits
+execution limits
+aggregation limits
+
+If an orchestration-specific configuration value is genuinely required:
+
+Add it through the existing Zod-validated configuration pattern.
+
+Document the default.
+
+============================================================
+19. PUBLIC API
+============================================================
+
+Expose a clean public entry point.
+
+Existing consumers should ideally be able to import the orchestrator
+from the AG-001 package/barrel.
+
+Do not expose internal implementation details.
+
+Public API should include only what is necessary.
+
+============================================================
+20. TEST STRATEGY
+============================================================
+
+Add comprehensive tests.
+
+Minimum:
+
+A. Unit tests
+
+- service construction
+- dependency injection
+- validation
+- stage ordering
+- error propagation
+- cancellation
+- timeout behavior
+
+B. Integration tests
+
+At minimum:
+
+1. successful single-agent flow
+
+Request
+→ Intent
+→ Context
+→ Routing
+→ Planning
+→ Execution
+→ Aggregation
+→ Response
+
+2. unknown intent
+
+3. ambiguous intent
+
+4. routing failure
+
+5. fallback routing
+
+6. planning failure
+
+7. execution failure
+
+8. execution timeout
+
+9. cancellation
+
+10. parallel execution
+
+11. conditional execution
+
+12. hybrid execution
+
+13. aggregation failure
+
+14. sensitive output sanitization
+
+15. routing constraints
+
+16. draft/disabled agent filtering
+
+17. correlation ID propagation
+
+18. terminal-state preservation
+
+19. concurrent orchestrator requests
+
+20. deterministic response
+
+============================================================
+21. TEST DOUBLES
+============================================================
+
+Use deterministic test doubles.
+
+Do not call:
+
+- real OpenAI
+- real Gemini
+- real Anthropic
+- real OpenClaw
+- real FreelancifyHub
+- real Stripe
+- real database
+
+Tests must be deterministic.
+
+============================================================
+22. BACKWARD COMPATIBILITY
+============================================================
+
+All existing Sprint 1–8 tests must remain green.
+
+Current baseline:
+
+540 tests
+
+Final test count should increase.
+
+If any test must change:
+
+Explain why.
+
+Do not weaken assertions merely to make tests pass.
+
+============================================================
+23. ARCHITECTURE RULE
+============================================================
+
+MasterOrchestratorService is a coordinator.
+
+It MUST NOT become a God Object.
+
+It should:
+
+coordinate
+
+validate stage transitions
+
+propagate context
+
+handle lifecycle
+
+aggregate final response
+
+It must NOT implement:
+
+intent algorithms
+
+routing algorithms
+
+planning algorithms
+
+execution algorithms
+
+aggregation algorithms
+
+memory algorithms
+
+knowledge retrieval
+
+tool execution
+
+business logic
+
+============================================================
+24. AG-002 / AG-003 / AG-004 BOUNDARIES
+============================================================
+
+Do NOT implement these agents.
+
+However, make sure the orchestrator can eventually accept their interfaces
+through dependency injection.
+
+Future conceptual dependencies:
+
+MemoryManager
+KnowledgeManager
+ToolManager
+
+They must remain optional/abstract at this stage if the architecture
+allows that.
+
+Do not create fake production implementations.
+
+============================================================
+25. OPENCLAW READINESS
+============================================================
+
+The service must remain transport-independent.
+
+It must work when called:
+
+- directly in process
+- from a future OpenClaw agent runtime
+- from a future API
+- from a future workflow engine
+
+Do not connect to the Gateway.
+
+============================================================
+26. PERFORMANCE
+============================================================
+
+Do not add unnecessary:
+
+- serialization
+- deep cloning
+- duplicate validation
+- duplicate sanitization
+- sequential waits
+
+Preserve parallel execution behavior.
+
+The orchestrator should add minimal overhead.
+
+============================================================
+27. DOCUMENTATION
+============================================================
+
+Create:
+
+docs/ag-001-orchestrator-integration-v1.md
+
+Document:
+
+1. Purpose
+2. Architecture
+3. Lifecycle
+4. Interfaces
+5. Dependency injection
+6. Error handling
+7. Cancellation
+8. Timeout
+9. Observability
+10. Events
+11. Security
+12. Testing
+13. Future AG-002/003/004 integration points
+14. OpenClaw readiness
+15. Known limitations
+
+Update only relevant documentation indexes/README links.
+
+============================================================
+28. QUALITY GATES
+============================================================
+
+Before completion run:
+
+npm test
+
+typecheck
+
+lint
+
+build
+
+Also inspect:
+
+- circular dependencies
+- any usage
+- unsafe casts
+- race conditions
+- error swallowing
+- secret leakage
+- duplicated business logic
+- God Object growth
+
+Expected:
+
+ALL TESTS PASS.
+
+============================================================
+29. GIT SAFETY
+============================================================
+
+DO NOT commit.
+
+DO NOT push.
+
+Run:
+
+git status
+
+Confirm only intended files changed.
+
+============================================================
+30. FINAL RESPONSE
+============================================================
+
+Return:
+
+1. What was implemented
+2. MasterOrchestratorService location
+3. Public API
+4. Dependency injection design
+5. End-to-end lifecycle
+6. Error handling
+7. Timeout behavior
+8. Cancellation behavior
+9. Routing integration
+10. Planning integration
+11. Execution integration
+12. Aggregation integration
+13. Security guarantees
+14. Tests added
+15. Previous test count
+16. Final test count
+17. Typecheck
+18. Lint
+19. Build
+20. Files changed
+21. Remaining limitations
+22. AG-002/003/004 readiness
+23. OpenClaw readiness
+24. Confirmation that no external integrations were added
+25. Confirmation that no commit/push was performed
+
+============================================================
+ABSOLUTE RESTRICTIONS
+============================================================
+
+DO NOT:
+
+- rewrite existing engines
+- redesign architecture
+- implement Memory Manager
+- implement Knowledge Manager
+- implement Tool Manager
+- implement real agents
+- implement Social Media Agent
+- call external LLM APIs
+- call OpenClaw Gateway
+- call FreelancifyHub APIs
+- connect Stripe
+- connect database
+- add production credentials
+- weaken existing tests
+- remove existing security controls
+- commit
+- push
+
+Only implement the AG-001 orchestration integration layer.
+
+============================================================
+END
+============================================================

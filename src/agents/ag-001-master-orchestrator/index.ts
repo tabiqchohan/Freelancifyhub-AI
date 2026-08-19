@@ -20,3 +20,35 @@ export { validateOrchestratorConfig } from './validators/config.validator.js';
 
 export { createServiceKey } from './services/dependency-container.js';
 export type { DependencyContainer, ServiceKey } from './services/dependency-container.js';
+
+export { OrchestrationError, toOrchestrationError } from './orchestrator/errors/index.js';
+export { OrchestratorStage } from './orchestrator/types/index.js';
+export type { OrchestrationRequest, OrchestratorResponse } from './orchestrator/types/index.js';
+export {
+  validateOrchestrationRequest,
+  normalizeOrchestrationRequest,
+} from './orchestrator/validators/index.js';
+export { buildOrchestratorResponse } from './orchestrator/builders/orchestrator-response.builder.js';
+export type { BuildOrchestratorResponseInput } from './orchestrator/builders/orchestrator-response.builder.js';
+export {
+  OrchestratorEventType,
+  InMemoryOrchestratorEventEmitter,
+} from './orchestrator/services/events.js';
+export type {
+  OrchestratorEvent,
+  OrchestratorEventEmitter,
+} from './orchestrator/services/events.js';
+export {
+  MasterOrchestratorService,
+  createMasterOrchestratorService,
+} from './orchestrator/services/master-orchestrator.service.js';
+export type {
+  MasterOrchestratorServiceOptions,
+  MasterOrchestratorServiceDependencies,
+} from './orchestrator/services/master-orchestrator.service.js';
+export type {
+  MasterOrchestratorServiceContract,
+  ContextBuilderContract,
+  AggregationServiceContract,
+  CancellableExecutionEngine,
+} from './orchestrator/interfaces/index.js';

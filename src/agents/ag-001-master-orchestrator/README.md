@@ -23,27 +23,28 @@ knowledge retrieval, or tool invocation — those arrive in future sprints.
 
 ## Current Sprint
 
-**Sprint 1 — Foundation** (implemented). See
-`docs/master-orchestrator-specification-v1.md`.
+**Sprint 9 — Orchestration Integration** (implemented). See
+`docs/master-orchestrator-specification-v1.md` and
+`docs/ag-001-orchestrator-integration-v1.md`.
 
-| Sub-module    | Contains                                                                                                                                                                                            |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `interfaces/` | `RequestContext`, `AgentRequest`, `AgentResponse`, `AgentMetadata`, `ExecutionContext`, `ExecutionPlan`, `ExecutionResult`, `Pipeline*`, `AgentCapability`, `AgentDependency`, `AgentConfiguration` |
-| `types/`      | scalar types, enums (`AgentCategory`, `AgentStatus`, `ExecutionStatus`, `DependencyType`), `ErrorInfo`, `AgentLimits`                                                                               |
-| `errors/`     | `OrchestratorError` + `ValidationError`, `ConfigurationError`, `PipelineError`, `DependencyError`, `TimeoutError`                                                                                   |
-| `config/`     | typed config, environment validation, defaults (no secrets hardcoded)                                                                                                                               |
-| `schemas/`    | Zod schemas for request, response, metadata, config                                                                                                                                                 |
-| `validators/` | `validateAgentRequest`, `validateAgentResponse`, `validateOrchestratorConfig`                                                                                                                       |
-| `services/`   | DI container interfaces; pipeline abstractions (interface only)                                                                                                                                     |
-| `builders/`   | `RequestContextBuilder`, `ExecutionContextBuilder`, `ResponseBuilder`                                                                                                                               |
-| `utils/`      | scoped pino logger, id + timestamp helpers, generic schema validator                                                                                                                                |
-| `tests/`      | README — runnable unit tests live under the repo `tests/` (Vitest)                                                                                                                                  |
+| Sub-module      | Contains                                                                                                                                                                                            |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `interfaces/`   | `RequestContext`, `AgentRequest`, `AgentResponse`, `AgentMetadata`, `ExecutionContext`, `ExecutionPlan`, `ExecutionResult`, `Pipeline*`, `AgentCapability`, `AgentDependency`, `AgentConfiguration` |
+| `types/`        | scalar types, enums (`AgentCategory`, `AgentStatus`, `ExecutionStatus`, `DependencyType`), `ErrorInfo`, `AgentLimits`                                                                               |
+| `errors/`       | `OrchestratorError` + `ValidationError`, `ConfigurationError`, `PipelineError`, `DependencyError`, `TimeoutError`                                                                                   |
+| `config/`       | typed config, environment validation, defaults (no secrets hardcoded)                                                                                                                               |
+| `schemas/`      | Zod schemas for request, response, metadata, config                                                                                                                                                 |
+| `validators/`   | `validateAgentRequest`, `validateAgentResponse`, `validateOrchestratorConfig`                                                                                                                       |
+| `services/`     | DI container interfaces; pipeline abstractions (interface only)                                                                                                                                     |
+| `builders/`     | `RequestContextBuilder`, `ExecutionContextBuilder`, `ResponseBuilder`                                                                                                                               |
+| `utils/`        | scoped pino logger, id + timestamp helpers, generic schema validator                                                                                                                                |
+| `tests/`        | README — runnable unit tests live under the repo `tests/` (Vitest)                                                                                                                                  |
+| `orchestrator/` | End-to-end integration: `MasterOrchestratorService` wiring intent/context/routing/planning/execution/aggregation engines (prompt §19)                                                               |
 
 ## Future Sprints
 
-- Intent detection and routing (Sprint 2)
-- Memory, Knowledge and Tool client integration (Sprints 3–4)
-- LLM execution and business logic (Sprint 5+)
+- Memory, Knowledge and Tool client integration (AG-002/003/004 contracts)
+- Real agent runtimes and LLM execution behind the existing abstractions
 
 ## Folder Structure
 
