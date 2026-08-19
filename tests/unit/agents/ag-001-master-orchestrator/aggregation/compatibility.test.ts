@@ -122,6 +122,71 @@ describe('aggregation public contract', () => {
     expect(serialized).not.toContain('apiKey');
   });
 
+  it('never leaks secrets embedded in step output through the full pipeline', () => {
+    const service = new SharedAggregationService();
+    const plan = makeAggregationInputPlan();
+    const input = {
+      executionId: 'exec-1',
+      plan,
+      results: [
+        makeExecutionResult(
+          {
+            stepResults: [
+              makeStepResult({
+                status: ExecutionStatus.Succeeded,
+                output: {
+                  apiKey: 'SECRET-VALUE',
+                  token: 'SECRET-VALUE',
+                  nested: { password: 'SECRET-VALUE' },
+                },
+              }),
+            ],
+          },
+          plan,
+        ),
+      ] as readonly ExecutionResult[],
+    };
+
+    const response = service.aggregate(input);
+    const serialized = JSON.stringify(response);
+    expect(serialized).not.toContain('SECRET-VALUE');
+    expect(serialized).not.toContain('apiKey');
+    expect(serialized).toContain('nested');
+    expect((response.outputs[0]?.output as Record<string, unknown>).nested).toEqual({});
+  });
+
+  it('sanitizes output across arrays, deep nesting and mixed casing', () => {
+    const service = new SharedAggregationService();
+    const plan = makeAggregationInputPlan();
+    const input = {
+      executionId: 'exec-1',
+      plan,
+      results: [
+        makeExecutionResult(
+          {
+            stepResults: [
+              makeStepResult({
+                status: ExecutionStatus.Succeeded,
+                output: {
+                  data: [{ accessToken: 'S1', ok: true }, { level: { authToken: 'S2' } }],
+                },
+              }),
+            ],
+          },
+          plan,
+        ),
+      ] as readonly ExecutionResult[],
+    };
+
+    const response = service.aggregate(input);
+    const serialized = JSON.stringify(response);
+    expect(serialized).not.toContain('S1');
+    expect(serialized).not.toContain('S2');
+    expect(serialized).not.toContain('accessToken');
+    expect(serialized).not.toContain('authToken');
+    expect(serialized).toContain('ok');
+  });
+
   it('maps execution states through the aggregation status vocabulary', () => {
     const plan = makeAggregationInputPlan();
     const states = [ExecutionState.Failed, ExecutionState.Cancelled, ExecutionState.TimedOut];

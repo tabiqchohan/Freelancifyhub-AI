@@ -6,6 +6,15 @@ import {
   isExecutionFeatureEnabled,
 } from '../../../../../src/agents/ag-001-master-orchestrator/execution/config/index.js';
 import { ExecutionConfigError } from '../../../../../src/agents/ag-001-master-orchestrator/execution/errors/index.js';
+import { ExecutionEngine } from '../../../../../src/agents/ag-001-master-orchestrator/execution/engine/index.js';
+import {
+  FakeAgentExecutor,
+  StaticExecutorRegistry,
+} from '../../../../../src/agents/ag-001-master-orchestrator/execution/executors/index.js';
+import { ExecutionState } from '../../../../../src/agents/ag-001-master-orchestrator/execution/types/index.js';
+import { ExecutionMode } from '../../../../../src/agents/ag-001-master-orchestrator/routing/types/index.js';
+import { ExecutionConcurrencyError } from '../../../../../src/agents/ag-001-master-orchestrator/execution/errors/index.js';
+import { buildPlanForMode, buildSinglePlan, baseExecutionRequest } from './fixtures.js';
 
 describe('execution config', () => {
   it('applies safe defaults', () => {
@@ -96,5 +105,116 @@ describe('isExecutionFeatureEnabled', () => {
 
   it('treats unknown features as enabled', () => {
     expect(isExecutionFeatureEnabled(enabled, 'nonsense')).toBe(true);
+  });
+});
+
+describe('ExecutionEngine - H-5 feature flag enforcement', () => {
+  it('no-ops cancel() when cancellation is disabled', async () => {
+    const executor = new FakeAgentExecutor({ id: 'e-1', delayMs: 10 });
+    const engine = new ExecutionEngine({
+      registry: new StaticExecutorRegistry([executor]),
+      config: parseExecutionConfig({
+        EXECUTION_EVENTS_ENABLED: 'false',
+        EXECUTION_CANCELLATION_ENABLED: 'false',
+      }),
+    });
+
+    const resultPromise = engine.execute(
+      baseExecutionRequest(buildPlanForMode(ExecutionMode.Sequential)),
+    );
+    engine.cancel('exec-1', 'must be ignored');
+    const result = await resultPromise;
+
+    expect(result.state).toBe(ExecutionState.Completed);
+    expect(result.cancellation).toBeUndefined();
+  });
+
+  it('allows duplicate scheduling when idempotency is disabled', async () => {
+    const executor = new FakeAgentExecutor({ id: 'e-1', delayMs: 5 });
+    const engine = new ExecutionEngine({
+      registry: new StaticExecutorRegistry([executor]),
+      config: parseExecutionConfig({
+        EXECUTION_EVENTS_ENABLED: 'false',
+        EXECUTION_IDEMPOTENCY_ENABLED: 'false',
+      }),
+    });
+    const request = baseExecutionRequest(buildSinglePlan());
+
+    const first = engine.execute(request);
+    const second = engine.execute(request);
+
+    await expect(first).resolves.toMatchObject({ state: ExecutionState.Completed });
+    await expect(second).resolves.toMatchObject({ state: ExecutionState.Completed });
+  });
+
+  it('rejects duplicate scheduling by default (idempotency on)', async () => {
+    const executor = new FakeAgentExecutor({ id: 'e-1', delayMs: 5 });
+    const engine = new ExecutionEngine({
+      registry: new StaticExecutorRegistry([executor]),
+      config: parseExecutionConfig({ EXECUTION_EVENTS_ENABLED: 'false' }),
+    });
+    const request = baseExecutionRequest(buildSinglePlan());
+
+    const first = engine.execute(request);
+    await expect(engine.execute(request)).rejects.toBeInstanceOf(ExecutionConcurrencyError);
+    await expect(first).resolves.toMatchObject({ state: ExecutionState.Completed });
+  });
+
+  it('fails closed when parallel mode is disabled', async () => {
+    const executor = new FakeAgentExecutor({ id: 'e-1' });
+    const engine = new ExecutionEngine({
+      registry: new StaticExecutorRegistry([executor]),
+      config: parseExecutionConfig({
+        EXECUTION_EVENTS_ENABLED: 'false',
+        EXECUTION_PARALLEL_ENABLED: 'false',
+      }),
+    });
+
+    const result = await engine.execute(
+      baseExecutionRequest(buildPlanForMode(ExecutionMode.Parallel)),
+    );
+
+    expect(result.state).toBe(ExecutionState.Failed);
+    expect(result.error?.code).toBe('UNSUPPORTED_EXECUTION_MODE_ERROR');
+  });
+
+  it('fails closed when conditional mode is disabled', async () => {
+    const executor = new FakeAgentExecutor({ id: 'e-1' });
+    const engine = new ExecutionEngine({
+      registry: new StaticExecutorRegistry([executor]),
+      config: parseExecutionConfig({
+        EXECUTION_EVENTS_ENABLED: 'false',
+        EXECUTION_CONDITIONAL_ENABLED: 'false',
+      }),
+    });
+
+    const result = await engine.execute(
+      baseExecutionRequest(buildPlanForMode(ExecutionMode.Conditional)),
+    );
+
+    expect(result.state).toBe(ExecutionState.Failed);
+    expect(result.error?.code).toBe('UNSUPPORTED_EXECUTION_MODE_ERROR');
+  });
+
+  it('falls back to EXECUTION_DEFAULT_TIMEOUT_MS when the plan omits a budget', async () => {
+    const executor = new FakeAgentExecutor({ id: 'e-1', delayMs: 40 });
+    const engine = new ExecutionEngine({
+      registry: new StaticExecutorRegistry([executor]),
+      config: parseExecutionConfig({
+        EXECUTION_EVENTS_ENABLED: 'false',
+        EXECUTION_DEFAULT_TIMEOUT_MS: '5',
+        EXECUTION_MAX_TIMEOUT_MS: '10',
+      }),
+    });
+    const plan = buildSinglePlan();
+    const planWithoutBudget = {
+      ...plan,
+      policy: { ...plan.policy, maxTotalExecutionTimeMs: 0 },
+    };
+
+    const result = await engine.execute(baseExecutionRequest(planWithoutBudget));
+
+    expect(result.state).toBe(ExecutionState.TimedOut);
+    expect(result.timeout?.timeoutMs).toBe(5);
   });
 });

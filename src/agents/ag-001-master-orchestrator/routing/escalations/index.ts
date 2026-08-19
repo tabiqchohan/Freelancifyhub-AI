@@ -11,6 +11,8 @@ export interface EscalationInput {
   readonly confidenceLevel: ConfidenceLevel;
   readonly lowThreshold: number;
   readonly enabled: boolean;
+  /** Request-level role restriction from routing constraints (§13). */
+  readonly allowedRoles?: readonly UserRole[];
 }
 
 /** Result of escalation resolution. */
@@ -42,6 +44,27 @@ export function resolveEscalation(input: EscalationInput): EscalationResult {
         {
           code: 'NO_ELIGIBLE_CANDIDATES',
           message: `No eligible agent for intent ${input.intent.primary.intent.id}`,
+        },
+      ],
+    };
+  }
+
+  if (
+    input.allowedRoles !== undefined &&
+    input.allowedRoles.length > 0 &&
+    !input.allowedRoles.includes(input.role)
+  ) {
+    return {
+      status: RoutingStatus.Escalated,
+      escalation: {
+        reason: EscalationReason.PermissionDenied,
+        message: `Role ${input.role} is not allowed by the routing constraints`,
+        details: { role: input.role, allowedRoles: input.allowedRoles },
+      },
+      reasons: [
+        {
+          code: 'ROLE_NOT_ALLOWED_BY_CONSTRAINT',
+          message: `Role ${input.role} cannot route through these constraints`,
         },
       ],
     };

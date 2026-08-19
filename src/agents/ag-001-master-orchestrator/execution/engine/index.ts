@@ -5,6 +5,7 @@ import { ExecutionMode } from '../../routing/types/index.js';
 import type { ExecutionEngineContract } from '../interfaces/index.js';
 import type { ExecutorRegistry, ConditionEvaluator } from '../interfaces/index.js';
 import { ExecutionConcurrencyError } from '../errors/index.js';
+import { UnsupportedExecutionModeError } from '../../planning/errors/index.js';
 import {
   ExecutionConfigSchema,
   parseExecutionConfig,
@@ -21,6 +22,7 @@ import { ExecutionLifecycle, toExecutionError } from '../lifecycle/index.js';
 import { resolveExecutionStrategy } from '../strategies/index.js';
 import { validateExecutionPlan, validateExecutionRequest } from '../validators/index.js';
 import { createDeadline } from '../timeout/index.js';
+import { ConcurrencyLimiter } from '../concurrency/index.js';
 import type {
   ExecutionRequest,
   ExecutionResult,
@@ -68,6 +70,9 @@ export class ExecutionEngine implements ExecutionEngineContract {
 
   /** Cancels a running execution. Idempotent (prompt §14). */
   cancel(executionId: string, reason = 'cancelled by caller'): void {
+    if (!isExecutionFeatureEnabled(this.config, 'cancellation')) {
+      return;
+    }
     this.active.get(executionId)?.cancel(reason);
   }
 
@@ -76,7 +81,10 @@ export class ExecutionEngine implements ExecutionEngineContract {
     validateExecutionRequest(request);
     validateExecutionPlan(request.plan);
 
-    if (this.active.has(request.executionId)) {
+    if (
+      isExecutionFeatureEnabled(this.config, 'idempotency') &&
+      this.active.has(request.executionId)
+    ) {
       throw new ExecutionConcurrencyError(
         `Execution ${request.executionId} is already running; refusing duplicate scheduling`,
         { details: { executionId: request.executionId } },
@@ -144,37 +152,57 @@ export class ExecutionEngine implements ExecutionEngineContract {
       | undefined;
 
     try {
+      this.assertModeEnabled(request.plan.mode);
       const strategy = resolveExecutionStrategy(request.plan.mode);
-      const deadline = createDeadline(this.overallTimeoutMs(request.plan));
+      const deadlineMs = this.overallTimeoutMs(request.plan);
+      const deadlineStartedAt = Date.now();
+      const deadline = createDeadline(deadlineMs);
 
-      const work = this.runStrategy(strategy, lifecycle, stateManager);
+      try {
+        const work = this.runStrategy(strategy, lifecycle, stateManager);
 
-      const settled = await Promise.race([
-        work.then(() => 'done' as const),
-        deadline.promise.then(() => 'timeout' as const),
-        cancellation.waitForCancellation().then(() => 'cancelled' as const),
-      ]);
+        const race: Promise<'done' | 'timeout' | 'cancelled'>[] = [
+          work.then(() => 'done' as const),
+          deadline.promise.then(() => 'timeout' as const),
+        ];
 
-      if (settled === 'timeout') {
-        overallTimeout = this.overallTimeoutMs(request.plan);
-        cancellation.cancel('overall execution timeout exceeded');
+        if (isExecutionFeatureEnabled(this.config, 'cancellation')) {
+          race.push(cancellation.waitForCancellation().then(() => 'cancelled' as const));
+        }
+
+        let settled: 'done' | 'timeout' | 'cancelled' = await Promise.race(race);
+
+        // Authoritative deadline enforcement (C-2): a race won by the work
+        // promise must not outlive the overall deadline. If the deadline has
+        // actually elapsed, treat the run as timed out even though the race
+        // settled first (timer ordering under load is not reliable).
+        if (settled === 'done' && Date.now() - deadlineStartedAt >= deadlineMs) {
+          settled = 'timeout';
+        }
+
+        if (settled === 'timeout') {
+          overallTimeout = deadlineMs;
+          cancellation.cancel('overall execution timeout exceeded');
+        }
+
+        if (settled === 'cancelled') {
+          cancellationReason = cancellation.cancellationReason ?? 'cancelled';
+          lifecycle.cancellation.cancel(cancellationReason);
+        }
+
+        await work.catch(() => undefined);
+
+        finalState = this.computeFinalState(
+          stateManager,
+          settled,
+          cancellationReason,
+          overallTimeout,
+        );
+      } finally {
+        deadline.clear();
       }
-
-      if (settled === 'cancelled') {
-        cancellationReason = cancellation.cancellationReason ?? 'cancelled';
-        lifecycle.cancellation.cancel(cancellationReason);
-      }
-
-      await work.catch(() => undefined);
-
-      finalState = this.computeFinalState(
-        stateManager,
-        settled,
-        cancellationReason,
-        overallTimeout,
-      );
     } catch (error) {
-      finalState = ExecutionStateValue.Failed;
+      finalState = stateManager.settle(ExecutionStateValue.Failed);
       const structured = toExecutionError(error);
       terminalError = structured;
     }
@@ -284,13 +312,17 @@ export class ExecutionEngine implements ExecutionEngineContract {
   ): Promise<void> {
     stateManager.transition(ExecutionStateValue.Running);
 
+    const limiter = new ConcurrencyLimiter(this.config.EXECUTION_MAX_CONCURRENT_STEPS);
+
     const input = {
       run: lifecycle.run,
       executeStep: async (step: ExecutionStep) => {
-        if (lifecycle.cancellation.isCancelled) {
-          return;
-        }
-        await lifecycle.executeStep(step);
+        await limiter.run(async () => {
+          if (lifecycle.cancellation.isCancelled) {
+            return;
+          }
+          await lifecycle.executeStep(step);
+        });
       },
       evaluateCondition: (condition: ExecutionCondition) =>
         lifecycle.evaluateCondition(condition, {}),
@@ -345,20 +377,27 @@ export class ExecutionEngine implements ExecutionEngineContract {
       (status) => status === 'Failed' || status === 'TimedOut',
     ).length;
     const successCount = stepStatuses.filter((status) => status === 'Succeeded').length;
+    const cancelledCount = stepStatuses.filter((status) => status === 'Cancelled').length;
 
     if (cancellationReason !== undefined || settled === 'cancelled') {
-      return ExecutionStateValue.Cancelled;
+      return stateManager.settle(ExecutionStateValue.Cancelled);
     }
     if (overallTimeout !== undefined || settled === 'timeout') {
-      return ExecutionStateValue.TimedOut;
+      return stateManager.settle(ExecutionStateValue.TimedOut);
     }
     if (timedOutCount > 0) {
-      return ExecutionStateValue.TimedOut;
+      return stateManager.settle(ExecutionStateValue.TimedOut);
+    }
+    // All steps cancelled with none completed must not fall back to Completed.
+    if (cancelledCount > 0 && successCount === 0 && failureCount === 0) {
+      return stateManager.settle(ExecutionStateValue.Cancelled);
     }
     if (failureCount > 0) {
-      return successCount > 0 ? ExecutionStateValue.Partial : ExecutionStateValue.Failed;
+      return stateManager.settle(
+        successCount > 0 ? ExecutionStateValue.Partial : ExecutionStateValue.Failed,
+      );
     }
-    return ExecutionStateValue.Completed;
+    return stateManager.settle(ExecutionStateValue.Completed);
   }
 
   private collectStepResults(
@@ -388,7 +427,28 @@ export class ExecutionEngine implements ExecutionEngineContract {
   }
 
   private overallTimeoutMs(plan: ExecutionPlan): number {
-    return Math.min(plan.policy.maxTotalExecutionTimeMs, this.config.EXECUTION_MAX_TIMEOUT_MS);
+    const budget = plan.policy.maxTotalExecutionTimeMs || this.config.EXECUTION_DEFAULT_TIMEOUT_MS;
+    return Math.min(budget, this.config.EXECUTION_MAX_TIMEOUT_MS);
+  }
+
+  /** Fails closed when a strategy-requiring feature flag is disabled (H-5). */
+  private assertModeEnabled(mode: ExecutionMode): void {
+    if (
+      (mode === ExecutionMode.Parallel || mode === ExecutionMode.Hybrid) &&
+      !isExecutionFeatureEnabled(this.config, 'parallel')
+    ) {
+      throw new UnsupportedExecutionModeError(
+        `Parallel execution is disabled by configuration (mode: ${mode})`,
+      );
+    }
+    if (
+      mode === ExecutionMode.Conditional &&
+      !isExecutionFeatureEnabled(this.config, 'conditional')
+    ) {
+      throw new UnsupportedExecutionModeError(
+        `Conditional execution is disabled by configuration (mode: ${mode})`,
+      );
+    }
   }
 
   private parallelBranches(plan: ExecutionPlan): number {

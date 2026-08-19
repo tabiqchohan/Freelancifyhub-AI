@@ -1,0 +1,1007 @@
+You are a Senior AI Systems Architect, TypeScript Architect, Distributed Systems Engineer, OpenClaw Multi-Agent Architect, Security Engineer, and QA Architect.
+
+Project:
+Freelancify AI
+
+Parent Platform:
+FreelancifyHub
+
+====================================================================
+OBJECTIVE
+====================================================================
+
+Perform a COMPLETE ARCHITECTURE AND IMPLEMENTATION AUDIT of:
+
+AG-001 Master Orchestrator
+
+Sprints completed:
+
+Sprint 1 — Foundation
+Sprint 2 — Intent Detection Engine
+Sprint 3 — Context Builder Engine
+Sprint 4 — Agent Routing Engine
+Sprint 5 — Execution Planner
+Sprint 6 — Execution Engine
+Sprint 7 — Response Aggregation & Result Processing
+
+IMPORTANT:
+
+THIS IS AN AUDIT ONLY.
+
+DO NOT:
+
+❌ write new implementation code
+❌ modify source files
+❌ refactor code
+❌ create new modules
+❌ delete files
+❌ change architecture
+❌ create Sprint 8
+❌ implement missing features
+❌ commit changes
+❌ push changes
+
+You may inspect files, run tests, run static analysis, and generate an audit report.
+
+The working tree MUST remain unchanged.
+
+====================================================================
+SOURCE OF TRUTH
+====================================================================
+
+Read and compare against:
+
+1. docs/freelancify-ai-blueprint-v1.0.md
+2. docs/product-requirements-v1.md
+3. docs/agent-catalog-v1.md
+4. docs/master-orchestrator-specification-v1.md
+5. docs/shared-memory-architecture-v1.md
+6. docs/tool-registry-architecture-v1.md
+7. docs/knowledge-base-architecture-v1.md
+8. docs/agent-development-kit-v1.md
+9. docs/architecture-review-v1.md
+
+Also inspect:
+
+10. prompts/README.md
+11. docs/index.md
+12. prompts/prompts11
+13. prompts/prompts12
+14. prompts/prompts13
+15. prompts/prompts14
+16. prompts/prompts15
+17. prompts/prompts16
+18. prompts/prompts17
+
+Use the actual source code as the implementation source of truth.
+
+====================================================================
+IMPLEMENTATION TO AUDIT
+====================================================================
+
+Inspect:
+
+src/agents/ag-001-master-orchestrator/
+
+including all Sprint 1–7 modules.
+
+Inspect associated tests:
+
+tests/unit/
+
+and any AG-001 integration/compatibility tests.
+
+Do not assume the implementation report is correct.
+
+Verify claims against actual code.
+
+====================================================================
+1. SPRINT COMPLETENESS AUDIT
+====================================================================
+
+For each Sprint 1–7 determine:
+
+- What was required?
+- What was actually implemented?
+- What was intentionally excluded?
+- What was accidentally implemented?
+- What is missing?
+- What is partially implemented?
+- What is over-engineered?
+- What violates the original specification?
+
+Create a table:
+
+| Sprint | Required | Implemented | Missing | Extra | Violations | Status |
+
+Status must be one of:
+
+COMPLETE
+COMPLETE_WITH_GAPS
+PARTIAL
+NON_COMPLIANT
+
+====================================================================
+2. BLUEPRINT CONSISTENCY
+====================================================================
+
+Compare implementation against:
+
+docs/freelancify-ai-blueprint-v1.0.md
+
+Check:
+
+- architecture
+- responsibilities
+- boundaries
+- OpenClaw architecture
+- multi-agent architecture
+- orchestration
+- memory architecture
+- knowledge architecture
+- tools
+- workflows
+- security
+- observability
+- scalability
+
+Identify contradictions.
+
+For every contradiction provide:
+
+- source
+- implementation
+- expected behavior
+- severity
+- recommendation
+
+====================================================================
+3. MASTER ORCHESTRATOR SPECIFICATION AUDIT
+====================================================================
+
+Compare implementation against:
+
+docs/master-orchestrator-specification-v1.md
+
+Audit all major responsibilities.
+
+At minimum:
+
+1. Intent detection
+2. Context construction
+3. Agent routing
+4. Execution planning
+5. Execution
+6. Result aggregation
+7. Error handling
+8. Retry
+9. Timeout
+10. Cancellation
+11. Security
+12. Observability
+13. Cost management
+14. State management
+15. Configuration
+16. API contracts
+17. Events
+18. Escalation
+19. Rate limits
+20. Performance constraints
+
+Create:
+
+| Responsibility | Spec | Implementation | Gap | Severity |
+
+====================================================================
+4. AGENT CATALOG CONSISTENCY
+====================================================================
+
+Compare implementation against:
+
+docs/agent-catalog-v1.md
+
+Focus specifically on:
+
+AG-001
+
+Verify:
+
+- responsibilities
+- non-responsibilities
+- interfaces
+- dependencies
+- permissions
+- context
+- memory usage
+- knowledge usage
+- tool access
+- LLM requirements
+- failure handling
+- retry policy
+- observability
+- security
+- privacy
+- rate limits
+- cost controls
+- KPIs
+
+IMPORTANT:
+
+Do NOT implement missing dependencies.
+
+Only report them.
+
+====================================================================
+5. INTERFACE AND CONTRACT AUDIT
+====================================================================
+
+Inspect all public interfaces/types/contracts.
+
+Look for:
+
+- duplicate interfaces
+- duplicate types
+- incompatible types
+- circular dependencies
+- unnecessary coupling
+- leaking internal implementation details
+- mutable shared state
+- unsafe generic types
+- excessive `any`
+- unsafe casts
+- incorrect nullability
+- inconsistent error contracts
+- inconsistent result contracts
+
+Create:
+
+| Contract | Location | Used By | Issue | Severity |
+
+====================================================================
+6. DEPENDENCY GRAPH AUDIT
+====================================================================
+
+Analyze module dependencies.
+
+Expected architecture should remain layered.
+
+Identify:
+
+- circular dependencies
+- reverse dependencies
+- inappropriate imports
+- infrastructure leaking into domain
+- domain depending on implementation
+- test-only dependencies leaking into production
+- cross-sprint coupling
+
+Produce a dependency summary.
+
+If possible provide Mermaid dependency diagram in the report.
+
+DO NOT modify code.
+
+====================================================================
+7. EXECUTION PIPELINE AUDIT
+====================================================================
+
+Trace the complete path:
+
+Request
+→ Intent
+→ Context
+→ Routing
+→ Planning
+→ Execution
+→ Aggregation
+→ Final Response
+
+Verify actual code paths.
+
+Identify:
+
+- dead stages
+- bypasses
+- missing stages
+- duplicated stages
+- incorrect ordering
+- data loss
+- state loss
+- error loss
+- context loss
+- result loss
+
+Provide an actual implementation flow diagram.
+
+====================================================================
+8. INTENT DETECTION AUDIT
+====================================================================
+
+Inspect Sprint 2.
+
+Verify:
+
+- intent registry
+- keyword matching
+- phrase matching
+- duplicate detection
+- unknown intent
+- confidence behavior
+- ambiguity
+- multi-intent behavior
+- extensibility
+- interface abstraction
+
+Check whether the implementation matches the Master Orchestrator specification.
+
+IMPORTANT:
+
+Do not add LLM intent detection.
+
+Only identify whether the abstraction is ready for future AI-based classification.
+
+====================================================================
+9. CONTEXT BUILDER AUDIT
+====================================================================
+
+Inspect Sprint 3.
+
+Verify:
+
+- context sources
+- priority
+- token estimation
+- compression
+- deduplication
+- normalization
+- budget management
+- critical context preservation
+- deterministic behavior
+- configuration
+
+Identify possible context-loss bugs.
+
+====================================================================
+10. ROUTING AUDIT
+====================================================================
+
+Inspect Sprint 4.
+
+Verify:
+
+- candidate selection
+- capability matching
+- priority
+- availability
+- fallback
+- cost constraints
+- routing confidence
+- multi-agent routing
+- disabled routing behavior
+- deterministic selection
+
+Check whether routing actually integrates correctly with execution planning.
+
+====================================================================
+11. EXECUTION PLANNER AUDIT
+====================================================================
+
+Inspect Sprint 5.
+
+Verify:
+
+- single
+- sequential
+- parallel
+- conditional
+- hybrid
+- dependency graph
+- topological ordering
+- cycle detection
+- optimization
+- dangling dependencies
+- unreachable nodes
+- constraints
+- failure policies
+
+Check whether produced plans are actually consumable by Sprint 6.
+
+====================================================================
+12. EXECUTION ENGINE AUDIT
+====================================================================
+
+Inspect Sprint 6.
+
+Verify:
+
+- AgentExecutor abstraction
+- lifecycle
+- state machine
+- single execution
+- sequential execution
+- parallel execution
+- conditional execution
+- hybrid execution
+- retry
+- timeout
+- cancellation
+- failure policy
+- concurrency
+- idempotency
+- event emission
+- metrics
+- resource cleanup
+
+Look specifically for:
+
+- race conditions
+- Promise handling problems
+- timer leaks
+- cancellation bugs
+- duplicate execution
+- retry bugs
+- dependency ordering bugs
+- partial execution bugs
+
+====================================================================
+13. RESULT AGGREGATION AUDIT
+====================================================================
+
+Inspect Sprint 7.
+
+Verify:
+
+validate
+→ normalize
+→ order
+→ dedupe
+→ status
+→ statistics
+→ retry handling
+→ format
+
+Check:
+
+- deterministic ordering
+- retry handling
+- dependency ordering
+- partial results
+- duplicate results
+- error preservation
+- warning preservation
+- status calculation
+- statistics
+- metadata
+- security sanitization
+
+Pay special attention to:
+
+apiKey
+token
+secret
+password
+authorization
+credentials
+
+Verify these cannot accidentally appear in aggregated outputs or logs.
+
+====================================================================
+14. SECURITY AUDIT
+====================================================================
+
+Perform a security-focused code review.
+
+Check:
+
+- secret leakage
+- unsafe logging
+- sensitive metadata
+- error leakage
+- input validation
+- output validation
+- injection risks
+- prototype pollution
+- unsafe object merging
+- unsafe serialization
+- arbitrary execution
+- unbounded resource consumption
+- retry abuse
+- concurrency abuse
+- denial-of-service risks
+
+Categorize:
+
+CRITICAL
+HIGH
+MEDIUM
+LOW
+INFO
+
+Do not fix anything.
+
+====================================================================
+15. PERFORMANCE AUDIT
+====================================================================
+
+Inspect:
+
+- algorithmic complexity
+- unnecessary copies
+- repeated processing
+- excessive serialization
+- parallel execution
+- concurrency limits
+- token estimation
+- result aggregation
+- memory usage
+- large result handling
+
+Identify potential bottlenecks.
+
+Do not optimize code.
+
+====================================================================
+16. TEST AUDIT
+====================================================================
+
+Run the full test suite.
+
+Expected current baseline:
+
+489 tests passing
+
+Verify actual number.
+
+Report:
+
+- total
+- passed
+- failed
+- skipped
+- flaky tests if detected
+
+Also inspect whether tests are actually meaningful.
+
+Check for:
+
+- shallow assertions
+- missing negative tests
+- missing edge cases
+- missing integration tests
+- missing security tests
+- missing concurrency tests
+- missing determinism tests
+- missing cancellation tests
+- missing timeout tests
+
+Create:
+
+| Area | Tests | Quality | Missing Coverage |
+
+====================================================================
+17. TYPE SAFETY AUDIT
+====================================================================
+
+Run:
+
+typecheck
+
+Inspect:
+
+- any
+- unknown misuse
+- unsafe casts
+- non-null assertions
+- weak interfaces
+- inconsistent generics
+- incorrect discriminated unions
+
+Do not change code.
+
+====================================================================
+18. LINT AND BUILD AUDIT
+====================================================================
+
+Run:
+
+lint
+
+build
+
+Record results.
+
+Check warnings even if the commands exit successfully.
+
+====================================================================
+19. OPENCLAW ARCHITECTURE AUDIT
+====================================================================
+
+Verify whether AG-001 is correctly designed for future OpenClaw integration.
+
+Check:
+
+- agent abstraction
+- execution abstraction
+- gateway independence
+- session independence
+- transport independence
+- tool independence
+- memory independence
+
+IMPORTANT:
+
+Do not integrate OpenClaw gateway in this audit.
+
+Only evaluate architectural readiness.
+
+====================================================================
+20. AG-002 / AG-003 / AG-004 BOUNDARY AUDIT
+====================================================================
+
+Verify AG-001 does NOT accidentally implement:
+
+AG-002 Memory Manager responsibilities
+
+AG-003 Knowledge Manager responsibilities
+
+AG-004 Tool Manager responsibilities
+
+Check for responsibility leakage.
+
+Create:
+
+| Component | AG-001 Responsibility | AG-002/3/4 Responsibility | Leakage? |
+
+====================================================================
+21. OBSERVABILITY AUDIT
+====================================================================
+
+Inspect logging/events/metrics.
+
+Verify:
+
+- execution IDs
+- plan IDs
+- step IDs
+- agent IDs
+- state transitions
+- errors
+- durations
+- retry counts
+- final status
+
+Check:
+
+- sensitive data leakage
+- inconsistent event naming
+- missing events
+- missing correlation IDs
+- excessive logging
+
+====================================================================
+22. CONFIGURATION AUDIT
+====================================================================
+
+Inspect all AG-001 configuration.
+
+Check:
+
+- environment validation
+- defaults
+- limits
+- feature flags
+- timeout limits
+- retry limits
+- concurrency limits
+- routing configuration
+- execution configuration
+- aggregation configuration
+
+Look for:
+
+- conflicting defaults
+- duplicate config
+- dead config
+- undocumented config
+- unsafe defaults
+
+====================================================================
+23. ERROR HANDLING AUDIT
+====================================================================
+
+Map errors across:
+
+Intent
+Context
+Routing
+Planning
+Execution
+Aggregation
+
+Check:
+
+- consistent error hierarchy
+- error codes
+- retryable flag
+- propagation
+- wrapping
+- sanitization
+- loss of original cause
+
+Identify errors that can disappear between layers.
+
+====================================================================
+24. DATA FLOW AUDIT
+====================================================================
+
+Trace:
+
+RequestContext
+
+IntentResult
+
+RouteDecision
+
+ExecutionPlan
+
+ExecutionContext
+
+ExecutionResult
+
+AggregatedResponse
+
+Check whether required information is:
+
+- preserved
+- transformed correctly
+- accidentally dropped
+- duplicated
+- mutated
+- exposed
+
+Create a data-flow table.
+
+====================================================================
+25. ARCHITECTURAL DEBT
+====================================================================
+
+Identify technical debt.
+
+Categorize:
+
+BLOCKER
+HIGH
+MEDIUM
+LOW
+
+Do NOT fix it.
+
+Explain impact.
+
+====================================================================
+26. MISSING FEATURES
+====================================================================
+
+Identify everything required by the architecture but not yet implemented.
+
+Separate:
+
+A. Required before AG-001 can be considered production-ready
+
+B. Required for future integrations
+
+C. Optional future improvements
+
+D. Intentionally deferred
+
+Do not implement any of them.
+
+====================================================================
+27. DETERMINE WHETHER SPRINT 8 IS ACTUALLY REQUIRED
+====================================================================
+
+This is VERY IMPORTANT.
+
+Do NOT assume Sprint 8 is needed.
+
+Based on the actual audit, determine:
+
+Option A:
+
+AG-001 still requires additional core implementation.
+
+OR
+
+Option B:
+
+AG-001 core is complete and should move to integration/hardening.
+
+Explain the decision.
+
+If additional work is required, propose the smallest logical next sprint.
+
+Do NOT implement it.
+
+====================================================================
+28. SPRINT ROADMAP REVIEW
+====================================================================
+
+Review whether Sprints 1–7 were correctly sequenced.
+
+Determine whether any future sprint should instead be:
+
+- hardening
+- integration
+- testing
+- observability
+- security
+- performance
+
+Do not blindly continue numbering.
+
+====================================================================
+29. FINAL SCORECARD
+====================================================================
+
+Score AG-001 from 0–100.
+
+Categories:
+
+Architecture
+Interfaces
+Intent Detection
+Context
+Routing
+Planning
+Execution
+Aggregation
+Security
+Testing
+Observability
+Performance
+Configuration
+Error Handling
+OpenClaw Readiness
+Integration Readiness
+
+Provide:
+
+overall score
+
+production readiness score
+
+integration readiness score
+
+test readiness score
+
+security readiness score
+
+====================================================================
+30. FINAL AUDIT REPORT
+====================================================================
+
+Create ONLY:
+
+docs/ag-001-sprints-1-7-audit-v1.md
+
+Do not modify source code.
+
+The report must contain:
+
+1. Executive Summary
+2. Scope
+3. Source of Truth
+4. Sprint 1 Audit
+5. Sprint 2 Audit
+6. Sprint 3 Audit
+7. Sprint 4 Audit
+8. Sprint 5 Audit
+9. Sprint 6 Audit
+10. Sprint 7 Audit
+11. Architecture Consistency
+12. Master Orchestrator Compliance
+13. Interface Audit
+14. Dependency Audit
+15. Execution Pipeline Audit
+16. Security Audit
+17. Performance Audit
+18. Test Audit
+19. Type Safety Audit
+20. Observability Audit
+21. Configuration Audit
+22. Error Handling Audit
+23. Data Flow Audit
+24. AG-002/003/004 Boundary Audit
+25. OpenClaw Readiness
+26. Architectural Debt
+27. Missing Features
+28. Sprint 8 Recommendation
+29. Future Roadmap Recommendation
+30. Final Scorecard
+31. Blocking Issues
+32. Non-Blocking Issues
+33. Recommended Next Steps
+
+====================================================================
+31. SEVERITY RULES
+====================================================================
+
+CRITICAL:
+
+Security vulnerability, data loss, architecture corruption, or production-blocking defect.
+
+HIGH:
+
+Major missing functionality or reliability issue.
+
+MEDIUM:
+
+Important architectural or maintainability issue.
+
+LOW:
+
+Minor improvement.
+
+INFO:
+
+Observation only.
+
+====================================================================
+32. ABSOLUTE RULE
+====================================================================
+
+THIS IS AN AUDIT.
+
+DO NOT CHANGE SOURCE CODE.
+
+DO NOT CHANGE CONFIGURATION.
+
+DO NOT REFACTOR.
+
+DO NOT COMMIT.
+
+DO NOT PUSH.
+
+ONLY:
+
+inspect
+
+test
+
+analyze
+
+document
+
+The only intended new file is:
+
+docs/ag-001-sprints-1-7-audit-v1.md
+
+At the end verify:
+
+git status
+
+and confirm that no source files were modified.
+
+====================================================================
+FINAL RESPONSE
+====================================================================
+
+Return:
+
+- Audit completed
+- Actual test count
+- Typecheck result
+- Lint result
+- Build result
+- Critical issues
+- High issues
+- Medium issues
+- Low issues
+- Missing features
+- AG-001 overall score
+- Production readiness
+- Integration readiness
+- Whether Sprint 8 is required
+- Recommended next action
+- Confirmation that no source code was changed
+- Audit report path

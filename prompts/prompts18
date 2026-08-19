@@ -1,0 +1,775 @@
+You are a Senior TypeScript Architect, AI Systems Engineer, Distributed Systems Engineer, Security Engineer, QA Engineer, and OpenClaw Multi-Agent Systems Architect.
+
+Project:
+Freelancify AI
+
+Parent Platform:
+FreelancifyHub
+
+============================================================
+TASK
+============================================================
+
+Implement:
+
+AG-001 Master Orchestrator
+Hardening Sprint 8
+
+This is a HARDENING sprint based strictly on:
+
+docs/ag-001-sprints-1-7-audit-v1.md
+
+The audit found:
+
+CRITICAL:
+C-1 Sensitive step output can leak secrets into AggregatedResponse.outputs
+C-2 Overall timeout race can report COMPLETED after timeout and can leak timers
+
+HIGH:
+H-1 Intent single-word saturation
+H-2 Draft agents can be selected / stale selectedAgent
+H-3 Routing cost/min-confidence/permission constraints not enforced
+H-4 EXECUTION_MAX_CONCURRENT_STEPS is metric-only
+H-5 Dead execution flags
+H-6 Sanitizer key gaps such as pwd/passphrase
+H-7 Missing security/stress coverage
+
+MEDIUM issues should NOT be broadly refactored in this sprint unless a Critical/High fix directly requires them.
+
+============================================================
+IMPORTANT SCOPE
+============================================================
+
+This sprint is HARDENING ONLY.
+
+DO NOT implement:
+
+❌ AG-002 Memory Manager
+❌ AG-003 Knowledge Manager
+❌ AG-004 Tool Manager
+❌ Knowledge Base integration
+❌ Tool execution
+❌ Real LLM integration
+❌ Gemini/OpenAI/Claude API integration
+❌ Social media agents
+❌ Payment agents
+❌ Client agents
+❌ Freelancer agents
+❌ Marketing agents
+❌ Admin agents
+❌ Database integration
+❌ Production external API integrations
+❌ OpenClaw gateway integration
+
+DO NOT redesign the architecture.
+
+DO NOT rewrite Sprints 1–7.
+
+Fix the identified defects with the smallest safe changes.
+
+============================================================
+SOURCE OF TRUTH
+============================================================
+
+Read:
+
+docs/ag-001-sprints-1-7-audit-v1.md
+
+Then read:
+
+docs/freelancify-ai-blueprint-v1.0.md
+docs/product-requirements-v1.md
+docs/agent-catalog-v1.md
+docs/master-orchestrator-specification-v1.md
+docs/shared-memory-architecture-v1.md
+docs/tool-registry-architecture-v1.md
+docs/knowledge-base-architecture-v1.md
+docs/agent-development-kit-v1.md
+docs/architecture-review-v1.md
+
+Inspect actual implementation:
+
+src/agents/ag-001-master-orchestrator/
+
+Inspect all existing tests.
+
+============================================================
+BASELINE
+============================================================
+
+Before modifying code:
+
+1. Run full tests
+2. Run typecheck
+3. Run lint
+4. Run build
+5. Record baseline
+
+Expected baseline from audit:
+
+489 tests passing
+
+If the baseline differs, investigate before making changes.
+
+============================================================
+CRITICAL FIX C-1
+SENSITIVE OUTPUT SANITIZATION
+============================================================
+
+Problem:
+
+Sensitive step output can flow through:
+
+execution
+→ aggregation
+→ formatter
+→ AggregatedResponse.outputs
+
+without sufficient sanitization.
+
+Fix this properly.
+
+Create/use ONE canonical security sanitization mechanism.
+
+It must protect:
+
+password
+passwd
+pwd
+passphrase
+token
+access_token
+refresh_token
+apiKey
+api_key
+apikey
+secret
+client_secret
+private_key
+authorization
+credentials
+credential
+cookie
+session_token
+auth_token
+
+Case-insensitive matching is required.
+
+Support nested objects.
+
+Support nested arrays.
+
+Support deeply nested structures.
+
+Do not mutate original input objects.
+
+Do not leak secrets through:
+
+output
+metadata
+errors
+warnings
+statistics
+formatted results
+logs
+
+The sanitizer must be applied at the correct trust boundary.
+
+Do not rely on only the formatter.
+
+The normalized result and final aggregated response must both be safe.
+
+Tests must prove:
+
+input:
+
+{
+  output: {
+    apiKey: "SECRET",
+    token: "SECRET",
+    nested: {
+      password: "SECRET"
+    }
+  }
+}
+
+cannot produce those secret values in AggregatedResponse.
+
+Also test:
+
+arrays
+
+nested objects
+
+mixed casing
+
+deep nesting
+
+metadata
+
+errors
+
+warnings
+
+============================================================
+CRITICAL FIX C-2
+OVERALL TIMEOUT RACE
+============================================================
+
+Problem:
+
+Overall execution timeout can race with execution completion.
+
+Under load an execution that exceeded its timeout can incorrectly return:
+
+COMPLETED
+
+instead of:
+
+TIMED_OUT
+
+Also investigate timer cleanup.
+
+Implement race-safe timeout behavior.
+
+Requirements:
+
+1. Overall timeout must be authoritative once its deadline has been reached.
+2. A completion occurring after the timeout deadline must not change final status to COMPLETED.
+3. Timeout must be represented consistently.
+4. Timers must always be cleaned up.
+5. No timer leaks.
+6. No unhandled Promise rejection.
+7. Cancellation and timeout must interact deterministically.
+8. Repeated completion after timeout must be ignored.
+9. Final state must be immutable once terminal state is reached.
+10. Step timers must also be cleaned up.
+
+Use a monotonic/deadline-based approach where appropriate.
+
+Avoid relying only on Promise.race if it allows state races.
+
+Create a single terminal-state transition mechanism.
+
+Terminal states:
+
+COMPLETED
+FAILED
+CANCELLED
+TIMED_OUT
+
+Once terminal state is reached:
+
+No later operation may overwrite it.
+
+Add stress tests that repeatedly execute timeout scenarios.
+
+Include:
+
+- timeout before completion
+- completion before timeout
+- exact-boundary timing
+- completion after deadline
+- cancellation before timeout
+- timeout before cancellation
+- multiple completion attempts
+- multiple timeout attempts
+- many concurrent executions
+- repeated execution runs
+
+Do not use flaky arbitrary sleeps where avoidable.
+
+Use controllable/fake timers or deterministic timing mechanisms where possible.
+
+============================================================
+HIGH FIX H-1
+INTENT SINGLE-WORD SATURATION
+============================================================
+
+Audit finding:
+
+SATURATION_UNITS=2 causes single-word intents to saturate incorrectly.
+
+Inspect current intent scoring.
+
+Fix scoring so a single keyword does not automatically produce unjustified high confidence.
+
+Preserve:
+
+- phrase matching
+- keyword matching
+- confidence thresholds
+- unknown intent
+- ambiguity handling
+
+Do not add an LLM.
+
+Add tests for:
+
+single keyword
+
+multiple keywords
+
+phrase
+
+conflicting keywords
+
+strong phrase
+
+weak single-word match
+
+unknown input
+
+ambiguous input
+
+============================================================
+HIGH FIX H-2
+NON-ROUTABLE / DRAFT AGENTS
+============================================================
+
+Routing must not select agents that are:
+
+- draft
+- unavailable
+- disabled
+- not routable
+- missing required capability
+- missing required permissions
+
+Inspect AgentStatus and routing metadata.
+
+Do not invent new agent statuses unless existing architecture requires it.
+
+Fix stale selectedAgent behavior:
+
+If primary agent becomes unavailable and fallback is selected:
+
+selectedAgent MUST represent the actual selected agent.
+
+No stale primary agent may remain.
+
+Add tests for:
+
+primary available
+
+primary unavailable
+
+draft primary
+
+disabled primary
+
+fallback
+
+no eligible agents
+
+stale selection prevention
+
+============================================================
+HIGH FIX H-3
+ROUTING CONSTRAINT ENFORCEMENT
+============================================================
+
+Audit found:
+
+- cost constraints not fully enforced
+- minimum confidence not fully enforced
+- permission constraints not fully enforced
+
+Inspect the existing routing specification and contracts.
+
+Implement only constraints already defined by the architecture.
+
+Do NOT invent new business rules.
+
+At minimum verify:
+
+maxRoutingCost
+
+minimum routing confidence
+
+required permissions
+
+capability requirements
+
+agent availability
+
+agent status
+
+If a candidate violates a hard constraint:
+
+DO NOT select it.
+
+If no candidate remains:
+
+return the correct structured routing failure.
+
+Add tests for every constraint.
+
+============================================================
+HIGH FIX H-4
+CONCURRENCY LIMIT ENFORCEMENT
+============================================================
+
+Audit finding:
+
+EXECUTION_MAX_CONCURRENT_STEPS is currently metric-only.
+
+Make the configured concurrency limit actually control execution.
+
+Requirements:
+
+- maximum active step executions must never exceed configured limit
+- queued steps must wait
+- dependency rules must still be respected
+- parallel plans must remain parallel up to the limit
+- cancellation must clear pending work
+- timeout must stop scheduling new work
+- failed execution must not deadlock the queue
+- retries must respect the same concurrency limit
+
+Do NOT implement a worker queue system.
+
+A lightweight in-process scheduler/semaphore is sufficient.
+
+Add tests that measure maximum observed concurrency.
+
+Example:
+
+limit = 2
+
+Never allow:
+
+active steps > 2
+
+Also test:
+
+limit = 1
+
+limit = 2
+
+limit > step count
+
+cancellation
+
+timeout
+
+retry
+
+failure
+
+============================================================
+HIGH FIX H-5
+DEAD EXECUTION FLAGS
+============================================================
+
+Audit identified 6 dead execution flags.
+
+Inspect all AG-001 execution feature flags.
+
+For every flag determine:
+
+A. Actually used
+B. Required but unused
+C. Obsolete
+D. Duplicate
+
+Do not blindly delete configuration.
+
+If a flag is required by the architecture, connect it correctly.
+
+If genuinely obsolete, remove it cleanly.
+
+If removing it would break a documented contract, keep it and document why.
+
+Tests must verify active feature flags.
+
+No dead configuration should remain without justification.
+
+============================================================
+HIGH FIX H-6
+SANITIZER KEY GAPS
+============================================================
+
+Extend the canonical sanitizer to cover:
+
+pwd
+passwd
+password
+passphrase
+token
+access_token
+refresh_token
+apiKey
+api_key
+apikey
+secret
+client_secret
+private_key
+authorization
+credentials
+credential
+cookie
+session_token
+auth_token
+
+Case-insensitive.
+
+Nested.
+
+Recursive.
+
+Non-mutating.
+
+Add regression tests.
+
+============================================================
+HIGH FIX H-7
+SECURITY + STRESS TESTS
+============================================================
+
+Add meaningful tests for:
+
+secret leakage
+
+nested secret leakage
+
+timeout races
+
+concurrency
+
+retry + concurrency
+
+cancellation + concurrency
+
+parallel execution
+
+large result sets
+
+deeply nested outputs
+
+large metadata
+
+multiple simultaneous executions
+
+terminal state races
+
+Do not create tests that pass only because implementation behavior is mocked away.
+
+============================================================
+REGRESSION PROTECTION
+============================================================
+
+All existing Sprint 1–7 behavior must remain compatible.
+
+Do not remove working functionality.
+
+Existing tests must continue passing.
+
+Add regression tests for every bug fixed.
+
+============================================================
+MEDIUM ISSUES
+============================================================
+
+DO NOT perform a general Medium-issue cleanup.
+
+However, if a Medium issue is directly responsible for a Critical or High issue, it may be fixed.
+
+Examples:
+
+dependency propagation may be touched only if required for routing constraint correctness.
+
+executor cancellation may be touched only if required for timeout/cancellation correctness.
+
+Document every such change.
+
+============================================================
+SECURITY REQUIREMENTS
+============================================================
+
+Never log:
+
+passwords
+tokens
+API keys
+credentials
+authorization headers
+private keys
+cookies
+payment secrets
+
+Never expose them in:
+
+ExecutionResult
+AggregatedResponse
+errors
+warnings
+events
+metrics
+logs
+
+Do not sanitize only at presentation time.
+
+Sanitize at the appropriate internal trust boundary.
+
+============================================================
+STATE MACHINE REQUIREMENT
+============================================================
+
+Terminal state transitions must be atomic from the perspective of concurrent async operations.
+
+For example:
+
+RUNNING
+  ├── COMPLETED
+  ├── FAILED
+  ├── CANCELLED
+  └── TIMED_OUT
+
+Once one terminal state wins:
+
+No other terminal state may overwrite it.
+
+Test this extensively.
+
+============================================================
+PERFORMANCE
+============================================================
+
+Do not introduce unnecessary O(n²) behavior.
+
+Avoid:
+
+deep-copying huge objects repeatedly
+
+re-sanitizing the same structure unnecessarily
+
+unbounded queues
+
+unbounded retries
+
+unbounded concurrency
+
+Do not sacrifice security for performance.
+
+============================================================
+FILES
+============================================================
+
+Modify only files necessary to implement the fixes.
+
+Add tests in the appropriate existing test directories.
+
+Create/update:
+
+docs/ag-001-hardening-sprint-v1.md
+
+This document must explain:
+
+- audit findings
+- fixes
+- design decisions
+- security model
+- timeout model
+- concurrency model
+- routing constraint model
+- intent scoring change
+- configuration cleanup
+- tests
+- remaining known issues
+
+============================================================
+QUALITY GATES
+============================================================
+
+After implementation run:
+
+npm test
+
+typecheck
+
+lint
+
+build
+
+Also inspect:
+
+- circular dependencies
+- unsafe casts
+- any usage
+- timer cleanup
+- Promise rejection handling
+- race conditions
+- secret leakage
+- dead configuration
+- stale state
+- duplicate scheduling
+
+Expected result:
+
+ALL TESTS PASS.
+
+The final test count must be greater than the previous baseline of 489 unless tests were intentionally consolidated.
+
+If test count decreases:
+
+Explain exactly why.
+
+============================================================
+FINAL VERIFICATION
+============================================================
+
+Run:
+
+git status
+
+Confirm only intentional files changed.
+
+Do NOT commit.
+
+Do NOT push.
+
+============================================================
+FINAL REPORT
+============================================================
+
+Return:
+
+1. Baseline test count
+2. Final test count
+3. C-1 fix details
+4. C-2 fix details
+5. H-1 fix
+6. H-2 fix
+7. H-3 fix
+8. H-4 fix
+9. H-5 fix
+10. H-6 fix
+11. H-7 fix
+12. Security tests
+13. Stress tests
+14. Timeout race tests
+15. Concurrency tests
+16. Routing constraint tests
+17. Intent scoring tests
+18. Typecheck
+19. Lint
+20. Build
+21. Files changed
+22. Remaining known issues
+23. Architecture compliance
+24. Production readiness after hardening
+
+Explicitly confirm:
+
+"No AG-002, AG-003, AG-004 integration, external API integration, LLM integration, social media integration, payment integration, database integration, or production business agents were implemented."
+
+Also confirm:
+
+"No source files outside the intended hardening scope were modified."
+
+Do NOT implement Sprint 9 or any future feature.
+
+============================================================
+END
+============================================================

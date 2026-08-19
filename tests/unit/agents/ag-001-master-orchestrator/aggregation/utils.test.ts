@@ -40,6 +40,97 @@ describe('isSensitiveKey / sanitizeRecord', () => {
     expect(isSensitiveKey('result')).toBe(false);
   });
 
+  it('detects the full hardened key set case-insensitively', () => {
+    for (const key of [
+      'password',
+      'passwd',
+      'pwd',
+      'passphrase',
+      'token',
+      'access_token',
+      'accessToken',
+      'refresh_token',
+      'refreshToken',
+      'apiKey',
+      'api_key',
+      'apikey',
+      'API_KEY',
+      'secret',
+      'client_secret',
+      'clientSecret',
+      'private_key',
+      'privateKey',
+      'authorization',
+      'Authorization',
+      'credentials',
+      'credential',
+      'cookie',
+      'session_token',
+      'sessionToken',
+      'auth_token',
+      'authToken',
+    ]) {
+      expect(isSensitiveKey(key)).toBe(true);
+    }
+  });
+
+  it('does not over-match benign keys', () => {
+    for (const key of [
+      'company',
+      'author',
+      'authorId',
+      'spin',
+      'pinned',
+      'description',
+      'result',
+      'clientName',
+      'accessLevel',
+      'sessionType',
+    ]) {
+      expect(isSensitiveKey(key)).toBe(false);
+    }
+  });
+
+  it('strips deep, mixed-case and compound secrets without mutation', () => {
+    const input = {
+      output: {
+        apiKey: 'SECRET-1',
+        token: 'SECRET-2',
+        nested: { password: 'SECRET-3', pwd: 'SECRET-4' },
+      },
+      headers: [{ authToken: 'SECRET-5' }, { clientSecret: 'SECRET-6' }],
+      meta: { username: 'alice', company: 'acme' },
+    };
+    const cleaned = sanitizeRecord(input);
+    const serialized = JSON.stringify(cleaned);
+    for (let i = 1; i <= 6; i++) {
+      expect(serialized).not.toContain(`SECRET-${i}`);
+    }
+    expect(cleaned).toEqual({
+      output: { nested: {} },
+      headers: [{}, {}],
+      meta: { username: 'alice', company: 'acme' },
+    });
+    expect(input.output.apiKey).toBe('SECRET-1');
+  });
+
+  it('supports deeply nested structures and arrays', () => {
+    const input = {
+      level1: {
+        level2: {
+          level3: { passphrase: 'secret', visible: 'ok' },
+        },
+      },
+      list: [[{ privateKey: 'secret' }, { ok: true }]],
+    };
+    const cleaned = sanitizeRecord(input) as {
+      level1: { level2: { level3: Record<string, unknown> } };
+      list: unknown[][];
+    };
+    expect(cleaned.level1.level2.level3).toEqual({ visible: 'ok' });
+    expect(cleaned.list).toEqual([[{}, { ok: true }]]);
+  });
+
   it('strips sensitive keys deeply without mutating the input', () => {
     const input = {
       result: 'ok',

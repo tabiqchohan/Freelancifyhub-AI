@@ -25,6 +25,7 @@ import { resolveEscalation } from './escalations/index.js';
 import { resolveFallbacks } from './fallback/index.js';
 import { validateRouteRequest } from './validators/index.js';
 import { weightsFromConfig } from './utils/index.js';
+import { defaultConstraints } from './config/index.js';
 import type { AgentRoutingRegistry, RouteScorer, RoutableAgent } from './interfaces/index.js';
 import type {
   RouteCandidate,
@@ -32,6 +33,7 @@ import type {
   RouteRequest,
   RouteScore,
   RouteReason,
+  RoutingConstraints,
   RoutingMetadata,
 } from './types/index.js';
 import { EscalationReason, RoutingStatus, RoutingStrategy } from './types/index.js';
@@ -72,13 +74,11 @@ export class RoutingEngine {
     validateRouteRequest(input);
 
     const intentId = input.intent.primary.intent.id;
-    const candidates = this.buildCandidates(input, intentId);
+    const constraints = this.effectiveConstraints(input);
+    const routingInput: RouteRequest = { ...input, constraints };
+    const candidates = this.buildCandidates(routingInput, intentId);
     const sorted = sortCandidates(candidates);
-    const limited = applyCandidateLimit(
-      sorted,
-      input.constraints,
-      this.config.ROUTING_MAX_CANDIDATES,
-    );
+    const limited = applyCandidateLimit(sorted, constraints, this.config.ROUTING_MAX_CANDIDATES);
 
     const confidence = limited[0]?.confidence ?? 0;
     const confidenceLevel = toConfidenceLevel(
@@ -95,6 +95,7 @@ export class RoutingEngine {
       confidenceLevel,
       lowThreshold: this.config.ROUTING_CONFIDENCE_LOW,
       enabled: this.config.ROUTING_ESCALATION_ENABLED,
+      allowedRoles: constraints.allowedRoles,
     });
 
     const reasons: RouteReason[] = [...escalation.reasons];
@@ -124,7 +125,7 @@ export class RoutingEngine {
           candidates: limited,
           selectedAgent,
           enabled: this.config.ROUTING_FALLBACK_ENABLED,
-          excludedAgentIds: new Set(input.constraints?.excludedAgents ?? []),
+          excludedAgentIds: new Set(constraints?.excludedAgents ?? []),
           availableAgentIds: this.availableAgentIds(),
         });
 
@@ -148,6 +149,7 @@ export class RoutingEngine {
         } else if (fallbackResult.fallbackRequired) {
           status = RoutingStatus.Escalated;
           strategy = RoutingStrategy.Escalation;
+          selectedAgent = undefined;
           decisionEscalation = {
             reason: EscalationReason.AgentUnavailable,
             message: 'Preferred agent is unavailable and no fallback agent exists',
@@ -161,6 +163,10 @@ export class RoutingEngine {
           });
         }
       }
+    }
+
+    if (status === RoutingStatus.Escalated) {
+      selectedAgent = undefined;
     }
 
     const executionMode = resolveExecutionMode(limited, this.config.ROUTING_MULTI_AGENT_ENABLED);
@@ -227,6 +233,10 @@ export class RoutingEngine {
         return;
       }
 
+      if (!isRoutableStatus(agent.configuration)) {
+        return;
+      }
+
       const supported = isSupportedAgent(agent.configuration, supportedAgents);
       const capable =
         intentCapabilities.length > 0 &&
@@ -240,9 +250,16 @@ export class RoutingEngine {
         return;
       }
 
+      const score = this.score(agent, input);
+      if (
+        input.constraints?.minConfidence !== undefined &&
+        score.total < input.constraints.minConfidence
+      ) {
+        return;
+      }
+
       seen.add(id);
 
-      const score = this.score(agent, input);
       const strategy = supported ? RoutingStrategy.Direct : RoutingStrategy.CapabilityMatch;
 
       candidates.push({
@@ -316,6 +333,21 @@ export class RoutingEngine {
         .filter((agent) => agent.availability.available && isRoutableStatus(agent.configuration))
         .map((agent) => agent.configuration.agentId),
     );
+  }
+
+  /**
+   * Merges configured routing defaults into the request constraints so the
+   * global ROUTING_MAX_COST ceiling is always enforced (prompt §13). The
+   * request can tighten it. ROUTING_CONFIDENCE_LOW is deliberately not merged
+   * as minConfidence because it already gates low-confidence escalation, and
+   * maxCandidates is applied by applyCandidateLimit from configuration.
+   */
+  private effectiveConstraints(input: RouteRequest): RoutingConstraints {
+    const defaults = defaultConstraints(this.config);
+    return {
+      ...input.constraints,
+      maxRoutingCost: input.constraints?.maxRoutingCost ?? defaults.maxRoutingCost,
+    };
   }
 }
 

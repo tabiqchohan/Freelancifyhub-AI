@@ -34,13 +34,31 @@ const TRANSITIONS: Readonly<Record<ExecutionState, readonly ExecutionState[]>> =
   [ExecutionState.TimedOut]: [],
 };
 
+/** States that are terminal and can never be overwritten once reached. */
+const TERMINAL_STATES: Readonly<Set<ExecutionState>> = new Set([
+  ExecutionState.Completed,
+  ExecutionState.Partial,
+  ExecutionState.Failed,
+  ExecutionState.Cancelled,
+  ExecutionState.TimedOut,
+]);
+
 /** Execution-local, deterministic state manager (prompt §18). */
 export class ExecutionStateManager {
   private state: ExecutionState = ExecutionState.Pending;
+  private settled: ExecutionState | undefined;
   private readonly stepStates = new Map<string, ExecutionStepState>();
 
   get current(): ExecutionState {
     return this.state;
+  }
+
+  get isSettled(): boolean {
+    return this.settled !== undefined;
+  }
+
+  get settledState(): ExecutionState | undefined {
+    return this.settled;
   }
 
   get snapshot(): ReadonlyMap<string, ExecutionStepState> {
@@ -75,6 +93,27 @@ export class ExecutionStateManager {
       return true;
     }
     return false;
+  }
+
+  /**
+   * Commits a terminal state once. The first terminal state wins; every later
+   * call is a no-op returning the already-settled state, so a completion after
+   * a timeout/cancellation can never overwrite the terminal outcome (C-2).
+   */
+  settle(next: ExecutionState): ExecutionState {
+    if (this.settled !== undefined) {
+      return this.settled;
+    }
+    if (!TERMINAL_STATES.has(next)) {
+      throw new ExecutionStateError(`Cannot settle into non-terminal state: ${String(next)}`, {
+        details: { to: next },
+      });
+    }
+    if (!this.tryTransition(next)) {
+      this.state = next;
+    }
+    this.settled = next;
+    return next;
   }
 
   /** Marks a single step as started. */

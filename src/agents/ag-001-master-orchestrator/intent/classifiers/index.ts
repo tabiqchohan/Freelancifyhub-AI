@@ -17,7 +17,7 @@ import { buildRules, unknownRule } from '../rules/index.js';
 export const CLASSIFIER_NAME = 'rule-based';
 export const CLASSIFIER_VERSION = '1.0.0';
 
-const SATURATION_UNITS = 2;
+const SATURATION_UNITS = 3;
 
 function sortByConfidence(a: IntentCandidate, b: IntentCandidate): number {
   if (b.confidence !== a.confidence) {

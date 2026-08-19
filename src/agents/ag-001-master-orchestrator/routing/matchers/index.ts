@@ -50,7 +50,26 @@ export function constraintViolations(
   const violations: string[] = [];
 
   if (constraints.allowedRoles !== undefined && constraints.allowedRoles.length > 0) {
-    // Role filtering is intent-level; agents do not declare roles in Sprint 4.
+    // Request-level role restriction; agents do not declare roles in Sprint 4,
+    // so this is enforced by the engine against the caller role (§13).
+  }
+
+  if (constraints.requiredPermissions !== undefined && constraints.requiredPermissions.length > 0) {
+    const missing = constraints.requiredPermissions.filter(
+      (permission) => !(agent.configuration.permissions ?? []).includes(permission),
+    );
+    if (missing.length > 0) {
+      violations.push(`missing required permissions: ${missing.join(', ')}`);
+    }
+  }
+
+  if (
+    constraints.maxRoutingCost !== undefined &&
+    (agent.configuration.cost ?? 1) > constraints.maxRoutingCost
+  ) {
+    violations.push(
+      `routing cost ${(agent.configuration.cost ?? 1).toFixed(3)} exceeds max ${constraints.maxRoutingCost.toFixed(3)}`,
+    );
   }
 
   if (

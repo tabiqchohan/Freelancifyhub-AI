@@ -2,7 +2,7 @@ import type { IntentMatch, IntentMatcher, IntentRule } from '../types.js';
 import { IntentId } from '../types.js';
 
 const WORD_WEIGHT = 1;
-const PHRASE_WEIGHT = 2;
+const PHRASE_WEIGHT = 3;
 
 function isPhrase(keyword: string): boolean {
   return /\s/.test(keyword);

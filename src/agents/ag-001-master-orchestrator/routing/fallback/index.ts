@@ -72,7 +72,7 @@ export function resolveFallbacks(input: FallbackInput): FallbackResult {
   if (fallback === undefined) {
     return {
       fallbacks: [],
-      selectedAgent: input.selectedAgent,
+      selectedAgent: undefined,
       status: RoutingStatus.Success,
       fallbackRequired: true,
     };

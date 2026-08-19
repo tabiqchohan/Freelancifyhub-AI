@@ -13,6 +13,14 @@ const positiveInt = z.coerce.number().int().min(1);
  * Typed execution configuration (prompt §22). Limits mirror the orchestrator
  * spec §11/§21 and default to safe values. Feature flags opt-in the more
  * complex behaviours.
+ *
+ * H-5 (hardening): EXECUTION_DEFAULT_TIMEOUT_MS is the overall-execution
+ * timeout fallback used by the engine when a plan omits a
+ * maxTotalExecutionTimeMs budget. EXECUTION_DEFAULT_RETRY_ATTEMPTS is a
+ * validation floor: planning always supplies an explicit per-step retry
+ * policy, so this default only guarantees EXECUTION_MAX_RETRY_ATTEMPTS is
+ * never configured below it (see superRefine). Removing either would break
+ * the documented config contract, so both are kept and enforced.
  */
 export const ExecutionConfigSchema = z
   .object({

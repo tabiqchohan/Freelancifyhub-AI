@@ -224,7 +224,7 @@ describe('RoutingEngine - disabled and unavailable agents', () => {
     expect(decision.escalation?.reason).toBe(EscalationReason.AgentUnavailable);
   });
 
-  it('treats a disabled agent (Draft/Retired status) as unavailable', () => {
+  it('does not route to an agent with a disabled (Draft/Retired) status', () => {
     const registry = new RoutingRegistry([
       makeRoutableAgent({
         agentId: 'AG-202',
@@ -248,7 +248,67 @@ describe('RoutingEngine - disabled and unavailable agents', () => {
     );
 
     expect(decision.status).toBe(RoutingStatus.Escalated);
-    expect(decision.escalation?.reason).toBe(EscalationReason.AgentUnavailable);
+    expect(decision.escalation?.reason).toBe(EscalationReason.NoMatch);
+    expect(decision.selectedAgent).toBeUndefined();
+    expect(decision.candidates.some((c) => c.agent.agentId === 'AG-202')).toBe(false);
+  });
+
+  it('selects a routable agent over a draft agent with a higher rank', () => {
+    const registry = new RoutingRegistry([
+      makeRoutableAgent({
+        agentId: 'AG-202',
+        status: AgentStatus.Draft,
+        capabilities: [{ id: 'profile.optimize', name: 'optimize', enabled: true }],
+      }),
+      makeRoutableAgent({
+        agentId: 'AG-900',
+        status: AgentStatus.InDevelopment,
+        capabilities: [{ id: 'profile.optimize', name: 'optimize', enabled: true }],
+      }),
+    ]);
+
+    const engine = new RoutingEngine({ registry });
+    const definition = makeIntentDefinition({
+      id: IntentId.OPTIMIZE_PROFILE,
+      supportedAgents: ['AG-202', 'AG-900'],
+    });
+
+    const decision = routeFor(
+      baseInput({
+        intent: makeIntentResult(definition),
+        request: makeAgentRequest({ agentId: 'AG-202' }),
+      }),
+      engine,
+    );
+
+    expect(decision.status).toBe(RoutingStatus.Success);
+    expect(decision.selectedAgent?.agent.agentId).toBe('AG-900');
+    expect(decision.candidates.some((c) => c.agent.agentId === 'AG-202')).toBe(false);
+  });
+
+  it('does not leak non-routable agents into multi-agent candidate lists', () => {
+    const config = parseRoutingConfig({ ROUTING_MULTI_AGENT_ENABLED: 'true' });
+    const engine = new RoutingEngine({ config });
+
+    const definition = makeIntentDefinition({
+      id: IntentId.ADMIN_ACTION,
+      allowedRoles: [UserRole.Admin, UserRole.Freelancer],
+      supportedAgents: ['AG-501', 'AG-502', 'AG-503', 'AG-504', 'AG-505'],
+    });
+
+    const decision = routeFor(
+      baseInput({
+        intent: makeIntentResult(definition),
+        role: UserRole.Freelancer,
+      }),
+      engine,
+    );
+
+    for (const candidate of decision.candidates) {
+      expect(candidate.agent.status).not.toBe(AgentStatus.Draft);
+      expect(candidate.agent.status).not.toBe(AgentStatus.Retired);
+    }
+    expect(decision.candidates.map((c) => c.agent.agentId)).toEqual(['AG-501', 'AG-502']);
   });
 });
 
@@ -268,7 +328,7 @@ describe('RoutingEngine - no candidate and low confidence', () => {
     const registry = new RoutingRegistry([
       makeRoutableAgent({
         agentId: 'AG-900',
-        status: AgentStatus.Draft,
+        status: AgentStatus.InDevelopment,
         capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
       }),
     ]);
@@ -332,6 +392,188 @@ describe('RoutingEngine - constraints', () => {
 
     expect(decision.candidates.length).toBe(2);
   });
+
+  it('does not select an agent whose routing cost exceeds maxRoutingCost', () => {
+    const registry = new RoutingRegistry([
+      makeRoutableAgent({
+        agentId: 'AG-101',
+        cost: 0.9,
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+      makeRoutableAgent({
+        agentId: 'AG-102',
+        cost: 0.3,
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+    ]);
+
+    const engine = new RoutingEngine({ registry });
+    const decision = routeFor(baseInput({ constraints: { maxRoutingCost: 0.5 } }), engine);
+
+    expect(decision.candidates.some((c) => c.agent.agentId === 'AG-101')).toBe(false);
+    expect(decision.selectedAgent?.agent.agentId).toBe('AG-102');
+  });
+
+  it('enforces the configured ROUTING_MAX_COST as a hard ceiling', () => {
+    const registry = new RoutingRegistry([
+      makeRoutableAgent({
+        agentId: 'AG-101',
+        cost: 0.9,
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+      makeRoutableAgent({
+        agentId: 'AG-102',
+        cost: 0.3,
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+    ]);
+
+    const config = parseRoutingConfig({ ROUTING_MAX_COST: '0.5' });
+    const engine = new RoutingEngine({ config, registry });
+    const decision = routeFor(baseInput(), engine);
+
+    expect(decision.candidates.some((c) => c.agent.agentId === 'AG-101')).toBe(false);
+    expect(decision.selectedAgent?.agent.agentId).toBe('AG-102');
+  });
+
+  it('escalates when every candidate exceeds maxRoutingCost', () => {
+    const registry = new RoutingRegistry([
+      makeRoutableAgent({
+        agentId: 'AG-101',
+        cost: 0.9,
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+    ]);
+
+    const engine = new RoutingEngine({ registry });
+    const decision = routeFor(baseInput({ constraints: { maxRoutingCost: 0.5 } }), engine);
+
+    expect(decision.status).toBe(RoutingStatus.Escalated);
+    expect(decision.escalation?.reason).toBe(EscalationReason.NoMatch);
+  });
+
+  it('filters candidates below the minimum confidence', () => {
+    const registry = new RoutingRegistry([
+      makeRoutableAgent({
+        agentId: 'AG-101',
+        status: AgentStatus.Testing,
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+      makeRoutableAgent({
+        agentId: 'AG-102',
+        status: AgentStatus.InDevelopment,
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+    ]);
+
+    const config = parseRoutingConfig({
+      ROUTING_WEIGHT_INTENT: '0',
+      ROUTING_WEIGHT_CAPABILITY: '0',
+      ROUTING_WEIGHT_ROLE: '0',
+      ROUTING_WEIGHT_STATUS: '1',
+      ROUTING_WEIGHT_PRIORITY: '0',
+      ROUTING_WEIGHT_COST: '0',
+      ROUTING_WEIGHT_AVAILABILITY: '0',
+      ROUTING_WEIGHT_CONSTRAINT: '0',
+    });
+    const engine = new RoutingEngine({ config, registry });
+    const decision = routeFor(baseInput({ constraints: { minConfidence: 0.85 } }), engine);
+
+    expect(decision.candidates.some((c) => c.agent.agentId === 'AG-102')).toBe(false);
+    expect(decision.selectedAgent?.agent.agentId).toBe('AG-101');
+  });
+
+  it('escalates when every candidate is below the minimum confidence', () => {
+    const registry = new RoutingRegistry([
+      makeRoutableAgent({
+        agentId: 'AG-102',
+        status: AgentStatus.InDevelopment,
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+    ]);
+
+    const config = parseRoutingConfig({
+      ROUTING_WEIGHT_INTENT: '0',
+      ROUTING_WEIGHT_CAPABILITY: '0',
+      ROUTING_WEIGHT_ROLE: '0',
+      ROUTING_WEIGHT_STATUS: '1',
+      ROUTING_WEIGHT_PRIORITY: '0',
+      ROUTING_WEIGHT_COST: '0',
+      ROUTING_WEIGHT_AVAILABILITY: '0',
+      ROUTING_WEIGHT_CONSTRAINT: '0',
+    });
+    const engine = new RoutingEngine({ config, registry });
+    const decision = routeFor(baseInput({ constraints: { minConfidence: 0.85 } }), engine);
+
+    expect(decision.status).toBe(RoutingStatus.Escalated);
+    expect(decision.escalation?.reason).toBe(EscalationReason.NoMatch);
+  });
+
+  it('does not select an agent missing required permissions', () => {
+    const registry = new RoutingRegistry([
+      makeRoutableAgent({
+        agentId: 'AG-101',
+        permissions: ['projects:write'],
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+      makeRoutableAgent({
+        agentId: 'AG-102',
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+    ]);
+
+    const engine = new RoutingEngine({ registry });
+    const decision = routeFor(
+      baseInput({ constraints: { requiredPermissions: ['projects:write'] } }),
+      engine,
+    );
+
+    expect(decision.candidates.some((c) => c.agent.agentId === 'AG-102')).toBe(false);
+    expect(decision.selectedAgent?.agent.agentId).toBe('AG-101');
+  });
+
+  it('escalates when no agent declares the required permissions', () => {
+    const registry = new RoutingRegistry([
+      makeRoutableAgent({
+        agentId: 'AG-101',
+        capabilities: [{ id: 'project.create', name: 'create', enabled: true }],
+      }),
+    ]);
+
+    const engine = new RoutingEngine({ registry });
+    const decision = routeFor(
+      baseInput({ constraints: { requiredPermissions: ['projects:write'] } }),
+      engine,
+    );
+
+    expect(decision.status).toBe(RoutingStatus.Escalated);
+    expect(decision.escalation?.reason).toBe(EscalationReason.NoMatch);
+  });
+
+  it('escalates with PERMISSION_DENIED when the role is excluded by constraints', () => {
+    const decision = routeFor(
+      baseInput({
+        role: UserRole.Freelancer,
+        constraints: { allowedRoles: [UserRole.Admin] },
+      }),
+    );
+
+    expect(decision.status).toBe(RoutingStatus.Escalated);
+    expect(decision.escalation?.reason).toBe(EscalationReason.PermissionDenied);
+    expect(decision.selectedAgent).toBeUndefined();
+  });
+
+  it('routes normally when the role is allowed by constraints', () => {
+    const decision = routeFor(
+      baseInput({
+        role: UserRole.Freelancer,
+        constraints: { allowedRoles: [UserRole.Freelancer, UserRole.Admin] },
+      }),
+    );
+
+    expect(decision.status).toBe(RoutingStatus.Success);
+    expect(decision.selectedAgent?.agent.agentId).toBe('AG-101');
+  });
 });
 
 describe('RoutingEngine - determinism', () => {
@@ -386,19 +628,7 @@ describe('RoutingEngine - multi-agent mode', () => {
     const config = parseRoutingConfig({ ROUTING_MULTI_AGENT_ENABLED: 'true' });
     const engine = new RoutingEngine({ config });
 
-    const definition = makeIntentDefinition({
-      id: IntentId.ADMIN_ACTION,
-      allowedRoles: [UserRole.Admin, UserRole.Freelancer],
-      supportedAgents: ['AG-501', 'AG-502', 'AG-503', 'AG-504', 'AG-505'],
-    });
-
-    const decision = routeFor(
-      baseInput({
-        intent: makeIntentResult(definition),
-        role: UserRole.Freelancer,
-      }),
-      engine,
-    );
+    const decision = routeFor(baseInput(), engine);
 
     expect(decision.executionMode).toBe(ExecutionMode.Hybrid);
   });

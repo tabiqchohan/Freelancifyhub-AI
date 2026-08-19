@@ -36,6 +36,8 @@ export {
 
 export { withTimeout, createDeadline } from './timeout/index.js';
 
+export { ConcurrencyLimiter } from './concurrency/index.js';
+
 export { CancellationController } from './cancellation/index.js';
 
 export { InMemoryExecutionEventEmitter } from './events/index.js';

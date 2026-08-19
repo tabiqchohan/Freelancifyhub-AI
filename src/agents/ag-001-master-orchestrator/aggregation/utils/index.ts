@@ -3,13 +3,41 @@ import type { NormalizedResult, ResultGroup } from '../types/index.js';
 import { ResultGroup as ResultGroupValue } from '../types/index.js';
 import type { ResultGrouper, ResultOrderer } from '../interfaces/index.js';
 
-/** Keys that must never leak into metadata or aggregated output (prompt §19/§43). */
-const SENSITIVE_KEY_PATTERN =
-  /(password|passwd|secret|token|api[-_]?key|auth|authorization|cookie|credential|private[-_]?key|access[-_]?key|session[-_]?id|ssn|credit[-_]?card|pan|pin|cvv)/i;
+/**
+ * Canonical security sanitization mechanism (prompt §19/§43).
+ *
+ * A key is sensitive when its canonical form (lower-cased, separator- and
+ * camelCase-normalised to `snake_case`) matches either:
+ * - a sensitive single token: `password`, `passwd`, `pwd`, `passphrase`,
+ *   `token`, `secret`, `authorization`, `credentials`, `cookie`, `ssn`,
+ *   `cvv`, `pan`, `pin`; or
+ * - a sensitive compound: `api_key`/`apikey`, `access_token`,
+ *   `refresh_token`, `session_token`/`session_id`, `auth_token`,
+ *   `client_secret`, `private_key`, `access_key`.
+ *
+ * Matching is case-insensitive, supports nested objects/arrays via
+ * {@link sanitizeRecord}, and is non-mutating. The canonical form avoids both
+ * false negatives (e.g. `pwd`, `passphrase`, `apikey`, `authToken`,
+ * `clientSecret`) and substring false positives (e.g. `company`, `author`,
+ * `spin` are not treated as sensitive).
+ */
+function canonicalKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .toLowerCase();
+}
 
-/** Whether a metadata key is considered sensitive. */
+const SENSITIVE_TOKEN_PATTERN =
+  /(?:^|_)(?:password|passwd|pwd|passphrase|token|secret|authorization|credentials?|cookie|ssn|cvv|pan|pin)(?:_|$)/;
+
+const SENSITIVE_COMPOUND_PATTERN =
+  /(?:^|_)(?:api_?key|apikey|access_?token|refresh_?token|session_?token|session_?id|auth_?token|client_?secret|private_?key|access_?key)(?:_|$)/;
+
+/** Whether a key is considered sensitive. */
 export function isSensitiveKey(key: string): boolean {
-  return SENSITIVE_KEY_PATTERN.test(key);
+  const canonical = canonicalKey(key);
+  return SENSITIVE_TOKEN_PATTERN.test(canonical) || SENSITIVE_COMPOUND_PATTERN.test(canonical);
 }
 
 /** Deeply strips sensitive keys from a record without mutating the input. */

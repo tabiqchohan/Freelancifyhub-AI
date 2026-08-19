@@ -134,7 +134,7 @@ export class ExecutionResultNormalizer implements ResultNormalizer {
       order: step.order,
       status: step.status,
       group,
-      output: step.output,
+      output: sanitizeRecord(step.output),
       error,
       warnings,
       startedAt: step.startedAt,

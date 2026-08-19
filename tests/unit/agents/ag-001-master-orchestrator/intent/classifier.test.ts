@@ -113,3 +113,60 @@ describe('max candidates', () => {
     expect(result.secondary.length).toBe(0);
   });
 });
+
+describe('H-1 single-word saturation', () => {
+  it('keeps a lone single word below qualifying confidence', () => {
+    const result = classifier.classify('chat');
+
+    expect(result.fallback).toBe(true);
+    expect(result.primary.intent.id).toBe(IntentId.UNKNOWN);
+    expect(result.confidence).toBeLessThan(0.55);
+  });
+
+  it('does not saturate two single-word keywords to 1.0', () => {
+    const result = classifier.classify('chat dm');
+
+    expect(result.fallback).toBe(false);
+    expect(result.primary.intent.id).toBe(IntentId.SEND_MESSAGE);
+    expect(result.confidence).toBeLessThan(1);
+    expect(result.confidence).toBeGreaterThanOrEqual(0.55);
+  });
+
+  it('does not saturate two admin single words to 1.0', () => {
+    const result = classifier.classify('scam fraud');
+
+    expect(result.primary.intent.id).toBe(IntentId.REPORT_SCAM);
+    expect(result.confidence).toBeLessThan(1);
+    expect(result.confidence).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it('gives a phrase match full saturation confidence', () => {
+    const result = classifier.classify('create project');
+
+    expect(result.fallback).toBe(false);
+    expect(result.primary.intent.id).toBe(IntentId.CREATE_PROJECT);
+    expect(result.confidence).toBe(1);
+  });
+
+  it('gives a strong phrase match high confidence', () => {
+    const result = classifier.classify('submit proposal');
+
+    expect(result.primary.intent.id).toBe(IntentId.SUBMIT_PROPOSAL);
+    expect(result.confidence).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('resolves conflicting keywords into multiple candidates', () => {
+    const result = classifier.classify('create project and delete project');
+
+    expect(result.fallback).toBe(false);
+    expect(result.candidates.length).toBeGreaterThanOrEqual(2);
+    expect(result.primary.intent.id).toBe(IntentId.CREATE_PROJECT);
+  });
+
+  it('treats unknown input as UNKNOWN', () => {
+    const result = classifier.classify('zzz no intent here');
+
+    expect(result.fallback).toBe(true);
+    expect(result.primary.intent.id).toBe(IntentId.UNKNOWN);
+  });
+});

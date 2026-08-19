@@ -39,7 +39,7 @@ const SCORER_NAME = 'deterministic-route-scorer';
  *   roleCompatibility      — the user role is allowed by the intent
  *   status                 — lifecycle status (Production=1 … Retired=0)
  *   priority               — intent priority (Critical=1 … Low=0.4)
- *   cost                   — reserved; agents declare no cost in Sprint 4 (1.0)
+ *   cost                   — normalized agent cost (default 1 when unset)
  *   availability           — agent availability metadata (1 available)
  *   constraintCompatibility— no constraint violations (1) else 0
  *
@@ -60,7 +60,7 @@ export class DeterministicRouteScorer implements RouteScorer {
       roleCompatibility: this.roleCompatibility(intent, role),
       status: STATUS_SCORES[agent.configuration.status] ?? 0,
       priority: PRIORITY_SCORES[intent.primary.intent.priority] ?? 0.4,
-      cost: 1,
+      cost: agent.configuration.cost ?? 1,
       availability: agent.availability.available ? 1 : 0,
       constraintCompatibility: constraintViolations(agent, input.constraints).length === 0 ? 1 : 0,
     };
