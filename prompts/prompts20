@@ -1,0 +1,974 @@
+You are a Senior TypeScript Architect, Distributed Systems Engineer,
+AI Memory Systems Engineer, Security Engineer, and Multi-Agent
+Architecture Engineer.
+
+Project:
+Freelancify AI
+
+Parent Platform:
+FreelancifyHub
+
+============================================================
+TASK
+============================================================
+
+Implement:
+
+AG-002 Shared Memory Manager
+Sprint 1 — Foundation
+
+The architecture specification already exists:
+
+docs/shared-memory-architecture-v1.md
+
+This sprint converts the AG-002 architecture into a clean,
+type-safe, testable implementation foundation.
+
+============================================================
+CURRENT SYSTEM
+============================================================
+
+AG-001 Master Orchestrator is already implemented.
+
+Current AG-001 status:
+
+Sprint 1 Foundation       ✅
+Sprint 2 Intent           ✅
+Sprint 3 Context          ✅
+Sprint 4 Routing          ✅
+Sprint 5 Planning         ✅
+Sprint 6 Execution        ✅
+Sprint 7 Aggregation      ✅
+Sprint 8 Hardening        ✅
+Sprint 9 Integration      ✅
+
+Current AG-001 baseline:
+
+594 tests passing
+Typecheck clean
+Lint clean
+Build clean
+
+DO NOT modify AG-001 unless absolutely required for a clean
+AG-002 contract boundary.
+
+============================================================
+PRIMARY GOAL
+============================================================
+
+Create the AG-002 Memory Manager foundation.
+
+AG-002 must eventually provide:
+
+- memory creation
+- memory retrieval
+- memory update
+- memory deletion
+- memory lifecycle
+- memory classification
+- memory access control
+- memory metadata
+- retention/TTL handling
+- memory prioritization
+- memory security
+- future persistence abstraction
+- future vector retrieval abstraction
+
+But THIS SPRINT only implements the foundation.
+
+============================================================
+STRICT SCOPE
+============================================================
+
+IMPLEMENT:
+
+✅ AG-002 module structure
+✅ interfaces
+✅ types
+✅ enums
+✅ error hierarchy
+✅ configuration
+✅ validation
+✅ memory record contracts
+✅ memory lifecycle contracts
+✅ memory access contracts
+✅ storage abstraction interfaces
+✅ retrieval abstraction interfaces
+✅ repository interfaces
+✅ service interfaces
+✅ deterministic in-memory test implementation
+✅ unit tests
+✅ documentation
+
+DO NOT IMPLEMENT:
+
+❌ PostgreSQL
+❌ Neon
+❌ Supabase
+❌ Qdrant
+❌ Redis
+❌ Pinecone
+❌ Elasticsearch
+❌ external vector database
+❌ external memory provider
+❌ LLM
+❌ embeddings
+❌ OpenAI
+❌ Gemini
+❌ Claude
+❌ OpenClaw Gateway
+❌ FreelancifyHub API
+❌ Stripe
+❌ production agents
+❌ Social Media Agent
+❌ AG-003 Knowledge Manager
+❌ AG-004 Tool Manager
+
+The storage layer must remain replaceable.
+
+============================================================
+SOURCE OF TRUTH
+============================================================
+
+Read these documents before implementation:
+
+docs/shared-memory-architecture-v1.md
+
+Also inspect:
+
+docs/freelancify-ai-blueprint-v1.0.md
+docs/product-requirements-v1.md
+docs/agent-catalog-v1.md
+docs/master-orchestrator-specification-v1.md
+docs/agent-development-kit-v1.md
+docs/architecture-review-v1.md
+
+Inspect existing AG-001 conventions:
+
+src/agents/ag-001-master-orchestrator/
+
+Follow the repository's existing:
+
+- TypeScript conventions
+- folder conventions
+- error conventions
+- config conventions
+- validation conventions
+- test conventions
+- logging conventions
+- export/barrel conventions
+
+Do not invent a completely different style.
+
+============================================================
+1. MODULE LOCATION
+============================================================
+
+Create:
+
+src/agents/ag-002-memory-manager/
+
+Use a structure consistent with AG-001.
+
+A suitable conceptual structure:
+
+ag-002-memory-manager/
+  interfaces/
+  types/
+  enums/
+  errors/
+  config/
+  schemas/
+  validators/
+  builders/
+  repositories/
+  storage/
+  retrieval/
+  services/
+  security/
+  lifecycle/
+  utils/
+  index.ts
+  README.md
+
+Do not blindly create every directory.
+
+Only create directories required by this sprint.
+
+============================================================
+2. MEMORY TYPES
+============================================================
+
+The architecture specification defines 11 memory types.
+
+Implement the canonical enum/type for:
+
+1. SHORT_TERM
+2. CONVERSATION
+3. USER
+4. PROJECT
+5. WORKSPACE
+6. ORGANIZATION
+7. KNOWLEDGE_REFERENCE
+8. TEMPORARY
+9. SESSION
+10. LONG_TERM
+11. ARCHIVED
+
+Use the exact naming convention already established by the project.
+
+Do not add additional memory types.
+
+============================================================
+3. MEMORY RECORD
+============================================================
+
+Create a strongly typed MemoryRecord contract.
+
+It must support the architecture-defined concepts:
+
+- id
+- memory type
+- owner
+- scope
+- content
+- metadata
+- priority
+- security level
+- createdAt
+- updatedAt
+- expiresAt / TTL where applicable
+- retention information
+- version
+- source/reference information where required
+- lifecycle state
+
+Do NOT blindly invent fields.
+
+Cross-reference the architecture document and implement the
+required fields defined there.
+
+The record must be:
+
+- type-safe
+- serializable
+- immutable from the consumer perspective where practical
+- versionable
+
+Avoid any.
+
+============================================================
+4. MEMORY CONTENT
+============================================================
+
+Memory content must support structured data.
+
+Do not force everything into a string.
+
+Support a safe JSON-compatible structure.
+
+Define a recursive JSON value type if the project does not
+already have one.
+
+Do not use:
+
+any
+
+unknown values should be validated before entering the memory system.
+
+============================================================
+5. MEMORY LIFECYCLE
+============================================================
+
+Implement lifecycle states according to the architecture.
+
+At minimum inspect and support the required concepts for:
+
+created
+active
+expired
+archived
+deleted
+
+Use the exact architecture terminology if different.
+
+Implement lifecycle transition contracts.
+
+Invalid transitions must produce a typed error.
+
+Example:
+
+ACTIVE → ARCHIVED
+
+may be valid.
+
+DELETED → ACTIVE
+
+must not become silently valid.
+
+Do not invent transition rules without checking the specification.
+
+============================================================
+6. MEMORY OWNERSHIP
+============================================================
+
+Implement ownership concepts defined by the architecture.
+
+Support the distinction between:
+
+- user
+- project
+- workspace
+- organization
+- agent/system ownership
+
+Use typed identifiers.
+
+Do not use arbitrary strings everywhere if existing scalar types
+can represent them safely.
+
+============================================================
+7. ACCESS CONTROL
+============================================================
+
+Implement the foundation for memory access control.
+
+The architecture defines access across agent groups and memory types.
+
+Create a typed access model supporting:
+
+READ
+WRITE
+UPDATE
+DELETE
+
+Use a clear permission representation.
+
+Do not implement authentication.
+
+Do not implement a real identity provider.
+
+Do not connect to user accounts.
+
+This sprint only implements the authorization contract.
+
+============================================================
+8. SECURITY LEVEL
+============================================================
+
+Implement the architecture-defined security classification.
+
+Inspect the specification for the canonical values.
+
+Do not invent additional levels.
+
+Security level must be part of the memory record or its metadata
+where specified by the architecture.
+
+============================================================
+9. RETENTION / TTL
+============================================================
+
+Implement the contract for:
+
+- TTL
+- expiration timestamp
+- retention policy
+- archival behavior
+- deletion policy
+
+Do not build a background scheduler in this sprint.
+
+Do not automatically delete records from a real database.
+
+The foundation must simply represent and validate the policies.
+
+============================================================
+10. MEMORY PRIORITY
+============================================================
+
+Implement the architecture-defined priority model.
+
+Priority must support the Context Builder's future retrieval needs.
+
+Do not implement the full retrieval ranking algorithm yet.
+
+Only implement:
+
+- priority type
+- validation
+- comparison helpers if explicitly required
+
+============================================================
+11. REPOSITORY ABSTRACTION
+============================================================
+
+Create an interface such as a MemoryRepository contract.
+
+It must abstract persistence.
+
+Required operations should be based on the architecture:
+
+- create
+- get
+- update
+- delete
+- list/search if required by the architecture
+- count if required
+
+Do not connect a database.
+
+Do not put business logic into the repository.
+
+============================================================
+12. STORAGE ABSTRACTION
+============================================================
+
+Create a storage abstraction that allows future:
+
+hot storage
+warm storage
+cold/archive storage
+
+without coupling AG-002 to a specific provider.
+
+Do NOT implement:
+
+Postgres
+Redis
+Qdrant
+
+A deterministic in-memory implementation is acceptable ONLY for
+testing.
+
+============================================================
+13. RETRIEVAL ABSTRACTION
+============================================================
+
+Create the future retrieval contract.
+
+It must allow future:
+
+- metadata filtering
+- memory type filtering
+- ownership filtering
+- security filtering
+- priority filtering
+- relevance/ranking
+
+Do not implement embeddings or vector search.
+
+The interface should be replaceable.
+
+============================================================
+14. MEMORY SERVICE
+============================================================
+
+Create a MemoryManager / MemoryService interface.
+
+It should conceptually support:
+
+createMemory
+getMemory
+updateMemory
+deleteMemory
+retrieveMemory
+archiveMemory
+
+Use the exact architecture naming if already defined.
+
+The service must coordinate:
+
+validation
+authorization contract
+lifecycle validation
+repository/storage abstraction
+
+Do not implement retrieval algorithms yet.
+
+============================================================
+15. DEPENDENCY INJECTION
+============================================================
+
+The Memory Manager must use dependency injection.
+
+Do not instantiate a concrete database inside the service.
+
+Conceptually:
+
+MemoryManager
+   ↓
+Repository
+   ↓
+Storage Adapter
+
+and:
+
+MemoryManager
+   ↓
+Access Policy
+   ↓
+Lifecycle Policy
+
+Keep dependencies replaceable.
+
+============================================================
+16. ERROR HIERARCHY
+============================================================
+
+Create typed AG-002 errors.
+
+At minimum inspect the architecture and support appropriate categories:
+
+- validation error
+- configuration error
+- not found
+- authorization/access denied
+- lifecycle transition error
+- retention error
+- storage error
+- retrieval error
+- conflict error
+
+Follow AG-001 error conventions where applicable.
+
+Errors should contain:
+
+- code
+- message
+- retryable where meaningful
+- safe details
+
+Never include secrets.
+
+============================================================
+17. CONFIGURATION
+============================================================
+
+Create Zod-validated AG-002 configuration.
+
+Only include settings required by this foundation.
+
+Potential areas:
+
+- memory size limits
+- default TTL
+- retention behavior
+- retrieval limits
+- feature flags
+
+Do not invent large configuration surfaces.
+
+Every configuration value must have:
+
+- type
+- validation
+- safe default where appropriate
+- documentation
+
+Never silently accept invalid configuration.
+
+============================================================
+18. VALIDATION
+============================================================
+
+Validate:
+
+- memory ID
+- owner
+- type
+- content
+- metadata
+- priority
+- security level
+- timestamps
+- TTL
+- lifecycle state
+- version
+
+Reject malformed memory records.
+
+Do not mutate input.
+
+Do not silently coerce dangerous values.
+
+============================================================
+19. IMMUTABILITY
+============================================================
+
+Memory operations must avoid accidental mutation.
+
+Tests must verify:
+
+Input object remains unchanged after:
+
+create
+update
+validation
+serialization
+
+Do not unnecessarily deep clone huge objects repeatedly.
+
+Use a sensible boundary-based approach.
+
+============================================================
+20. IN-MEMORY TEST IMPLEMENTATION
+============================================================
+
+Create a deterministic in-memory repository/storage implementation.
+
+Purpose:
+
+TESTING ONLY.
+
+It must:
+
+- store records
+- retrieve records
+- update records
+- delete records
+- enforce IDs
+- preserve versions
+- support lifecycle tests
+- support access-control tests
+
+Clearly mark it as test/in-memory infrastructure.
+
+Do not treat it as production persistence.
+
+============================================================
+21. VERSIONING
+============================================================
+
+Memory records must support versioning according to the architecture.
+
+Test:
+
+create version 1
+
+update → version 2
+
+update → version 3
+
+Do not silently overwrite version history if the architecture
+requires historical versions.
+
+If version history belongs to a future sprint, implement only
+the contract necessary for it.
+
+============================================================
+22. SERIALIZATION
+============================================================
+
+Create safe serialization/deserialization boundaries if required.
+
+Ensure:
+
+- Dates are handled consistently
+- JSON values are valid
+- malformed records are rejected
+
+No secrets should be emitted through logs.
+
+============================================================
+23. SECURITY
+============================================================
+
+Memory is potentially sensitive.
+
+Do not log memory content by default.
+
+Do not log:
+
+passwords
+tokens
+API keys
+credentials
+authorization headers
+private keys
+cookies
+payment secrets
+
+If memory metadata contains sensitive information, treat it safely.
+
+Create security regression tests.
+
+============================================================
+24. TESTS
+============================================================
+
+Create comprehensive Sprint 1 tests.
+
+Minimum test areas:
+
+A. Types/enums
+
+B. Memory record validation
+
+C. Memory content validation
+
+D. Memory type validation
+
+E. Lifecycle transitions
+
+F. Ownership validation
+
+G. Access permissions
+
+H. Security levels
+
+I. TTL validation
+
+J. Retention validation
+
+K. Priority validation
+
+L. Repository behavior
+
+M. In-memory repository
+
+N. Service behavior
+
+O. Dependency injection
+
+P. Error hierarchy
+
+Q. Configuration
+
+R. Immutability
+
+S. Versioning
+
+T. Serialization
+
+U. Security/no-secret-logging
+
+Target:
+
+Meaningful tests, not arbitrary test-count inflation.
+
+============================================================
+25. AG-001 COMPATIBILITY
+============================================================
+
+Do NOT integrate AG-002 into AG-001 yet.
+
+However, the contracts must be compatible with future injection into:
+
+MasterOrchestratorService
+
+The future relationship is:
+
+AG-001
+  ↓
+AG-002 MemoryManager
+
+But this sprint only builds AG-002.
+
+If AG-001 interfaces already define a MemoryManager contract,
+inspect and reuse it rather than creating a conflicting contract.
+
+============================================================
+26. AG-003 / AG-004 BOUNDARY
+============================================================
+
+Do not implement Knowledge Manager.
+
+Do not implement Tool Manager.
+
+Memory Manager may define references/interfaces that are explicitly
+required by the architecture, but must not depend on concrete
+AG-003 or AG-004 implementations.
+
+============================================================
+27. PERFORMANCE
+============================================================
+
+Do not introduce unnecessary complexity.
+
+In-memory test storage may use Map or an appropriate structure.
+
+Avoid:
+
+O(n²) scans when unnecessary
+
+unbounded memory
+
+unbounded metadata
+
+unbounded content size
+
+Add configurable size limits if the architecture requires them.
+
+============================================================
+28. DOCUMENTATION
+============================================================
+
+Create:
+
+docs/ag-002-memory-manager-sprint1-v1.md
+
+Document:
+
+1. Purpose
+2. Scope
+3. Memory types
+4. Memory record
+5. Lifecycle
+6. Ownership
+7. Access control
+8. Security
+9. Retention
+10. Repository abstraction
+11. Storage abstraction
+12. Retrieval abstraction
+13. Service contracts
+14. Error model
+15. Configuration
+16. Testing
+17. In-memory implementation
+18. Future persistence
+19. AG-001 integration boundary
+20. Known limitations
+
+Also create/update:
+
+src/agents/ag-002-memory-manager/README.md
+
+Update documentation indexes only where necessary.
+
+============================================================
+29. ARCHITECTURE COMPLIANCE
+============================================================
+
+Before finishing, verify:
+
+shared-memory-architecture-v1.md
+
+against the implementation.
+
+Create an internal consistency check/report in the documentation.
+
+Explicitly identify:
+
+- implemented in Sprint 1
+- intentionally deferred
+- not applicable yet
+
+Do not silently omit architecture requirements.
+
+============================================================
+30. QUALITY GATES
+============================================================
+
+Before completion run:
+
+npm test
+
+typecheck
+
+lint
+
+build
+
+Also inspect:
+
+- circular dependencies
+- unsafe any
+- unsafe casts
+- mutation
+- error handling
+- secret logging
+- invalid state transitions
+- configuration validation
+- dependency injection
+
+Existing AG-001 tests MUST remain green.
+
+Baseline:
+
+594 tests
+
+Final test count should increase.
+
+If existing tests fail:
+
+STOP and investigate.
+
+Do NOT weaken existing AG-001 tests.
+
+============================================================
+31. GIT SAFETY
+============================================================
+
+DO NOT:
+
+commit
+
+push
+
+create a git tag
+
+modify unrelated files
+
+Only intended AG-002 files, tests, and documentation may change.
+
+Run:
+
+git status
+
+at the end.
+
+============================================================
+32. FINAL REPORT
+============================================================
+
+Return:
+
+1. What was implemented
+2. AG-002 module location
+3. Memory types implemented
+4. MemoryRecord design
+5. Lifecycle model
+6. Ownership model
+7. Access-control model
+8. Security model
+9. Retention/TTL model
+10. Repository abstraction
+11. Storage abstraction
+12. Retrieval abstraction
+13. Memory service
+14. Dependency injection
+15. Error hierarchy
+16. Configuration
+17. In-memory test implementation
+18. Tests added
+19. Previous test count
+20. Final test count
+21. Typecheck
+22. Lint
+23. Build
+24. Documentation
+25. Architecture compliance
+26. Deferred functionality
+27. AG-001 compatibility
+28. AG-003/AG-004 boundary
+29. Files changed
+30. Remaining known issues
+
+Explicitly confirm:
+
+"No PostgreSQL, Neon, Supabase, Redis, Qdrant, Pinecone,
+Elasticsearch, external vector database, LLM, OpenClaw Gateway,
+FreelancifyHub API, Stripe, production agents, AG-003, or AG-004
+implementation was added."
+
+Also confirm:
+
+"No AG-001 engine was rewritten."
+
+"No commit or push was performed."
+
+============================================================
+END
+============================================================
