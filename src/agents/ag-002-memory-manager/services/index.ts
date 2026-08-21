@@ -11,3 +11,13 @@ export type {
   RetrieveMemoryInput,
   UpdateMemoryInput,
 } from './memory.service.js';
+export { MemoryLifecycleServiceImpl, createMemoryLifecycleService } from './lifecycle.service.js';
+export type {
+  MemoryLifecycleBatchInput,
+  MemoryLifecycleInput,
+  MemoryLifecycleRunInput,
+  MemoryLifecycleRunResult,
+  MemoryLifecycleService,
+  MemoryLifecycleServiceDependencies,
+  MemoryLifecycleServiceOptions,
+} from './lifecycle.service.js';

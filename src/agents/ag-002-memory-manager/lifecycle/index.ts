@@ -1,5 +1,6 @@
 import { MemoryLifecycleState } from '../enums/index.js';
 import { MemoryLifecycleTransitionError } from '../errors/index.js';
+import type { IsoTimestamp, MemoryRecord, TraceId } from '../types/index.js';
 
 /**
  * Lifecycle transition contract (spec §5, prompt §5). Invalid transitions
@@ -63,3 +64,49 @@ export class DefaultMemoryLifecycle implements MemoryLifecycleContract {
 
 /** Shared deterministic lifecycle instance. */
 export const memoryLifecycle: MemoryLifecycleContract = new DefaultMemoryLifecycle();
+
+/** A single validated lifecycle transition applied to a record. */
+export interface MemoryLifecycleTransitionResult {
+  readonly from: MemoryLifecycleState;
+  readonly to: MemoryLifecycleState;
+  /** Instant the transition was applied (ISO-8601). */
+  readonly at: IsoTimestamp;
+  /** Resulting record version (monotonic, starting at 1). */
+  readonly version: number;
+  readonly traceId: TraceId;
+  /** The resulting record — identity, ownership and security are preserved. */
+  readonly record: MemoryRecord;
+}
+
+/**
+ * Applies a validated lifecycle transition to a record (prompt §3, §8, §14).
+ * Never mutates the input — returns a new record with `lifecycle`, `updatedAt`,
+ * `version + 1`, `reason` and `traceId` updated. Identity (id/key/namespace),
+ * ownership, security classification and content are preserved. Invalid
+ * transitions throw a typed {@link MemoryLifecycleTransitionError}.
+ */
+export function transitionMemoryRecord(
+  record: MemoryRecord,
+  to: MemoryLifecycleState,
+  at: IsoTimestamp,
+  traceId: TraceId,
+  reason: string,
+  lifecycle: MemoryLifecycleContract = memoryLifecycle,
+): MemoryLifecycleTransitionResult {
+  lifecycle.transition(record.lifecycle, to);
+  return {
+    from: record.lifecycle,
+    to,
+    at,
+    version: record.version + 1,
+    traceId,
+    record: {
+      ...record,
+      lifecycle: to,
+      updatedAt: at,
+      version: record.version + 1,
+      reason,
+      traceId,
+    },
+  };
+}

@@ -1,0 +1,741 @@
+You are a Senior TypeScript Architect, Distributed Systems Engineer,
+AI Memory Systems Engineer, Security Engineer, and Multi-Agent
+Architecture Engineer.
+
+Project:
+Freelancify AI
+
+Implement:
+
+AG-002 Shared Memory Manager
+Sprint 2 — Memory Lifecycle & Retention Engine
+
+============================================================
+SOURCE OF TRUTH
+============================================================
+
+Read first:
+
+docs/shared-memory-architecture-v1.md
+docs/ag-002-memory-manager-sprint1-v1.md
+
+Also inspect:
+
+docs/freelancify-ai-blueprint-v1.0.md
+docs/product-requirements-v1.md
+docs/agent-catalog-v1.md
+
+Inspect the existing implementation:
+
+src/agents/ag-002-memory-manager/
+
+Also inspect AG-001 conventions:
+
+src/agents/ag-001-master-orchestrator/
+
+Sprint 1 baseline:
+
+777 tests passing
+594 AG-001 tests
+183 AG-002 Sprint 1 tests
+typecheck clean
+lint clean
+build clean
+
+============================================================
+PRIMARY GOAL
+============================================================
+
+Implement the AG-002 Memory Lifecycle and Retention Engine.
+
+Sprint 1 created the foundation.
+
+Sprint 2 must make memory lifecycle behavior operational
+inside the AG-002 service boundary.
+
+The lifecycle engine must safely handle:
+
+- creation
+- activation
+- expiration
+- archival
+- deletion
+- TTL
+- retention policies
+- lifecycle transitions
+- expiration evaluation
+- deletion eligibility
+- lifecycle events
+- version safety
+- security boundaries
+
+============================================================
+STRICT SCOPE
+============================================================
+
+IMPLEMENT:
+
+✅ lifecycle state machine
+✅ lifecycle transition validation
+✅ TTL evaluation
+✅ expiration evaluation
+✅ retention policy evaluation
+✅ archival eligibility
+✅ deletion eligibility
+✅ lifecycle service
+✅ lifecycle events
+✅ deterministic clock abstraction
+✅ lifecycle-related configuration
+✅ service integration
+✅ comprehensive tests
+✅ documentation
+
+DO NOT IMPLEMENT:
+
+❌ PostgreSQL
+❌ Neon
+❌ Supabase
+❌ Redis
+❌ Qdrant
+❌ Pinecone
+❌ Elasticsearch
+❌ external vector DB
+❌ embeddings
+❌ LLM
+❌ OpenClaw Gateway
+❌ FreelancifyHub API
+❌ Stripe
+❌ AG-003
+❌ AG-004
+❌ social media agents
+❌ production cleanup workers
+❌ cron jobs
+❌ background workers
+
+No external integrations.
+
+============================================================
+1. INSPECT SPRINT 1 FIRST
+============================================================
+
+Before coding:
+
+- inspect all AG-002 Sprint 1 files
+- inspect existing lifecycle types
+- inspect existing retention types
+- inspect MemoryRecord
+- inspect repository contracts
+- inspect MemoryService
+- inspect errors
+- inspect configuration
+- inspect tests
+
+Reuse existing contracts.
+
+Do NOT duplicate types or create conflicting lifecycle models.
+
+============================================================
+2. LIFECYCLE STATE MACHINE
+============================================================
+
+Implement the lifecycle state machine defined by:
+
+docs/shared-memory-architecture-v1.md
+
+Use the existing canonical states.
+
+Expected conceptual lifecycle:
+
+CREATED
+   ↓
+ACTIVE
+   ↓
+EXPIRED
+   ↓
+ARCHIVED
+   ↓
+DELETED
+
+But DO NOT blindly assume these transitions.
+
+Use the architecture specification and Sprint 1 implementation
+as the source of truth.
+
+Every transition must be explicitly validated.
+
+Invalid transitions must produce a typed lifecycle error.
+
+Examples:
+
+ACTIVE → EXPIRED
+ACTIVE → ARCHIVED
+ARCHIVED → DELETED
+
+may be valid depending on the specification.
+
+But transitions such as:
+
+DELETED → ACTIVE
+
+must never silently succeed.
+
+============================================================
+3. LIFECYCLE TRANSITION ENGINE
+============================================================
+
+Create a dedicated lifecycle component.
+
+Conceptually:
+
+LifecycleManager
+LifecyclePolicy
+LifecycleTransitionValidator
+
+The component should provide operations equivalent to:
+
+canTransition()
+validateTransition()
+transition()
+
+Use the existing project naming conventions.
+
+Transition results must be deterministic.
+
+Do not mutate input objects.
+
+============================================================
+4. DETERMINISTIC CLOCK
+============================================================
+
+Do NOT use Date.now() directly throughout business logic.
+
+Create/use a clock abstraction.
+
+Conceptually:
+
+Clock
+  getNow(): Date
+
+Production implementation:
+
+SystemClock
+
+Test implementation:
+
+FixedClock
+
+This is required so TTL and expiration tests are deterministic.
+
+Do not introduce fake timers unless they are actually useful.
+
+============================================================
+5. TTL EVALUATION
+============================================================
+
+Implement TTL evaluation according to the architecture.
+
+Support:
+
+- explicit TTL
+- per-memory-type default TTL
+- no-expiration cases if allowed
+- expiresAt
+- expiration detection
+
+Sprint 1 already fixed default TTL behavior.
+
+Preserve that behavior.
+
+Example:
+
+Conversation → configured default TTL
+Temporary → configured default TTL
+
+Do not hard-code these values.
+
+Always derive from validated configuration.
+
+============================================================
+6. EXPIRATION
+============================================================
+
+Implement deterministic expiration evaluation.
+
+Conceptually:
+
+isExpired(memory, now)
+
+A memory is expired only when its expiration policy says so.
+
+Handle:
+
+- exact expiration boundary
+- before expiration
+- after expiration
+- missing expiration
+- invalid expiration
+- already expired memory
+- archived memory
+- deleted memory
+
+Do not allow deleted memories to become active again.
+
+============================================================
+7. RETENTION POLICY
+============================================================
+
+Implement retention evaluation based on the architecture.
+
+Support the configured concepts for:
+
+- retention duration
+- retention class/policy
+- expiration
+- archival
+- deletion eligibility
+
+Do not invent business rules.
+
+If the architecture leaves a rule unresolved, document it as deferred
+rather than guessing.
+
+============================================================
+8. ARCHIVAL
+============================================================
+
+Implement archival eligibility.
+
+Archiving must:
+
+- validate lifecycle transition
+- preserve memory identity
+- preserve ownership
+- preserve security classification
+- preserve audit-relevant metadata
+- increment/update lifecycle metadata as required
+- avoid exposing content in logs
+
+Archiving must not automatically delete the memory.
+
+============================================================
+9. DELETION
+============================================================
+
+Implement deletion eligibility and lifecycle transition.
+
+Deletion must enforce:
+
+- lifecycle rules
+- retention rules
+- authorization contract
+- version safety where applicable
+
+Do not physically delete from a production database because no
+production database exists yet.
+
+The repository abstraction should be used.
+
+If Sprint 1 defines logical deletion, preserve that model.
+
+Do not redesign persistence.
+
+============================================================
+10. RETENTION DECISION
+============================================================
+
+Create a deterministic decision result for lifecycle evaluation.
+
+Conceptually:
+
+RetentionDecision:
+
+- KEEP
+- EXPIRE
+- ARCHIVE
+- DELETE
+
+Use exact project terminology if already defined.
+
+The result should explain the decision through safe structured metadata.
+
+Do not include memory content in diagnostic details.
+
+============================================================
+11. LIFECYCLE SERVICE
+============================================================
+
+Integrate lifecycle behavior into the existing MemoryService boundary.
+
+Do not rewrite MemoryService.
+
+The service should be able to:
+
+- create memory with lifecycle metadata
+- evaluate lifecycle
+- transition lifecycle
+- archive
+- delete when allowed
+
+Keep dependencies injected.
+
+============================================================
+12. EVENTS
+============================================================
+
+Implement lifecycle events according to the architecture.
+
+Potential events include:
+
+MEMORY_CREATED
+MEMORY_ACTIVATED
+MEMORY_EXPIRED
+MEMORY_ARCHIVED
+MEMORY_DELETED
+MEMORY_LIFECYCLE_CHANGED
+
+Use the canonical event names from the architecture if already defined.
+
+Events must contain:
+
+- memory ID
+- memory type
+- previous state
+- new state
+- timestamp
+- correlation/request ID where applicable
+- safe metadata
+
+Never include:
+
+passwords
+tokens
+API keys
+credentials
+private content unless explicitly required by the architecture
+
+============================================================
+13. EVENT ABSTRACTION
+============================================================
+
+Create an injectable lifecycle event publisher.
+
+Do not connect Kafka, RabbitMQ, Redis Streams, NATS, etc.
+
+For tests, use an in-memory event collector.
+
+Production transport will be implemented later.
+
+============================================================
+14. VERSION SAFETY
+============================================================
+
+Lifecycle updates must respect the existing MemoryRecord versioning.
+
+Prevent stale updates where the architecture requires optimistic
+concurrency.
+
+Test:
+
+Version 1
+   ↓
+Transition
+   ↓
+Version 2
+
+A stale Version 1 update must not silently overwrite Version 2.
+
+Reuse Sprint 1 versioning contracts.
+
+Do not invent a second version system.
+
+============================================================
+15. SECURITY
+============================================================
+
+Lifecycle operations must respect the existing access-control
+contracts.
+
+Verify:
+
+- unauthorized archive rejected
+- unauthorized delete rejected
+- unauthorized lifecycle transition rejected
+- ownership boundaries preserved
+
+Do not implement authentication.
+
+Use existing authorization interfaces.
+
+============================================================
+16. IMMUTABILITY
+============================================================
+
+Lifecycle operations must not mutate caller-owned objects.
+
+Tests must verify:
+
+- original MemoryRecord unchanged
+- metadata unchanged
+- nested content unchanged
+
+Use safe copies only at appropriate boundaries.
+
+============================================================
+17. CONFIGURATION
+============================================================
+
+Extend AG-002 configuration only where Sprint 2 requires it.
+
+Possible areas:
+
+- lifecycle feature flag
+- retention evaluation limits
+- archival policy
+- deletion policy
+- clock behavior if architecture requires
+
+Do not create unnecessary configuration.
+
+Every new configuration value must have:
+
+- schema
+- validation
+- safe default
+- documentation
+
+============================================================
+18. EDGE CASES
+============================================================
+
+Tests MUST cover:
+
+- expiration exactly at now
+- expiration one millisecond before now
+- expiration one millisecond after now
+- missing expiresAt
+- default TTL
+- explicit TTL
+- already expired memory
+- archived memory
+- deleted memory
+- invalid transition
+- stale version
+- unauthorized transition
+- repeated transition
+- concurrent transition attempts
+- malformed retention policy
+- very large TTL
+- zero TTL if allowed
+- negative TTL rejection
+- clock boundary behavior
+
+Do not create meaningless tests just to increase count.
+
+============================================================
+19. TESTING
+============================================================
+
+Add focused tests for:
+
+A. lifecycle state machine
+B. transition validator
+C. lifecycle manager
+D. deterministic clock
+E. TTL evaluator
+F. expiration evaluator
+G. retention evaluator
+H. archival
+I. deletion
+J. lifecycle service
+K. event publisher
+L. event contents
+M. version safety
+N. authorization
+O. immutability
+P. configuration
+Q. security regression
+R. edge cases
+S. existing Sprint 1 compatibility
+
+Run the complete test suite.
+
+Existing tests MUST remain green.
+
+Baseline:
+
+777 tests
+
+Do not weaken or delete existing tests.
+
+============================================================
+20. PERFORMANCE
+============================================================
+
+Lifecycle evaluation should be deterministic and efficient.
+
+Do not scan the entire repository unnecessarily.
+
+Do not introduce an in-memory global scheduler.
+
+No background cleanup process in this sprint.
+
+============================================================
+21. DOCUMENTATION
+============================================================
+
+Create:
+
+docs/ag-002-memory-manager-sprint2-v1.md
+
+Document:
+
+1. Scope
+2. Lifecycle state machine
+3. Transition rules
+4. Clock abstraction
+5. TTL
+6. Expiration
+7. Retention
+8. Archival
+9. Deletion
+10. Version safety
+11. Authorization
+12. Events
+13. Event publisher
+14. Configuration
+15. Tests
+16. Edge cases
+17. Security
+18. Deferred functionality
+19. Architecture compliance
+20. Known limitations
+
+Update:
+
+src/agents/ag-002-memory-manager/README.md
+
+Update docs/index.md only if required.
+
+============================================================
+22. ARCHITECTURE COMPLIANCE
+============================================================
+
+Compare implementation against:
+
+docs/shared-memory-architecture-v1.md
+
+Explicitly report:
+
+IMPLEMENTED
+DEFERRED
+NOT APPLICABLE
+
+Do not silently invent missing decisions.
+
+============================================================
+23. AG-001 BOUNDARY
+============================================================
+
+Do not integrate AG-002 into AG-001 in Sprint 2.
+
+AG-001 must remain unchanged.
+
+Only maintain future compatibility.
+
+============================================================
+24. QUALITY GATES
+============================================================
+
+Run:
+
+npm run typecheck
+npm run lint
+npm test
+npm run build
+
+Also inspect:
+
+- circular dependencies
+- unsafe any
+- unsafe casts
+- mutation
+- lifecycle bypasses
+- stale-version handling
+- authorization bypasses
+- secret leakage
+- event leakage
+- configuration validation
+
+Existing AG-001 and AG-002 Sprint 1 tests MUST pass.
+
+============================================================
+25. GIT SAFETY
+============================================================
+
+DO NOT commit.
+
+DO NOT push.
+
+DO NOT tag.
+
+Only modify:
+
+AG-002 implementation
+AG-002 tests
+Sprint 2 documentation
+necessary documentation indexes
+
+Do not modify AG-001 source.
+
+============================================================
+26. FINAL REPORT
+============================================================
+
+Return a detailed implementation report containing:
+
+1. What was implemented
+2. Lifecycle states
+3. Valid transitions
+4. Invalid transitions
+5. TTL implementation
+6. Expiration implementation
+7. Retention implementation
+8. Archival implementation
+9. Deletion implementation
+10. Clock abstraction
+11. Lifecycle service
+12. Events
+13. Event publisher
+14. Version safety
+15. Authorization
+16. Security
+17. Tests added
+18. Previous test count
+19. Final test count
+20. Typecheck
+21. Lint
+22. Build
+23. Documentation
+24. Architecture compliance
+25. Deferred functionality
+26. Files changed
+27. Remaining known issues
+
+Explicitly confirm:
+
+"No PostgreSQL, Neon, Supabase, Redis, Qdrant, Pinecone,
+Elasticsearch, external vector database, LLM, OpenClaw Gateway,
+FreelancifyHub API, Stripe, AG-003, AG-004, production agents,
+cron jobs, or background workers were implemented."
+
+Also confirm:
+
+"No AG-001 source files were modified."
+
+"No existing tests were weakened or removed."
+
+"No commit or push was performed."
+
+============================================================
+END OF SPRINT 2
+============================================================

@@ -1,10 +1,24 @@
-import type { MemoryActorGroup } from '../enums/index.js';
-import type { IsoTimestamp, MemoryKey, MemoryNamespace, TraceId } from '../types/index.js';
+import type { MemoryActorGroup, MemoryLifecycleState } from '../enums/index.js';
+import type {
+  IsoTimestamp,
+  MemoryId,
+  MemoryKey,
+  MemoryNamespace,
+  TraceId,
+} from '../types/index.js';
 
-/** Memory lifecycle events defined by the architecture (spec §16). */
+/**
+ * Memory lifecycle events (spec §16). The six canonical events come straight
+ * from the architecture table; `MEMORY_ACTIVATED` and `MEMORY_EXPIRED` are
+ * Sprint 2 extensions that make the operational lifecycle observable (the
+ * architecture references activation and TTL expiry but does not name events
+ * for them).
+ */
 export enum MemoryEventType {
   Created = 'MEMORY_CREATED',
+  Activated = 'MEMORY_ACTIVATED',
   Updated = 'MEMORY_UPDATED',
+  Expired = 'MEMORY_EXPIRED',
   Archived = 'MEMORY_ARCHIVED',
   Deleted = 'MEMORY_DELETED',
   Retrieved = 'MEMORY_RETRIEVED',
@@ -18,11 +32,19 @@ export interface MemoryEvent {
   readonly occurredAt: IsoTimestamp;
   readonly namespace: MemoryNamespace;
   readonly key: MemoryKey;
+  /** Record id when the event refers to a stored record. */
+  readonly memoryId?: MemoryId;
   readonly actorGroup?: MemoryActorGroup;
   readonly version?: number;
   readonly previousVersion?: number;
+  /** Lifecycle state before the transition (Sprint 2). */
+  readonly previousState?: MemoryLifecycleState;
+  /** Lifecycle state after the transition (Sprint 2). */
+  readonly newState?: MemoryLifecycleState;
   readonly reason?: string;
   readonly hard?: boolean;
+  /** Archive identifier for archival events. */
+  readonly archiveId?: string;
   /** Number of results for retrieval events. */
   readonly count?: number;
 }

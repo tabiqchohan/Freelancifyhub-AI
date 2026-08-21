@@ -15,6 +15,7 @@ export type {
   MemoryActor,
 } from '../security/index.js';
 export type { MemoryStorageAdapter } from '../storage/index.js';
+export type { MemoryRetentionEvaluator } from '../retention/index.js';
 export type {
   ArchiveMemoryInput,
   CreateMemoryInput,
@@ -27,3 +28,12 @@ export type {
   RetrieveMemoryInput,
   UpdateMemoryInput,
 } from '../services/memory.service.js';
+export type {
+  MemoryLifecycleService,
+  MemoryLifecycleServiceDependencies,
+  MemoryLifecycleServiceOptions,
+  MemoryLifecycleInput,
+  MemoryLifecycleRunInput,
+  MemoryLifecycleBatchInput,
+  MemoryLifecycleRunResult,
+} from '../services/lifecycle.service.js';

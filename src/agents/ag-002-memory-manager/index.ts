@@ -15,6 +15,7 @@ export * from './storage/index.js';
 export * from './repositories/index.js';
 export * from './retrieval/index.js';
 export * from './events/index.js';
+export * from './clock/index.js';
 export * from './utils/ids.js';
 
 export { InMemoryStorageAdapter } from './storage/in-memory.js';
@@ -42,3 +43,17 @@ export type {
   ArchiveMemoryInput,
   RetrieveMemoryInput,
 } from './services/memory.service.js';
+
+export {
+  MemoryLifecycleServiceImpl,
+  createMemoryLifecycleService,
+} from './services/lifecycle.service.js';
+export type {
+  MemoryLifecycleService,
+  MemoryLifecycleServiceDependencies,
+  MemoryLifecycleServiceOptions,
+  MemoryLifecycleInput,
+  MemoryLifecycleRunInput,
+  MemoryLifecycleBatchInput,
+  MemoryLifecycleRunResult,
+} from './services/lifecycle.service.js';

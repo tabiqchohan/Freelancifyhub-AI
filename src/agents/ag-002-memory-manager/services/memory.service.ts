@@ -1,5 +1,6 @@
 import type { Logger } from 'pino';
 
+import { systemClock, type Clock } from '../clock/index.js';
 import {
   defaultPriorityFor,
   defaultRetentionFor,
@@ -30,7 +31,11 @@ import {
 import type { MemoryLifecycleContract } from '../lifecycle/index.js';
 import type { MemoryRepository } from '../repositories/index.js';
 import type { MemoryRetrievalEngine, MemoryRetrievalResult } from '../retrieval/index.js';
-import { isMemoryExpired } from '../retention/index.js';
+import {
+  DefaultMemoryRetentionEvaluator,
+  isMemoryExpired,
+  type MemoryRetentionEvaluation,
+} from '../retention/index.js';
 import type {
   MemoryAccessCheckTarget,
   MemoryAccessPolicy,
@@ -45,7 +50,7 @@ import type {
   MemoryRecordFilter,
   MemorySource,
 } from '../types/index.js';
-import { createMemoryId, createTraceId, nowIso } from '../utils/ids.js';
+import { createMemoryId, createTraceId } from '../utils/ids.js';
 import { createMemoryLogger } from '../utils/logger.js';
 import { sanitizeMemoryRecordForLogs } from '../utils/sanitize.js';
 import {
@@ -65,6 +70,14 @@ import {
   validateTraceId,
   validateTtlMs,
 } from '../validators/index.js';
+import {
+  createMemoryLifecycleService,
+  type MemoryLifecycleBatchInput,
+  type MemoryLifecycleInput,
+  type MemoryLifecycleRunInput,
+  type MemoryLifecycleRunResult,
+  type MemoryLifecycleService,
+} from './lifecycle.service.js';
 
 /** Input to {@link MemoryManager.createMemory} (spec §15 Save Memory). */
 export interface CreateMemoryInput {
@@ -155,6 +168,12 @@ export interface MemoryManager {
   deleteMemory(input: DeleteMemoryInput): Promise<DeleteMemoryResult>;
   archiveMemory(input: ArchiveMemoryInput): Promise<MemoryRecord>;
   retrieveMemory(input: RetrieveMemoryInput): Promise<readonly MemoryRetrievalResult[]>;
+  /** Evaluates retention for a single record without mutating it (Sprint 2). */
+  evaluateLifecycle(input: MemoryLifecycleInput): Promise<MemoryRetentionEvaluation>;
+  /** Evaluates and, when required, applies a version-safe lifecycle transition (Sprint 2). */
+  runLifecycle(input: MemoryLifecycleRunInput): Promise<MemoryLifecycleRunResult>;
+  /** Evaluates a deterministic, bounded lifecycle batch within actor scope (Sprint 2). */
+  runBatchLifecycle(input: MemoryLifecycleBatchInput): Promise<readonly MemoryLifecycleRunResult[]>;
 }
 
 /** Required dependencies injected into the service (prompt §15). */
@@ -170,6 +189,10 @@ export interface MemoryManagerServiceOptions extends MemoryManagerServiceDepende
   readonly config?: MemoryConfig;
   readonly logger?: Logger;
   readonly events?: MemoryEventEmitter;
+  /** Clock abstraction for deterministic timestamps (defaults to the system clock). */
+  readonly clock?: Clock;
+  /** Injected lifecycle engine; defaults to a fully wired lifecycle service. */
+  readonly lifecycleService?: MemoryLifecycleService;
 }
 
 /**
@@ -186,22 +209,37 @@ export class MemoryManagerService implements MemoryManager {
   private readonly config: MemoryConfig;
   private readonly logger: Logger;
   private readonly events: MemoryEventEmitter;
+  private readonly clock: Clock;
 
   private readonly repository: MemoryRepository;
   private readonly accessPolicy: MemoryAccessPolicy;
   private readonly lifecycle: MemoryLifecycleContract;
   private readonly retrievalEngine: MemoryRetrievalEngine;
+  private readonly lifecycleService: MemoryLifecycleService;
 
   constructor(options: MemoryManagerServiceOptions) {
     this.assertDependencies(options);
     this.config = options.config ?? memoryConfig;
     this.logger = options.logger ?? createMemoryLogger('memory-service');
     this.events = options.events ?? new InMemoryMemoryEventEmitter();
+    this.clock = options.clock ?? systemClock;
 
     this.repository = options.repository;
     this.accessPolicy = options.accessPolicy;
     this.lifecycle = options.lifecycle;
     this.retrievalEngine = options.retrievalEngine;
+    this.lifecycleService =
+      options.lifecycleService ??
+      createMemoryLifecycleService({
+        repository: options.repository,
+        lifecycle: options.lifecycle,
+        retention: new DefaultMemoryRetentionEvaluator(),
+        accessPolicy: options.accessPolicy,
+        config: this.config,
+        clock: this.clock,
+        logger: this.logger,
+        events: this.events,
+      });
   }
 
   async createMemory(input: CreateMemoryInput): Promise<MemoryRecord> {
@@ -224,7 +262,7 @@ export class MemoryManagerService implements MemoryManager {
     const ttlMs =
       input.ttlMs === undefined ? defaultTtlMsFor(type, this.config) : validateTtlMs(input.ttlMs);
     const reason = validateReason(input.reason);
-    const createdAt = nowIso();
+    const createdAt = this.nowIso();
 
     this.assertCan(input.actor, MemoryPermission.Write, { namespace, type, securityLevel });
 
@@ -324,7 +362,7 @@ export class MemoryManagerService implements MemoryManager {
         ? current.securityLevel
         : validateMemorySecurityLevel(input.securityLevel);
     const ttlMs = input.ttlMs === undefined ? current.ttlMs : validateTtlMs(input.ttlMs);
-    const updatedAt = nowIso();
+    const updatedAt = this.nowIso();
 
     const next: MemoryRecord = {
       ...current,
@@ -389,7 +427,7 @@ export class MemoryManagerService implements MemoryManager {
       lifecycle: MemoryLifecycleState.Deleted,
       reason,
       traceId,
-      updatedAt: nowIso(),
+      updatedAt: this.nowIso(),
     };
     validateMemoryRecord(deleted, this.limits());
     await this.repository.save(deleted);
@@ -425,7 +463,7 @@ export class MemoryManagerService implements MemoryManager {
       lifecycle: MemoryLifecycleState.Archived,
       reason,
       traceId,
-      updatedAt: nowIso(),
+      updatedAt: this.nowIso(),
     };
     validateMemoryRecord(archived, this.limits());
     await this.repository.save(archived);
@@ -465,6 +503,23 @@ export class MemoryManagerService implements MemoryManager {
     );
     this.logger.info({ namespace, traceId, count: accessible.length, limit }, 'memory retrieved');
     return accessible;
+  }
+
+  /** Delegates lifecycle evaluation to the wired lifecycle engine (Sprint 2). */
+  async evaluateLifecycle(input: MemoryLifecycleInput): Promise<MemoryRetentionEvaluation> {
+    return this.lifecycleService.evaluate(input);
+  }
+
+  /** Delegates lifecycle run (evaluate + version-safe transition) to the engine (Sprint 2). */
+  async runLifecycle(input: MemoryLifecycleRunInput): Promise<MemoryLifecycleRunResult> {
+    return this.lifecycleService.run(input);
+  }
+
+  /** Delegates the deterministic lifecycle batch to the engine (Sprint 2). */
+  async runBatchLifecycle(
+    input: MemoryLifecycleBatchInput,
+  ): Promise<readonly MemoryLifecycleRunResult[]> {
+    return this.lifecycleService.runBatch(input);
   }
 
   /** Fails closed at construction when a required dependency is missing. */
@@ -531,6 +586,11 @@ export class MemoryManagerService implements MemoryManager {
     return input === undefined ? createTraceId() : validateTraceId(input);
   }
 
+  /** Current instant as an ISO-8601 timestamp from the injected clock. */
+  private nowIso(): string {
+    return this.clock.getNow().toISOString();
+  }
+
   private emit(
     type: MemoryEventType,
     record: MemoryRecord | { namespace: string; key: string },
@@ -547,7 +607,7 @@ export class MemoryManagerService implements MemoryManager {
       type,
       traceId:
         extras?.traceId ?? ('traceId' in record ? record.traceId : undefined) ?? createTraceId(),
-      occurredAt: nowIso(),
+      occurredAt: this.nowIso(),
       namespace: record.namespace,
       key: record.key,
       actorGroup,

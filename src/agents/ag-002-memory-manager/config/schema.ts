@@ -14,6 +14,10 @@ export const DEFAULT_MEMORY_MAX_CONTENT_BYTES = 64 * 1024;
 export const DEFAULT_MEMORY_MAX_METADATA_KEYS = 64;
 /** Default retrieval result cap (spec §8, §15). */
 export const DEFAULT_MEMORY_RETRIEVAL_MAX_RESULTS = 50;
+/** Lifecycle/retention evaluation is enabled by default (Sprint 2, prompt §17). */
+export const DEFAULT_MEMORY_LIFECYCLE_EVALUATION_ENABLED = true;
+/** Cap on records evaluated per `runBatch` invocation (no global scheduler). */
+export const DEFAULT_MEMORY_LIFECYCLE_EVALUATION_BATCH_LIMIT = 100;
 
 /** Default size limits shared by validation and config defaults. */
 export const DEFAULT_MEMORY_LIMITS: MemorySizeLimits = {
@@ -69,6 +73,16 @@ export const MemoryConfigSchema = z.object({
     .int()
     .positive()
     .default(DEFAULT_MEMORY_RETRIEVAL_MAX_RESULTS),
+  /** Feature flag: lifecycle/retention evaluation (Sprint 2, prompt §17). */
+  MEMORY_LIFECYCLE_EVALUATION_ENABLED: booleanFromString.default(
+    DEFAULT_MEMORY_LIFECYCLE_EVALUATION_ENABLED,
+  ),
+  /** Cap on records evaluated per lifecycle batch invocation (prompt §17, §20). */
+  MEMORY_LIFECYCLE_EVALUATION_BATCH_LIMIT: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_LIFECYCLE_EVALUATION_BATCH_LIMIT),
   /** Feature flag: hybrid retrieval (spec §17). */
   MEMORY_HYBRID_SEARCH_ENABLED: booleanFromString,
   /** Feature flag: incremental summaries (spec §17). */
