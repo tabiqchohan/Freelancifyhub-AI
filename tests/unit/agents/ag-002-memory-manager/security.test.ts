@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MemoryActorGroup,
+  MemoryLifecycleState,
   MemoryPermission,
   MemorySecurityLevel,
   MemoryType,
@@ -20,8 +21,9 @@ function target(
   type: MemoryType,
   namespace = 'user:1',
   securityLevel = MemorySecurityLevel.Confidential,
+  lifecycle = MemoryLifecycleState.Active,
 ) {
-  return { namespace, type, securityLevel };
+  return { namespace, type, securityLevel, lifecycle };
 }
 
 describe('access matrix - spec §7 rows', () => {

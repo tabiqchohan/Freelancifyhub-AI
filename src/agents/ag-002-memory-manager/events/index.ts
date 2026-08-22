@@ -13,6 +13,8 @@ import type {
  * Sprint 2 extensions that make the operational lifecycle observable (the
  * architecture references activation and TTL expiry but does not name events
  * for them).
+ *
+ * Sprint 3 adds security audit events for authorization decisions.
  */
 export enum MemoryEventType {
   Created = 'MEMORY_CREATED',
@@ -23,6 +25,14 @@ export enum MemoryEventType {
   Deleted = 'MEMORY_DELETED',
   Retrieved = 'MEMORY_RETRIEVED',
   Summarized = 'MEMORY_SUMMARIZED',
+  // Sprint 3: Security audit events
+  AccessAllowed = 'MEMORY_ACCESS_ALLOWED',
+  AccessDenied = 'MEMORY_ACCESS_DENIED',
+  ReadDenied = 'MEMORY_READ_DENIED',
+  WriteDenied = 'MEMORY_WRITE_DENIED',
+  UpdateDenied = 'MEMORY_UPDATE_DENIED',
+  DeleteDenied = 'MEMORY_DELETE_DENIED',
+  ArchiveDenied = 'MEMORY_ARCHIVE_DENIED',
 }
 
 /** A single, correlated memory event. Never carries content. */
@@ -47,6 +57,14 @@ export interface MemoryEvent {
   readonly archiveId?: string;
   /** Number of results for retrieval events. */
   readonly count?: number;
+  /** Sprint 3: Security audit fields. */
+  readonly permission?: string;
+  readonly targetType?: string;
+  readonly targetSecurityLevel?: string;
+  readonly denialReason?: string;
+  readonly denialCode?: string;
+  readonly actorId?: string;
+  readonly actorType?: string;
 }
 
 /** Emits correlated memory events without coupling to a sink (spec §21). */

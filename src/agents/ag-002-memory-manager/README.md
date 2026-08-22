@@ -1,9 +1,9 @@
 # ag-002-memory-manager
 
-Sprint 1 **Foundation** + Sprint 2 **Lifecycle & Retention Engine** for the
+Sprint 1 **Foundation** + Sprint 2 **Lifecycle & Retention Engine** + Sprint 3 **Access Control & Security Enforcement** for the
 **AG-002 Shared Memory Manager** (catalog §10; blueprint §10; see
-`docs/shared-memory-architecture-v1.md` and the prompts in `prompts/prompts20`
-and `prompts/prompts21`).
+`docs/shared-memory-architecture-v1.md` and the prompts in `prompts/prompts20`,
+`prompts/prompts21`, and `prompts/prompts22`).
 
 ## Purpose
 
@@ -12,7 +12,8 @@ lifecycle, priority, security and access enums, the architecture access matrix
 (spec §7), per-type classification defaults, TTL/retention helpers, validation,
 the authorization contract, the repository/storage/retrieval contracts and the
 coordinating `MemoryManager` service. Sprint 2 adds a deterministic clock
-abstraction and the operational lifecycle/retention engine.
+abstraction and the operational lifecycle/retention engine. Sprint 3 adds the
+deterministic authorization layer with composable policies.
 
 ## Responsibilities
 
@@ -26,36 +27,39 @@ abstraction and the operational lifecycle/retention engine.
 - Provide a deterministic `Clock` abstraction so TTL and expiration evaluation is testable.
 - Provide the `MemoryLifecycleService` (retention evaluation, version-safe transitions,
   deterministic bounded batch) exposed as `evaluateLifecycle`/`runLifecycle`/`runBatchLifecycle`.
+- Provide the `AuthorizationService` (composable policy engine, actor context,
+  ownership validation, scope isolation, security-level enforcement, lifecycle-aware
+  access control, security audit events).
 
 It does **not** do vector similarity, weighted relevance ranking, summarization/
 compression, real persistence, or run a background retention scheduler — the
 in-memory storage/repository/retrieval implementations are **test infrastructure
-only** and the lifecycle engine is invoked explicitly (no workers).
+only** and the lifecycle/authorization engines are invoked explicitly (no workers).
 
 ## Current Sprint
 
-**Sprint 2 — Memory Lifecycle & Retention Engine** (implemented). See
-`docs/shared-memory-architecture-v1.md` and `docs/ag-002-memory-manager-sprint2-v1.md`.
+**Sprint 3 — Access Control & Security Enforcement** (implemented). See
+`docs/shared-memory-architecture-v1.md` and `docs/ag-002-memory-manager-sprint3-v1.md`.
 
-| Sub-module        | Contains                                                                                                                                                     |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `enums/`          | `MemoryType` (11), `MemoryLifecycleState`, `MemoryPriority`, `MemorySecurityLevel`, `MemoryPermission`, `MemoryOwnerKind`, `MemoryActorGroup`, `StorageTier` |
-| `types/`          | `MemoryRecord`, `MemoryRecordFilter`, `MemoryJsonValue`, `MemoryOwner`, `MemorySource`, `MemoryRetentionPolicy`, `MemorySizeLimits`, scalar types            |
-| `errors/`         | `MemoryError` + validation, configuration, not-found, access-denied, lifecycle, retention, storage (retryable), retrieval, conflict                          |
-| `config/`         | env-validated `MEMORY_*` config (`MemoryConfigSchema`), `parseMemoryConfig`, safe defaults, `memoryConfig`                                                   |
-| `schemas/`        | Zod schemas for ids, owners, content (recursive JSON), metadata, records, filters, retention                                                                 |
-| `validators/`     | `validateMemoryRecord`, `validateTtl`, `validateMemoryId/Namespace/Key/Owner/Actor/Content/...`                                                              |
-| `classification/` | per-type default priority, security level, retention policy, TTL and size cap (spec §4)                                                                      |
-| `clock/`          | `Clock`, `SystemClock`, `FixedClock` (deterministic), `systemClock`, `clockToIso`                                                                            |
-| `lifecycle/`      | `MemoryLifecycleContract`, `DefaultMemoryLifecycle`, `memoryLifecycle`, `transitionMemoryRecord`                                                             |
-| `retention/`      | `computeExpiry`, `isMemoryExpired`, `isMemoryLive`, `MemoryRetentionDecision`, `MemoryRetentionEvaluation`, `DefaultMemoryRetentionEvaluator`                |
-| `security/`       | `MemoryActor`, `MEMORY_ACCESS_MATRIX` (7×11), `MatrixMemoryAccessPolicy` (fail-closed), confidentiality helpers                                              |
-| `storage/`        | `MemoryStorageAdapter` contract, `tierForRecord` + `InMemoryStorageAdapter` (test-only)                                                                      |
-| `repositories/`   | `MemoryRepository` (version-guarded `update`) + `InMemoryMemoryRepository` (test-only)                                                                       |
-| `retrieval/`      | `MemoryRetrievalEngine`/`Query`/`Result` + `InMemoryMemoryRetrievalEngine` (test-only, priority+recency order)                                               |
-| `events/`         | `MemoryEventType` (incl. Sprint 2 `MEMORY_ACTIVATED`/`MEMORY_EXPIRED`), `MemoryEvent`, `MemoryEventEmitter` + `InMemoryMemoryEventEmitter`                   |
-| `services/`       | `MemoryManager` contract + `MemoryManagerService`, `MemoryLifecycleService` + `createMemoryLifecycleService`                                                 |
-| `index.ts`        | public barrel                                                                                                                                                |
+| Sub-module        | Contains                                                                                                                                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enums/`          | `MemoryType` (11), `MemoryLifecycleState`, `MemoryPriority`, `MemorySecurityLevel`, `MemoryPermission` (+ Archive/Restore/Expire/LifecycleManage), `MemoryOwnerKind`, `MemoryActorGroup`, `StorageTier` |
+| `types/`          | `MemoryRecord`, `MemoryRecordFilter`, `MemoryJsonValue`, `MemoryOwner`, `MemorySource`, `MemoryRetentionPolicy`, `MemorySizeLimits`, scalar types                                                       |
+| `errors/`         | `MemoryError` + validation, configuration, not-found, access-denied, lifecycle, retention, storage (retryable), retrieval, conflict, **authorization errors**                                           |
+| `config/`         | env-validated `MEMORY_*` config (`MemoryConfigSchema`), `parseMemoryConfig`, safe defaults, `memoryConfig`                                                                                              |
+| `schemas/`        | Zod schemas for ids, owners, content (recursive JSON), metadata, records, filters, retention                                                                                                            |
+| `validators/`     | `validateMemoryRecord`, `validateTtl`, `validateMemoryId/Namespace/Key/Owner/Actor/Content/...`                                                                                                         |
+| `classification/` | per-type default priority, security level, retention policy, TTL and size cap (spec §4)                                                                                                                 |
+| `clock/`          | `Clock`, `SystemClock`, `FixedClock` (deterministic), `systemClock`, `clockToIso`                                                                                                                       |
+| `lifecycle/`      | `MemoryLifecycleContract`, `DefaultMemoryLifecycle`, `memoryLifecycle`, `transitionMemoryRecord`                                                                                                        |
+| `retention/`      | `computeExpiry`, `isMemoryExpired`, `isMemoryLive`, `MemoryRetentionDecision`, `MemoryRetentionEvaluation`, `DefaultMemoryRetentionEvaluator`                                                           |
+| `security/`       | `MemoryActor` (+ context fields), `MEMORY_ACCESS_MATRIX` (7×11), **`AuthorizationService`**, **policy engine**, `DefaultAuthorizationService`, `createAuthorizationService`                             |
+| `storage/`        | `MemoryStorageAdapter` contract, `tierForRecord` + `InMemoryStorageAdapter` (test-only)                                                                                                                 |
+| `repositories/`   | `MemoryRepository` (version-guarded `update`) + `InMemoryMemoryRepository` (test-only)                                                                                                                  |
+| `retrieval/`      | `MemoryRetrievalEngine`/`Query`/`Result` + `InMemoryMemoryRetrievalEngine` (test-only, priority+recency order)                                                                                          |
+| `events/`         | `MemoryEventType` (+ Sprint 3 security audit events), `MemoryEvent` (+ audit fields), `MemoryEventEmitter` + `InMemoryMemoryEventEmitter`                                                               |
+| `services/`       | `MemoryManager` + `MemoryManagerService`, `MemoryLifecycleService`, **`AuthorizationService`** + `createAuthorizationService`                                                                           |
+| `index.ts`        | public barrel                                                                                                                                                                                           |
 
 ## Design Notes
 
@@ -77,6 +81,23 @@ only** and the lifecycle engine is invoked explicitly (no workers).
   closed otherwise.
 - **Clock** (Sprint 2): business logic never calls `Date.now()` directly; it reads
   through an injected `Clock` (production `SystemClock`, test `FixedClock`).
+- **Authorization engine** (Sprint 3): composable `AuthorizationService` with
+  `MatrixPermissionPolicy`, `NamespaceScopePolicy`, `OwnershipPolicy`,
+  `SecurityLevelPolicy`, `LifecycleStatePolicy`. Every operation routes through
+  `AuthorizationService.authorize()`.
+- **Actor context** (Sprint 3): enriched with `id`, `type`, `role`, `organizationId`,
+  `workspaceId`, `projectIds`, `securityClearance`. Default `Confidential` clearance.
+- **Permissions** (Sprint 3): extended with `Archive`, `Restore`, `Expire`,
+  `LifecycleManage` alongside `Read`, `Write`, `Update`, `Delete`.
+- **Ownership enforcement** (Sprint 3): system/agent owned → AG-002/Admin only;
+  user owned → actor must match user ID; project/workspace/org owned → scope ID match.
+- **Security levels** (Sprint 3): `actorClearance >= targetLevel` enforced.
+  `Internal` < `Confidential`. Unknown → DENY.
+- **Lifecycle integration** (Sprint 3): `Deleted` → no access; `Archived` →
+  `READ`/`RESTORE`/`DELETE` (DSR/retention); `Expired` → limited access.
+- **Security audit events** (Sprint 3): `AccessAllowed`, `AccessDenied`,
+  `ReadDenied`, `WriteDenied`, `UpdateDenied`, `DeleteDenied`, `ArchiveDenied`
+  with safe metadata only.
 - **Events never carry content**; logs pass through `sanitizeMemoryRecordForLogs`.
 - **TTL defaults**: absent TTL uses the per-type default from config
   (30d conversation, 15m temporary); `ttlMs: 0` disables expiry.

@@ -1,0 +1,966 @@
+You are a Senior TypeScript Architect, Security Engineer,
+Distributed Systems Engineer, AI Memory Systems Engineer,
+and Multi-Agent Authorization Engineer.
+
+Project:
+Freelancify AI
+
+Implement:
+
+AG-002 Shared Memory Manager
+Sprint 3 — Access Control & Security Enforcement
+
+============================================================
+SOURCE OF TRUTH
+============================================================
+
+Read first:
+
+docs/shared-memory-architecture-v1.md
+docs/ag-002-memory-manager-sprint1-v1.md
+docs/ag-002-memory-manager-sprint2-v1.md
+
+Also inspect:
+
+docs/freelancify-ai-blueprint-v1.0.md
+docs/product-requirements-v1.md
+docs/agent-catalog-v1.md
+docs/master-orchestrator-specification-v1.md
+
+Inspect the complete existing implementation:
+
+src/agents/ag-002-memory-manager/
+
+Also inspect AG-001 conventions:
+
+src/agents/ag-001-master-orchestrator/
+
+============================================================
+CURRENT BASELINE
+============================================================
+
+AG-001:
+594 tests passing
+
+AG-002 Sprint 1:
+183 tests
+
+AG-002 Sprint 2:
+242 tests
+
+Current total:
+836 tests passing
+
+Current gates:
+typecheck ✅
+lint ✅
+build ✅
+
+AG-001 source must remain untouched.
+
+============================================================
+PRIMARY GOAL
+============================================================
+
+Implement the AG-002 Memory Access Control and Security
+Enforcement layer.
+
+Sprint 1 established the memory and repository foundation.
+
+Sprint 2 established lifecycle, TTL, retention and
+version-safe lifecycle transitions.
+
+Sprint 3 now makes memory access permissions enforceable.
+
+The system must prevent unauthorized agents, users, roles,
+projects, workspaces and organizations from accessing memory.
+
+============================================================
+STRICT SCOPE
+============================================================
+
+IMPLEMENT:
+
+✅ access-control engine
+✅ authorization policy
+✅ permission evaluation
+✅ owner validation
+✅ scope isolation
+✅ agent-group access rules
+✅ security-level enforcement
+✅ READ enforcement
+✅ WRITE enforcement
+✅ UPDATE enforcement
+✅ DELETE enforcement
+✅ archive authorization
+✅ lifecycle authorization
+✅ authorization errors
+✅ security audit events where architecture requires
+✅ deterministic authorization tests
+✅ security regression tests
+✅ documentation
+
+DO NOT IMPLEMENT:
+
+❌ authentication provider
+❌ login
+❌ JWT
+❌ OAuth
+❌ NextAuth
+❌ database authentication
+❌ PostgreSQL
+❌ Neon
+❌ Supabase
+❌ Redis
+❌ Qdrant
+❌ vector database
+❌ LLM
+❌ OpenClaw Gateway
+❌ FreelancifyHub API
+❌ Stripe
+❌ AG-003
+❌ AG-004
+❌ Social Media Agent
+❌ production identity provider
+
+Authentication is OUT OF SCOPE.
+
+Authorization is IN SCOPE.
+
+============================================================
+1. INSPECT EXISTING CONTRACTS
+============================================================
+
+Before coding inspect:
+
+- Sprint 1 access types
+- Sprint 1 ownership types
+- Sprint 1 security levels
+- MemoryRecord
+- MemoryManager
+- repository contracts
+- errors
+- config
+- schemas
+- validators
+- lifecycle service
+- event contracts
+
+Reuse existing types.
+
+Do NOT create duplicate permission enums or security models.
+
+If an existing contract is incomplete, extend it carefully.
+
+Do not create conflicting definitions.
+
+============================================================
+2. AUTHORIZATION MODEL
+============================================================
+
+Implement authorization as a separate replaceable component.
+
+Conceptually:
+
+MemoryManager
+      ↓
+AuthorizationService
+      ↓
+AccessPolicy
+      ↓
+ALLOW / DENY
+
+The authorization service must not know about:
+
+HTTP
+JWT
+cookies
+sessions
+databases
+NextAuth
+
+It receives an already-resolved actor/access context.
+
+============================================================
+3. ACTOR CONTEXT
+============================================================
+
+Create or reuse a typed authorization actor context.
+
+It should represent the information needed for authorization.
+
+Depending on existing architecture, this may include:
+
+- actor ID
+- actor type
+- role
+- agent ID
+- agent group
+- organization ID
+- workspace ID
+- project ID
+- permissions
+- security clearance/level
+
+DO NOT blindly add fields.
+
+Only include fields supported by the architecture and existing
+contracts.
+
+Use typed identifiers wherever possible.
+
+Avoid any.
+
+============================================================
+4. PERMISSIONS
+============================================================
+
+Implement the canonical memory permissions:
+
+READ
+WRITE
+UPDATE
+DELETE
+
+Also support lifecycle-related permissions if required:
+
+ARCHIVE
+RESTORE
+EXPIRE
+LIFECYCLE_MANAGE
+
+Use exact architecture terminology where already defined.
+
+Do not create unnecessary permissions.
+
+============================================================
+5. RESOURCE SCOPE
+============================================================
+
+Memory access must respect ownership/scope.
+
+Support the architecture-defined scopes:
+
+- user
+- project
+- workspace
+- organization
+- agent/system
+
+Verify how Sprint 1 represented ownership and reuse it.
+
+Do not replace the ownership model.
+
+============================================================
+6. ACCESS RULES
+============================================================
+
+Implement deterministic access evaluation.
+
+Conceptually:
+
+evaluate(actor, memory, action)
+
+returns:
+
+ALLOW
+
+or:
+
+DENY
+
+with a safe reason/code.
+
+Evaluation must consider, where applicable:
+
+1. actor identity
+2. ownership
+3. scope
+4. role
+5. agent group
+6. permission
+7. security level
+8. lifecycle state
+9. resource state
+10. policy restrictions
+
+Do not rely on only one check.
+
+============================================================
+7. FAIL-CLOSED SECURITY
+============================================================
+
+Authorization MUST fail closed.
+
+If required authorization information is:
+
+- missing
+- malformed
+- ambiguous
+- unknown
+- inconsistent
+
+the operation must NOT be allowed by default.
+
+Example:
+
+Missing actor identity
+→ DENY
+
+Unknown security level
+→ DENY
+
+Unknown permission
+→ DENY
+
+Unknown scope
+→ DENY
+
+Do not use:
+
+if (!actor) allow
+
+or equivalent permissive behavior.
+
+============================================================
+8. OWNERSHIP ENFORCEMENT
+============================================================
+
+Implement ownership checks.
+
+Examples:
+
+A user-owned memory must not be readable by another unrelated
+user unless an explicit architecture-defined permission exists.
+
+A project-scoped memory must respect project scope.
+
+A workspace memory must not leak to another workspace.
+
+An organization memory must not leak across organizations.
+
+Do not invent sharing behavior.
+
+Use the architecture's access matrix.
+
+============================================================
+9. AGENT GROUP ACCESS
+============================================================
+
+The architecture defines access by agent groups.
+
+Inspect:
+
+docs/shared-memory-architecture-v1.md
+
+Implement the defined agent-group access matrix.
+
+Do not invent new agent groups.
+
+For each relevant memory type verify:
+
+READ
+WRITE
+UPDATE
+DELETE
+
+according to the architecture.
+
+Represent the matrix in a maintainable policy structure.
+
+Do not scatter authorization rules throughout the codebase.
+
+============================================================
+10. SECURITY LEVEL ENFORCEMENT
+============================================================
+
+Implement security-level checks.
+
+An actor must not access memory above their allowed
+security level.
+
+Use the existing canonical security levels.
+
+Example conceptual rule:
+
+actor clearance >= memory security level
+
+But verify the exact architecture rule before implementation.
+
+Never silently downgrade security.
+
+Unknown security classification:
+
+DENY.
+
+============================================================
+11. LIFECYCLE INTERACTION
+============================================================
+
+Authorization must work with Sprint 2 lifecycle.
+
+Examples:
+
+DELETED memory
+→ cannot be read
+
+ARCHIVED memory
+→ access depends on architecture
+
+EXPIRED memory
+→ access depends on architecture
+
+ACTIVE memory
+→ normal policy evaluation
+
+Do not duplicate lifecycle logic.
+
+Use the existing lifecycle service/contracts.
+
+============================================================
+12. READ ENFORCEMENT
+============================================================
+
+Memory retrieval must require authorization.
+
+No bypass.
+
+Tests must verify:
+
+authorized READ → succeeds
+
+unauthorized READ → denied
+
+wrong owner → denied
+
+wrong scope → denied
+
+insufficient security clearance → denied
+
+deleted memory → denied
+
+============================================================
+13. WRITE ENFORCEMENT
+============================================================
+
+Memory creation must require authorization.
+
+Tests:
+
+authorized WRITE → succeeds
+
+unauthorized WRITE → denied
+
+wrong organization → denied
+
+invalid agent group → denied
+
+insufficient permission → denied
+
+============================================================
+14. UPDATE ENFORCEMENT
+============================================================
+
+Memory updates must require:
+
+authorization
+
+correct ownership/scope
+
+valid lifecycle state
+
+valid version
+
+Tests must verify stale-version and unauthorized-update
+combinations.
+
+============================================================
+15. DELETE ENFORCEMENT
+============================================================
+
+Deletion is highly sensitive.
+
+Require explicit DELETE permission.
+
+Do not treat UPDATE as DELETE.
+
+Do not treat WRITE as DELETE.
+
+Tests must verify:
+
+WRITE only → DELETE denied
+
+UPDATE only → DELETE denied
+
+DELETE → allowed when all other policies pass
+
+============================================================
+16. ARCHIVE ENFORCEMENT
+============================================================
+
+Archive operations must require the appropriate permission.
+
+Integrate with Sprint 2 lifecycle.
+
+Do not bypass lifecycle validation.
+
+============================================================
+17. ERROR MODEL
+============================================================
+
+Create/reuse typed authorization errors.
+
+At minimum support:
+
+AccessDeniedError
+InsufficientPermissionError
+OwnershipViolationError
+ScopeViolationError
+SecurityLevelViolationError
+InvalidActorContextError
+
+Only create categories that are useful and consistent with the
+existing error hierarchy.
+
+Errors must contain safe details.
+
+Never include:
+
+passwords
+tokens
+API keys
+credentials
+memory content
+private data
+
+============================================================
+18. SAFE DENIAL REASONS
+============================================================
+
+Authorization failures must not reveal sensitive information.
+
+For example, do not tell an unauthorized actor:
+
+"This memory belongs to user X and contains private project data."
+
+Instead return a safe denial code/message.
+
+Detailed authorization diagnostics may exist internally only
+if the architecture permits them.
+
+============================================================
+19. AUDIT EVENTS
+============================================================
+
+Inspect the architecture for authorization/security events.
+
+If required, create an injectable security event publisher.
+
+Possible concepts:
+
+ACCESS_ALLOWED
+ACCESS_DENIED
+MEMORY_READ_DENIED
+MEMORY_WRITE_DENIED
+MEMORY_DELETE_DENIED
+
+Use canonical architecture terminology where defined.
+
+Events must contain safe metadata only.
+
+Never include memory content.
+
+Never log secrets.
+
+============================================================
+20. SECURITY LOGGING
+============================================================
+
+Authorization logs must be safe.
+
+Allowed:
+
+request/correlation ID
+memory ID if permitted
+action
+result
+safe reason code
+timestamp
+actor category
+
+Do NOT log:
+
+memory content
+password
+token
+API key
+credential
+private payload
+
+Add regression tests that inspect serialized logs/events for
+secret leakage.
+
+============================================================
+21. POLICY STRUCTURE
+============================================================
+
+Do not hard-code dozens of if statements inside MemoryService.
+
+Create a maintainable policy engine.
+
+Conceptually:
+
+AuthorizationService
+      ↓
+AccessPolicy
+      ↓
+OwnershipPolicy
+ScopePolicy
+PermissionPolicy
+SecurityPolicy
+LifecyclePolicy
+
+Use the simplest architecture that satisfies the existing
+specification.
+
+Avoid unnecessary abstractions.
+
+============================================================
+22. DEPENDENCY INJECTION
+============================================================
+
+Authorization must be injectable.
+
+MemoryManager should receive the authorization dependency.
+
+Do not instantiate a global singleton inside MemoryService.
+
+Provide deterministic test doubles.
+
+============================================================
+23. CONFIGURATION
+============================================================
+
+Only add configuration if required.
+
+Potential:
+
+ACCESS_CONTROL_ENABLED
+FAIL_CLOSED
+SECURITY_ENFORCEMENT_ENABLED
+
+Do not create configuration merely for convenience.
+
+If authorization is security-critical, safe defaults must be
+secure.
+
+A disabled security feature must never accidentally mean
+"allow everything."
+
+If a feature flag is unnecessary, do not add it.
+
+============================================================
+24. IMMUTABILITY
+============================================================
+
+Authorization evaluation must not mutate:
+
+actor context
+memory record
+metadata
+permissions
+scope
+
+Add tests.
+
+============================================================
+25. CONCURRENCY / TOCTOU
+============================================================
+
+Consider authorization + mutation race conditions.
+
+For UPDATE/DELETE:
+
+authorization must happen against the relevant current
+resource/version.
+
+Reuse existing repository/version mechanisms.
+
+Do not introduce an unsafe:
+
+READ → authorize → later unrestricted WRITE
+
+pattern.
+
+If full transactional authorization cannot be implemented
+without a real database, document the limitation.
+
+============================================================
+26. TEST MATRIX
+============================================================
+
+Create comprehensive tests.
+
+Minimum categories:
+
+A. Permission evaluation
+B. READ
+C. WRITE
+D. UPDATE
+E. DELETE
+F. ARCHIVE
+G. ownership
+H. user scope
+I. project scope
+J. workspace scope
+K. organization scope
+L. agent/system scope
+M. agent-group matrix
+N. security level
+O. lifecycle states
+P. deleted memory
+Q. expired memory
+R. archived memory
+S. missing actor
+T. malformed actor
+U. unknown permission
+V. unknown scope
+W. fail-closed
+X. version conflict
+Y. immutable input
+Z. security regression
+AA. event safety
+AB. logging safety
+AC. concurrent/stale access scenarios
+
+Do not inflate test count artificially.
+
+============================================================
+27. NEGATIVE SECURITY TESTS
+============================================================
+
+Explicitly test attack-like scenarios:
+
+1. User A attempts User B memory READ
+2. Project A attempts Project B memory READ
+3. Workspace A attempts Workspace B access
+4. Organization A attempts Organization B access
+5. Low-security actor attempts high-security memory
+6. Actor with WRITE attempts DELETE
+7. Actor with READ attempts UPDATE
+8. Unknown actor attempts READ
+9. Missing permission attempts WRITE
+10. Forged scope mismatch
+11. Modified actor context after authorization
+12. Deleted memory access
+13. Archived memory unauthorized access
+14. Stale version update
+15. Sensitive information leakage through denial error
+16. Sensitive information leakage through events
+17. Sensitive information leakage through logs
+
+All must fail safely.
+
+============================================================
+28. AG-001 COMPATIBILITY
+============================================================
+
+Do NOT integrate AG-002 into AG-001.
+
+Do not modify AG-001 source.
+
+Only ensure AG-002 authorization contracts can later be injected
+into MasterOrchestratorService.
+
+============================================================
+29. AG-003 / AG-004 BOUNDARY
+============================================================
+
+No implementation of:
+
+AG-003 Knowledge Manager
+
+AG-004 Tool Manager
+
+No dependency on their concrete implementations.
+
+============================================================
+30. PERFORMANCE
+============================================================
+
+Authorization should be deterministic and efficient.
+
+Avoid unnecessary repository scans.
+
+Policy evaluation should not require loading unrelated memories.
+
+Do not implement distributed authorization yet.
+
+============================================================
+31. DOCUMENTATION
+============================================================
+
+Create:
+
+docs/ag-002-memory-manager-sprint3-v1.md
+
+Document:
+
+1. Scope
+2. Authorization architecture
+3. Actor context
+4. Permissions
+5. Ownership
+6. Scope isolation
+7. Agent-group matrix
+8. Security levels
+9. Lifecycle interaction
+10. Fail-closed behavior
+11. Error model
+12. Security events
+13. Safe logging
+14. Dependency injection
+15. Tests
+16. Threat scenarios
+17. Deferred functionality
+18. Architecture compliance
+19. Known limitations
+
+Update:
+
+src/agents/ag-002-memory-manager/README.md
+
+Update docs/index.md if necessary.
+
+============================================================
+32. ARCHITECTURE COMPLIANCE
+============================================================
+
+Compare implementation against:
+
+docs/shared-memory-architecture-v1.md
+
+Specifically verify:
+
+- memory access matrix
+- ownership
+- security
+- privacy
+- lifecycle
+- agent-group permissions
+
+Report:
+
+IMPLEMENTED
+DEFERRED
+NOT APPLICABLE
+
+Do not invent unresolved architecture decisions.
+
+============================================================
+33. QUALITY GATES
+============================================================
+
+Run:
+
+npm run typecheck
+npm run lint
+npm test
+npm run build
+
+Baseline:
+
+836 tests
+
+All existing tests MUST remain green.
+
+Do not weaken, delete, skip, or rewrite existing tests just to
+make the suite pass.
+
+Inspect for:
+
+- unsafe any
+- unsafe casts
+- authorization bypass
+- permissive defaults
+- mutation
+- secret leakage
+- circular dependencies
+- duplicated policies
+- inconsistent permission definitions
+
+============================================================
+34. GIT SAFETY
+============================================================
+
+DO NOT commit.
+
+DO NOT push.
+
+DO NOT tag.
+
+Only modify:
+
+AG-002 source
+AG-002 tests
+Sprint 3 documentation
+necessary documentation indexes
+
+DO NOT modify AG-001 source.
+
+============================================================
+35. FINAL REPORT
+============================================================
+
+Return:
+
+1. What was implemented
+2. Authorization architecture
+3. Actor context
+4. Permissions
+5. Ownership enforcement
+6. Scope isolation
+7. Agent-group access
+8. Security-level enforcement
+9. Lifecycle integration
+10. READ enforcement
+11. WRITE enforcement
+12. UPDATE enforcement
+13. DELETE enforcement
+14. Archive authorization
+15. Error hierarchy
+16. Fail-closed behavior
+17. Security events
+18. Logging safety
+19. Dependency injection
+20. Tests added
+21. Previous test count
+22. Final test count
+23. Typecheck
+24. Lint
+25. Build
+26. Documentation
+27. Architecture compliance
+28. Deferred functionality
+29. Files changed
+30. Remaining known issues
+
+Explicitly confirm:
+
+"No PostgreSQL, Neon, Supabase, Redis, Qdrant, Pinecone,
+Elasticsearch, external vector database, LLM, OpenClaw Gateway,
+FreelancifyHub API, Stripe, AG-003, AG-004, authentication
+provider, JWT/OAuth, production identity provider, or external
+security service was implemented."
+
+Also confirm:
+
+"No AG-001 source files were modified."
+
+"No existing tests were weakened or removed."
+
+"No commit or push was performed."
+
+============================================================
+END OF SPRINT 3
+============================================================

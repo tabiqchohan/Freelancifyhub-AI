@@ -78,6 +78,8 @@ import {
   type MemoryLifecycleRunResult,
   type MemoryLifecycleService,
 } from './lifecycle.service.js';
+import type { AuthorizationService } from '../security/index.js';
+import { createAuthorizationService } from '../security/index.js';
 
 /** Input to {@link MemoryManager.createMemory} (spec §15 Save Memory). */
 export interface CreateMemoryInput {
@@ -182,6 +184,8 @@ export interface MemoryManagerServiceDependencies {
   readonly accessPolicy: MemoryAccessPolicy;
   readonly lifecycle: MemoryLifecycleContract;
   readonly retrievalEngine: MemoryRetrievalEngine;
+  /** Authorization service for access decisions (Sprint 3). */
+  readonly authorizationService?: AuthorizationService;
 }
 
 /** Options for constructing the Memory Manager Service. */
@@ -216,6 +220,7 @@ export class MemoryManagerService implements MemoryManager {
   private readonly lifecycle: MemoryLifecycleContract;
   private readonly retrievalEngine: MemoryRetrievalEngine;
   private readonly lifecycleService: MemoryLifecycleService;
+  private readonly authorizationService: AuthorizationService;
 
   constructor(options: MemoryManagerServiceOptions) {
     this.assertDependencies(options);
@@ -240,6 +245,7 @@ export class MemoryManagerService implements MemoryManager {
         logger: this.logger,
         events: this.events,
       });
+    this.authorizationService = options.authorizationService ?? createAuthorizationService();
   }
 
   async createMemory(input: CreateMemoryInput): Promise<MemoryRecord> {
@@ -264,7 +270,28 @@ export class MemoryManagerService implements MemoryManager {
     const reason = validateReason(input.reason);
     const createdAt = this.nowIso();
 
-    this.assertCan(input.actor, MemoryPermission.Write, { namespace, type, securityLevel });
+    const draftForAuth: MemoryRecord = {
+      id: createMemoryId(),
+      namespace,
+      key,
+      type,
+      owner,
+      content,
+      metadata,
+      priority,
+      securityLevel,
+      createdAt,
+      updatedAt: createdAt,
+      expiresAt: this.expiryOf(createdAt, ttlMs),
+      ttlMs,
+      retention,
+      version: 1,
+      lifecycle: MemoryLifecycleState.Created,
+      reason,
+      traceId,
+      source: input.source,
+    };
+    this.assertCan(input.actor, MemoryPermission.Write, this.targetOf(draftForAuth));
 
     const draft: MemoryRecord = {
       id: createMemoryId(),
@@ -311,8 +338,7 @@ export class MemoryManagerService implements MemoryManager {
       });
     }
 
-    this.assertCan(input.actor, MemoryPermission.Read, this.targetOf(record));
-
+    // Deleted/expired records are invisible (AC-MEM-4) - check before authorization
     if (record.lifecycle === MemoryLifecycleState.Deleted || isMemoryExpired(record)) {
       throw new MemoryNotFoundError(
         `Memory not found (${record.lifecycle}) at ${namespace}/${key}`,
@@ -321,6 +347,8 @@ export class MemoryManagerService implements MemoryManager {
         },
       );
     }
+
+    this.assertCan(input.actor, MemoryPermission.Read, this.targetOf(record));
 
     this.emit(MemoryEventType.Retrieved, record, input.actor.group, { traceId });
     this.logger.info({ namespace, key, traceId }, 'memory retrieved');
@@ -547,17 +575,82 @@ export class MemoryManagerService implements MemoryManager {
     target: MemoryAccessCheckTarget,
   ): void {
     validateMemoryActor(actor);
-    if (!this.accessPolicy.can({ actor, permission, target })) {
-      throw new MemoryAccessDeniedError('Memory access denied', {
-        details: {
-          permission,
-          namespace: target.namespace,
-          type: target.type,
-          securityLevel: target.securityLevel,
-          actorGroup: actor.group,
-        },
+    const decision = this.authorizationService.authorize({ actor, permission, target });
+
+    if (decision.allowed) {
+      this.emitSecurityEvent(MemoryEventType.AccessAllowed, target, actor, {
+        permission,
+        reason: 'allowed',
       });
+    } else {
+      this.emitSecurityEvent(MemoryEventType.AccessDenied, target, actor, {
+        permission,
+        denialReason: decision.reason,
+        denialCode: decision.code,
+      });
+      this.throwForPermission(permission, decision.reason, decision.code, target, actor);
     }
+  }
+
+  private throwForPermission(
+    permission: MemoryPermission,
+    reason: string | undefined,
+    code: string | undefined,
+    target: MemoryAccessCheckTarget,
+    actor: MemoryActor,
+  ): never {
+    const details = {
+      permission,
+      namespace: target.namespace,
+      type: target.type,
+      securityLevel: target.securityLevel,
+      actorGroup: actor.group,
+      denialCode: code,
+    };
+
+    switch (permission) {
+      case MemoryPermission.Read:
+        throw new MemoryAccessDeniedError(reason ?? 'Read access denied', { details });
+      case MemoryPermission.Write:
+        throw new MemoryAccessDeniedError(reason ?? 'Write access denied', { details });
+      case MemoryPermission.Update:
+        throw new MemoryAccessDeniedError(reason ?? 'Update access denied', { details });
+      case MemoryPermission.Delete:
+        throw new MemoryAccessDeniedError(reason ?? 'Delete access denied', { details });
+      case MemoryPermission.Archive:
+        throw new MemoryAccessDeniedError(reason ?? 'Archive access denied', { details });
+      default:
+        throw new MemoryAccessDeniedError(reason ?? 'Access denied', { details });
+    }
+  }
+
+  private emitSecurityEvent(
+    type: MemoryEventType,
+    target: MemoryAccessCheckTarget,
+    actor: MemoryActor,
+    extras: {
+      permission: MemoryPermission;
+      denialReason?: string;
+      denialCode?: string;
+      reason?: string;
+    },
+  ): void {
+    this.events.emit({
+      type,
+      traceId: createTraceId(),
+      occurredAt: this.nowIso(),
+      namespace: target.namespace,
+      key: 'authorization-check',
+      permission: extras.permission,
+      targetType: target.type,
+      targetSecurityLevel: target.securityLevel,
+      denialReason: extras.denialReason,
+      denialCode: extras.denialCode,
+      reason: extras.reason,
+      actorGroup: actor.group,
+      actorId: actor.id,
+      actorType: actor.type,
+    });
   }
 
   private targetOf(record: MemoryRecord): MemoryAccessCheckTarget {
@@ -565,6 +658,8 @@ export class MemoryManagerService implements MemoryManager {
       namespace: record.namespace,
       type: record.type,
       securityLevel: record.securityLevel,
+      lifecycle: record.lifecycle,
+      owner: record.owner,
     };
   }
 

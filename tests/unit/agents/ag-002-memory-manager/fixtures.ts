@@ -29,8 +29,25 @@ export function createTestConfig(): MemoryConfig {
 }
 
 /** Creates an actor with an explicit namespace allow-list (fail-closed). */
-export function makeActor(group: MemoryActorGroup, namespaces: readonly string[]): MemoryActor {
-  return { group, namespaces };
+export function makeActor(
+  group: MemoryActorGroup,
+  namespaces: readonly string[],
+  options: {
+    id?: string;
+    type?: string;
+    role?: string;
+    organizationId?: string;
+    workspaceId?: string;
+    projectIds?: readonly string[];
+    securityClearance?: MemorySecurityLevel;
+  } = {},
+): MemoryActor {
+  return {
+    group,
+    namespaces,
+    securityClearance: MemorySecurityLevel.Confidential,
+    ...options,
+  };
 }
 
 export function makeOwner(kind: MemoryOwnerKind, id = '1'): MemoryOwner {
@@ -121,8 +138,11 @@ export const clientActor = makeActor(MemoryActorGroup.Client, ['user:1', 'projec
 export const freelancerActor = makeActor(MemoryActorGroup.Freelancer, ['user:2', 'project:1']);
 export const marketplaceActor = makeActor(MemoryActorGroup.Marketplace, ['project:1']);
 export const marketingActor = makeActor(MemoryActorGroup.Marketing, ['workspace:1']);
-export const adminActor = makeActor(MemoryActorGroup.Admin, [
-  'org:1',
-  'workspace:admin:1',
-  'system:canonical',
-]);
+export const adminActor = makeActor(
+  MemoryActorGroup.Admin,
+  ['org:1', 'workspace:admin:1', 'system:canonical'],
+  {
+    organizationId: '1',
+    workspaceId: 'admin:1',
+  },
+);

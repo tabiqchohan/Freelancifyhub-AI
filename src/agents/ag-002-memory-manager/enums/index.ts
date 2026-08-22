@@ -62,6 +62,10 @@ export enum MemoryPermission {
   Write = 'WRITE',
   Update = 'UPDATE',
   Delete = 'DELETE',
+  Archive = 'ARCHIVE',
+  Restore = 'RESTORE',
+  Expire = 'EXPIRE',
+  LifecycleManage = 'LIFECYCLE_MANAGE',
 }
 
 /** Ownership kinds for typed memory ownership (spec §6, prompt §6). */

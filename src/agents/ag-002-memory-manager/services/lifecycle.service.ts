@@ -276,6 +276,8 @@ export class MemoryLifecycleServiceImpl implements MemoryLifecycleService {
           namespace: record.namespace,
           type: record.type,
           securityLevel: record.securityLevel,
+          lifecycle: record.lifecycle,
+          owner: record.owner,
         },
       })
     ) {

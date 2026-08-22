@@ -54,6 +54,43 @@ export class MemoryAccessDeniedError extends MemoryError {
   }
 }
 
+/** Raised when the actor lacks the specific permission required. */
+export class InsufficientPermissionError extends MemoryError {
+  constructor(message: string, options: MemoryErrorOptions = {}) {
+    super(message, { ...options, code: options.code ?? 'INSUFFICIENT_PERMISSION_ERROR' });
+  }
+}
+
+/** Raised when an actor attempts to access memory they do not own. */
+export class OwnershipViolationError extends MemoryError {
+  constructor(message: string, options: MemoryErrorOptions = {}) {
+    super(message, { ...options, code: options.code ?? 'OWNERSHIP_VIOLATION_ERROR' });
+  }
+}
+
+/** Raised when an actor attempts to access memory outside their scope. */
+export class ScopeViolationError extends MemoryError {
+  constructor(message: string, options: MemoryErrorOptions = {}) {
+    super(message, { ...options, code: options.code ?? 'SCOPE_VIOLATION_ERROR' });
+  }
+}
+
+/** Raised when an actor's security clearance is insufficient. */
+export class SecurityLevelViolationError extends MemoryError {
+  constructor(message: string, options: MemoryErrorOptions = {}) {
+    super(message, { ...options, code: options.code ?? 'SECURITY_LEVEL_VIOLATION_ERROR' });
+  }
+}
+
+/** Raised when the actor context is missing or malformed. */
+export class InvalidActorContextError extends MemoryError {
+  constructor(message: string, options: MemoryErrorOptions = {}) {
+    super(message, { ...options, code: options.code ?? 'INVALID_ACTOR_CONTEXT_ERROR' });
+  }
+}
+
+/** Raised when a lifecycle transition is not allowed (prompt §5). */
+
 /** Raised when a lifecycle transition is not allowed (prompt §5). */
 export class MemoryLifecycleTransitionError extends MemoryError {
   constructor(message: string, options: MemoryErrorOptions = {}) {

@@ -110,7 +110,7 @@ describe('security-regression - policy integration (U)', () => {
     expect(results).toEqual([]);
     await expect(
       service.getMemory({ actor: crossTenant, namespace: 'user:1', key: 'pref_theme' }),
-    ).rejects.toThrow(/denied/i);
+    ).rejects.toThrow(/actor scope does not include/i);
   });
 
   it('AG-002 cannot read user memory even in scope (write-only row)', async () => {
@@ -122,7 +122,7 @@ describe('security-regression - policy integration (U)', () => {
         namespace: created.namespace,
         key: created.key,
       }),
-    ).rejects.toThrow(/denied/i);
+    ).rejects.toThrow(/lacks READ permission/i);
   });
 
   it('archiving requires delete-class permission and fails otherwise', async () => {
@@ -140,7 +140,7 @@ describe('security-regression - policy integration (U)', () => {
         key: created.key,
         reason: 'x',
       }),
-    ).rejects.toThrow(/denied/i);
+    ).rejects.toThrow(/lacks DELETE permission/i);
   });
 
   it('soft-deleted records are invisible to every reader', async () => {
@@ -163,7 +163,7 @@ describe('security-regression - policy integration (U)', () => {
         namespace: created.namespace,
         key: created.key,
       }),
-    ).rejects.toThrow(/not found/i);
+    ).rejects.toThrow(/memory not found.*deleted/i);
   });
 
   it('explicit namespace allow-list is enforced even when the matrix grants', () => {
@@ -177,6 +177,7 @@ describe('security-regression - policy integration (U)', () => {
           namespace: 'org:2',
           type: MemoryType.Organization,
           securityLevel: MemorySecurityLevel.Confidential,
+          lifecycle: MemoryLifecycleState.Active,
         },
       }),
     ).toBe(false);
@@ -188,6 +189,7 @@ describe('security-regression - policy integration (U)', () => {
           namespace: 'org:1',
           type: MemoryType.Organization,
           securityLevel: MemorySecurityLevel.Confidential,
+          lifecycle: MemoryLifecycleState.Active,
         },
       }),
     ).toBe(true);
