@@ -1,0 +1,550 @@
+IMPORTANT CORRECTION — AG-002 SPRINT 4 IS NOT COMPLETE.
+
+The previous implementation only added retrieval contracts/interfaces
+in:
+
+src/agents/ag-002-memory-manager/retrieval/index.ts
+
+This is NOT sufficient for Sprint 4.
+
+Do NOT create Sprint 5.
+
+Continue Sprint 4 implementation from the existing contracts.
+
+============================================================
+ACTUAL SPRINT 4 IMPLEMENTATION REQUIRED
+============================================================
+
+Implement the real Memory Retrieval & Context Assembly Engine.
+
+You must inspect the existing AG-002 implementation before coding.
+
+Read:
+
+docs/shared-memory-architecture-v1.md
+docs/ag-002-memory-manager-sprint1-v1.md
+docs/ag-002-memory-manager-sprint2-v1.md
+docs/ag-002-memory-manager-sprint3-v1.md
+
+Inspect:
+
+src/agents/ag-002-memory-manager/
+tests/unit/agents/ag-002-memory-manager/
+
+Reuse existing:
+
+- MemoryRecord
+- MemoryRepository
+- MemoryManagerService
+- AuthorizationService
+- lifecycle contracts
+- security policies
+- Clock
+- token estimator
+- sanitization utilities
+- configuration
+- existing retrieval contracts
+
+Do NOT create duplicate implementations.
+
+============================================================
+IMPLEMENT THESE ACTUAL COMPONENTS
+============================================================
+
+1. QueryNormalizer
+
+Implement the real deterministic query normalization.
+
+Handle:
+
+- empty query
+- whitespace
+- repeated whitespace
+- case normalization
+- deterministic tokenization
+
+Add tests.
+
+------------------------------------------------------------
+
+2. CandidateRetriever
+
+Implement a repository-backed candidate retriever.
+
+Use existing repository abstractions.
+
+No database.
+
+No Qdrant.
+
+No embeddings.
+
+No vector search.
+
+Support the retrieval filters already defined by the contracts:
+
+- memory type
+- metadata
+- ownership
+- scope
+- security
+- priority
+
+Do not bypass authorization.
+
+Add tests.
+
+------------------------------------------------------------
+
+3. Authorization Filtering
+
+Integrate the Sprint 3 AuthorizationService.
+
+Every returned memory MUST pass authorization.
+
+Unauthorized memories must be excluded.
+
+Do not leak:
+
+- memory ID
+- content
+- metadata
+- unauthorized counts
+- error details
+
+Add security regression tests.
+
+------------------------------------------------------------
+
+4. Lifecycle Filtering
+
+Reuse Sprint 2 lifecycle rules.
+
+Deleted memories must never be returned.
+
+Expired/archived behavior must follow the existing architecture.
+
+Do not duplicate lifecycle logic.
+
+Add tests.
+
+------------------------------------------------------------
+
+5. Scope Filtering
+
+Respect existing:
+
+- user
+- project
+- workspace
+- organization
+
+scope rules.
+
+Authorization remains authoritative.
+
+Add tests for wrong:
+
+- organization
+- workspace
+- project
+- owner
+
+------------------------------------------------------------
+
+6. Security-Level Filtering
+
+Reuse the existing security-level policy.
+
+Insufficient clearance MUST exclude the memory.
+
+Unknown security requirements MUST fail closed.
+
+Add tests.
+
+------------------------------------------------------------
+
+7. Relevance Scorer
+
+Implement the actual deterministic baseline scorer.
+
+No embeddings.
+
+No LLM.
+
+Support:
+
+- exact match
+- token match
+- phrase match
+- memory priority
+- recency where supported by architecture
+
+Scores must be deterministic and finite.
+
+Normalize scores to a bounded range.
+
+Handle:
+
+- empty content
+- empty query
+- Unicode
+- large content
+- repeated tokens
+
+Add comprehensive scorer tests.
+
+------------------------------------------------------------
+
+8. Recency
+
+If used by the architecture ranking strategy:
+
+Reuse the existing Clock abstraction.
+
+NEVER use Date.now() directly.
+
+Tests must use FixedClock.
+
+------------------------------------------------------------
+
+9. Ranking
+
+Implement deterministic ranking.
+
+Use the architecture's canonical ranking strategy.
+
+Stable tie-breakers are required.
+
+Same input + same state MUST produce the same ordering.
+
+Add deterministic-order tests.
+
+------------------------------------------------------------
+
+10. Deduplication
+
+Implement real deduplication.
+
+Do not merge different memories incorrectly.
+
+Preserve canonical memory identity.
+
+Add duplicate-heavy tests.
+
+------------------------------------------------------------
+
+11. Result Limits
+
+Implement:
+
+- request limit
+- configured maximum
+- safe default
+
+Reject invalid limits.
+
+Never allow unbounded retrieval.
+
+Add tests for:
+
+0
+negative
+maximum
+excessively large values
+
+------------------------------------------------------------
+
+12. Context Budget
+
+Reuse the existing token estimator.
+
+Implement context budgeting.
+
+Higher-priority memories must survive budget pressure where
+the architecture requires this.
+
+Do not create another token estimator.
+
+Add tests.
+
+------------------------------------------------------------
+
+13. Truncation
+
+Implement safe truncation.
+
+Requirements:
+
+- valid UTF-8
+- no corrupted structures
+- priority preservation
+- truncated=true
+- deterministic behavior
+
+Add tests.
+
+------------------------------------------------------------
+
+14. Context Assembly
+
+Implement the actual Context Assembly Engine.
+
+It must produce structured context from selected memories.
+
+Do NOT create an LLM prompt.
+
+Return structured data only.
+
+Include:
+
+- selected memories
+- sections where applicable
+- token estimate
+- truncation state
+- safe statistics
+
+Add tests.
+
+------------------------------------------------------------
+
+15. RetrievalService
+
+Implement the real RetrievalService that coordinates:
+
+validate
+→ normalize
+→ retrieve
+→ lifecycle filter
+→ authorization
+→ scope/security filter
+→ score
+→ rank
+→ dedupe
+→ limit
+→ budget
+→ assemble
+
+Use dependency injection.
+
+Do not use global mutable state.
+
+------------------------------------------------------------
+
+16. Immutability
+
+Verify retrieval does not mutate:
+
+- MemoryRecord
+- metadata
+- actor
+- repository results
+- nested structures
+
+Add explicit deep immutability tests.
+
+------------------------------------------------------------
+
+17. Security Regression
+
+Add tests proving:
+
+- unauthorized memories never appear
+- deleted memories never appear
+- insufficient clearance never appears
+- wrong organization never appears
+- wrong workspace never appears
+- wrong project never appears
+- secret fields never appear
+- metadata secrets never appear
+- errors don't expose memory content
+
+------------------------------------------------------------
+
+18. Stress Tests
+
+Add tests for:
+
+- 1,000 memories
+- many unauthorized memories
+- duplicate-heavy results
+- large metadata
+- large content
+- context-budget pressure
+- maximum result limits
+
+Avoid unnecessary O(n²) behavior.
+
+------------------------------------------------------------
+
+19. Configuration
+
+Implement only necessary validated configuration:
+
+MEMORY_RETRIEVAL_ENABLED
+MEMORY_RETRIEVAL_MAX_RESULTS
+MEMORY_RETRIEVAL_MIN_SCORE
+MEMORY_CONTEXT_MAX_TOKENS
+
+Use existing configuration conventions.
+
+Safe defaults.
+
+No unlimited values.
+
+------------------------------------------------------------
+
+20. Typecheck Issue
+
+The previous report said:
+
+"Typecheck clean (2 pre-existing scorer.ts errors)"
+
+This must be explicitly verified.
+
+Run:
+
+npm run typecheck
+
+If errors exist:
+
+- determine whether they are truly pre-existing
+- inspect the exact errors
+- do NOT simply label them pre-existing
+- fix them if they belong to Sprint 4
+- report exact remaining errors if they genuinely belong
+  outside Sprint 4
+
+Final report MUST include the actual command result.
+
+============================================================
+TEST REQUIREMENT
+============================================================
+
+Current baseline:
+
+836 tests passing.
+
+After implementing the actual Sprint 4 functionality,
+the test count should increase substantially.
+
+Do NOT modify tests merely to inflate the number.
+
+Do NOT delete tests.
+
+Do NOT weaken tests.
+
+Do NOT skip tests.
+
+Run:
+
+npm test
+
+Then:
+
+npm run typecheck
+npm run lint
+npm run build
+
+ALL must pass.
+
+============================================================
+SCOPE
+============================================================
+
+Allowed:
+
+src/agents/ag-002-memory-manager/**
+tests/unit/agents/ag-002-memory-manager/**
+docs/ag-002-memory-manager-sprint4-v1.md
+necessary documentation index files
+prompts/prompts23
+
+Do NOT modify AG-001 source.
+
+Do NOT implement:
+
+- AG-003
+- AG-004
+- OpenClaw
+- FreelancifyHub
+- Stripe
+- social media
+- LLM
+- embeddings
+- Qdrant
+- PostgreSQL
+- external APIs
+
+============================================================
+DOCUMENTATION
+============================================================
+
+Update/create:
+
+docs/ag-002-memory-manager-sprint4-v1.md
+
+Document the ACTUAL implementation.
+
+Do not claim an interface is implemented when only a contract
+exists.
+
+Clearly separate:
+
+IMPLEMENTED
+DEFERRED
+NOT APPLICABLE
+
+============================================================
+NO GIT
+============================================================
+
+Do NOT commit.
+
+Do NOT push.
+
+============================================================
+FINAL REPORT
+============================================================
+
+Report:
+
+1. Actual components implemented
+2. Files created/modified
+3. Retrieval pipeline
+4. Authorization
+5. Lifecycle filtering
+6. Scope filtering
+7. Security filtering
+8. Query normalization
+9. Scoring
+10. Ranking
+11. Deduplication
+12. Limits
+13. Context budgeting
+14. Context assembly
+15. Security tests
+16. Stress tests
+17. Previous test count
+18. Final test count
+19. Typecheck result
+20. Lint result
+21. Build result
+22. Documentation
+23. Known issues
+24. Deferred functionality
+
+Most importantly:
+
+DO NOT report Sprint 4 as complete unless the actual retrieval
+and context assembly behavior has been implemented and tested.
+
+Explicitly confirm:
+
+"No AG-001 source files were modified."
+
+"No tests were deleted or weakened."
+
+"No external services were added."
+
+"No commit or push was performed."
