@@ -1,0 +1,752 @@
+AG-002 MEMORY MANAGER — SPRINT 5B
+MEMORY CONSOLIDATION ENGINE
+
+You are continuing the existing AG-002 Memory Manager implementation.
+
+CURRENT STATUS:
+
+- AG-001 Sprints 1–9 are complete and must NOT be modified.
+- AG-002 Sprints 1–4 are complete.
+- AG-002 Sprint 5A Context Integration Engine is complete.
+- Current AG-002 implementation must remain backward compatible.
+- Sprint 5A ContextIntegrationService is already implemented.
+- Current baseline is 915 passing tests.
+- Sprint 5A must NOT be rewritten or removed.
+
+SOURCE OF TRUTH:
+
+Read these before coding:
+
+- docs/shared-memory-architecture-v1.md
+- docs/ag-002-memory-manager-sprint1-v1.md
+- docs/ag-002-memory-manager-sprint2-v1.md
+- docs/ag-002-memory-manager-sprint3-v1.md
+- docs/ag-002-memory-manager-sprint4-v1.md
+- docs/ag-002-memory-manager-sprint5a-v1.md
+- src/agents/ag-002-memory-manager/
+- tests/unit/agents/ag-002-memory-manager/
+
+Also inspect current git status and current AG-002 architecture.
+
+==================================================
+CRITICAL RULES
+==================================================
+
+1. DO NOT delete existing implementation files.
+
+2. DO NOT remove Sprint 5A.
+
+3. DO NOT rewrite Sprint 1–4.
+
+4. DO NOT modify AG-001.
+
+5. DO NOT implement AG-003.
+
+6. DO NOT implement AG-004.
+
+7. DO NOT implement LLM integration.
+
+8. DO NOT implement embeddings.
+
+9. DO NOT implement vector databases.
+
+10. DO NOT implement OpenClaw integration.
+
+11. DO NOT implement external APIs.
+
+12. DO NOT implement Stripe/payment integration.
+
+13. DO NOT implement database integration beyond the existing
+    repository abstraction.
+
+14. DO NOT use @ts-ignore.
+
+15. DO NOT use @ts-expect-error.
+
+16. DO NOT use `any` to bypass type errors.
+
+17. DO NOT delete or weaken tests to make the suite pass.
+
+18. DO NOT change existing tests unless an actual API contract
+    requires a legitimate compatibility update.
+
+19. DO NOT commit.
+
+20. DO NOT push.
+
+21. If TypeScript errors appear, FIX them. Do not delete the
+    implementation to make errors disappear.
+
+==================================================
+SPRINT 5B OBJECTIVE
+==================================================
+
+Implement the actual:
+
+AG-002 Memory Consolidation Engine
+
+The engine must safely identify related/duplicate memory records
+and create consolidated memory records according to explicit
+policies.
+
+Consolidation must be:
+
+- deterministic
+- authorization-aware
+- lifecycle-aware
+- security-aware
+- version-aware
+- namespace-aware
+- non-destructive
+- auditable
+- testable
+- dependency-injected
+
+This is NOT an LLM summarization system.
+
+Do NOT generate semantic summaries using an AI model.
+
+Use deterministic consolidation only.
+
+==================================================
+1. ARCHITECTURE INSPECTION
+==================================================
+
+Before implementation, identify and reuse existing:
+
+- MemoryRecord
+- MemoryType
+- MemoryPriority
+- MemoryState/Lifecycle state
+- MemoryRepository
+- repository update/create methods
+- AuthorizationService
+- MemoryActor
+- security policies
+- lifecycle service
+- versioning mechanism
+- event system
+- sanitization utilities
+- configuration system
+- typed AG-002 errors
+- clock abstraction
+
+Do NOT create duplicate versions of these systems.
+
+If a required abstraction already exists, reuse it.
+
+==================================================
+2. CONSOLIDATION SERVICE CONTRACT
+==================================================
+
+Create an interface such as:
+
+MemoryConsolidationService
+
+and an implementation such as:
+
+MemoryConsolidationServiceImpl
+
+Use the naming conventions already established in AG-002.
+
+The service should expose deterministic operations for:
+
+- finding consolidation candidates
+- evaluating whether candidates may be consolidated
+- consolidating compatible records
+- reporting consolidation results/statistics
+
+Use dependency injection.
+
+Do not hard-code repositories or global services.
+
+==================================================
+3. CONSOLIDATION REQUEST
+==================================================
+
+The request should contain the necessary actor/security context
+and consolidation scope.
+
+Where appropriate support:
+
+- actor
+- namespace
+- memory types
+- project
+- workspace
+- organization
+- candidate records or candidate query
+- consolidation policy
+- correlation/request ID
+
+Reuse existing actor/scope contracts.
+
+Do not invent duplicate actor models.
+
+==================================================
+4. CANDIDATE DETECTION
+==================================================
+
+Implement deterministic candidate detection.
+
+Candidates may be related through existing memory identity
+semantics such as:
+
+- namespace
+- key
+- memory type
+- project/workspace scope
+- compatible metadata
+
+Do NOT perform fuzzy semantic similarity using an LLM.
+
+Do NOT use embeddings.
+
+Candidate detection must be explainable and deterministic.
+
+Every candidate decision should have a clear reason.
+
+==================================================
+5. CONSOLIDATION POLICY
+==================================================
+
+Implement an explicit validated policy.
+
+Policy should support at least:
+
+- enabled/disabled
+- minimum candidate count
+- maximum records per operation
+- allowed memory types
+- priority behavior
+- version behavior
+- retention behavior
+- security behavior
+- namespace restrictions
+- source preservation
+- output priority rules
+
+Use Zod validation following existing AG-002 configuration
+patterns.
+
+Use sensible defaults.
+
+Do not create unnecessary configuration.
+
+==================================================
+6. NON-DESTRUCTIVE GUARANTEE
+==================================================
+
+THIS IS CRITICAL.
+
+Consolidation MUST NOT automatically delete source records.
+
+After successful consolidation:
+
+- source records remain available
+- source versions remain intact
+- source metadata is preserved
+- source audit history remains intact
+
+If the architecture supports an explicit archive transition,
+it may be used ONLY if the policy explicitly allows it and
+authorization is satisfied.
+
+Default behavior must be non-destructive.
+
+==================================================
+7. CONSOLIDATED RECORD
+==================================================
+
+Create a deterministic consolidated record.
+
+The output must preserve appropriate:
+
+- memory type
+- namespace
+- scope
+- priority
+- security level
+- retention characteristics
+- timestamps
+- source references
+- provenance
+- version information
+
+The output must NOT contain secrets that were prohibited from
+the source/context boundary.
+
+Do not overwrite an unrelated existing record.
+
+Use a deterministic identity/key strategy consistent with the
+existing memory architecture.
+
+Do NOT introduce a completely separate identity system.
+
+==================================================
+8. PRIORITY RULES
+==================================================
+
+When combining records:
+
+CRITICAL > HIGH > MEDIUM > LOW
+
+The consolidated record must never downgrade a higher-priority
+source because of a lower-priority source.
+
+Test combinations such as:
+
+CRITICAL + LOW
+HIGH + MEDIUM
+MEDIUM + LOW
+CRITICAL + HIGH
+
+==================================================
+9. SECURITY
+==================================================
+
+Every candidate must pass authorization.
+
+Consolidation must never combine memories across unauthorized:
+
+- organizations
+- workspaces
+- projects
+- namespaces
+- security levels
+
+Missing/invalid actor context must fail closed.
+
+A user with insufficient security clearance must not be able
+to consolidate protected records.
+
+Do not rely only on the caller to filter candidates.
+
+The consolidation service itself must enforce security.
+
+==================================================
+10. LIFECYCLE
+==================================================
+
+Do not consolidate:
+
+- DELETED
+- EXPIRED
+
+records.
+
+Respect ARCHIVED according to the existing architecture and
+policy.
+
+Do not revive expired/deleted memories.
+
+Lifecycle checks must happen before consolidation.
+
+==================================================
+11. VERSIONING / CONCURRENCY
+==================================================
+
+Use the existing version-safe repository mechanisms.
+
+The consolidation operation must safely handle:
+
+- stale source versions
+- concurrent updates
+- version conflicts
+- duplicate consolidation attempts
+
+A version conflict must not silently overwrite newer data.
+
+Use existing typed errors.
+
+Mark retryable vs non-retryable appropriately.
+
+==================================================
+12. IDEMPOTENCY
+==================================================
+
+Where supported by the existing architecture, consolidation
+should be idempotent.
+
+Running the same consolidation request twice should not create
+unbounded duplicate consolidated records.
+
+Use deterministic source references / identity.
+
+Do NOT invent an unrelated idempotency subsystem.
+
+==================================================
+13. SANITIZATION
+==================================================
+
+Sensitive information must not leak into:
+
+- consolidated records
+- source references if they contain content
+- event payloads
+- statistics
+- logs
+- errors
+
+Reuse the canonical AG-002 sanitizer.
+
+Test at minimum:
+
+- apiKey
+- password
+- token
+- secret
+- credential
+- pwd
+- passphrase
+
+Test nested and mixed-case variants.
+
+==================================================
+14. PROVENANCE
+==================================================
+
+The consolidated record should preserve provenance sufficient
+to understand which source memories contributed to it.
+
+Use safe references/identifiers.
+
+Do NOT copy sensitive source contents into provenance metadata.
+
+Provenance should be deterministic.
+
+==================================================
+15. EVENTS
+==================================================
+
+Use the existing AG-002 event infrastructure.
+
+Emit appropriate consolidation events if the architecture
+requires them.
+
+Events should contain safe:
+
+- event type
+- consolidation ID
+- actor ID/type where allowed
+- source IDs
+- output ID
+- timestamp
+- correlation ID
+- status/result
+
+Never include raw secrets or sensitive memory content.
+
+If an existing event type is appropriate, reuse it rather than
+creating a duplicate event.
+
+==================================================
+16. STATISTICS
+==================================================
+
+Return useful deterministic statistics such as:
+
+- candidates discovered
+- candidates authorized
+- candidates rejected
+- candidates filtered by lifecycle
+- candidates filtered by scope
+- candidates filtered by security
+- groups formed
+- groups consolidated
+- records created
+- records preserved
+- conflicts
+- skipped groups
+- duration
+
+Statistics must not expose memory contents or secrets.
+
+==================================================
+17. ERROR HANDLING
+==================================================
+
+Use existing AG-002 typed errors.
+
+Handle:
+
+- invalid request
+- invalid actor
+- authorization failure
+- scope violation
+- security violation
+- lifecycle violation
+- invalid policy
+- insufficient candidates
+- version conflict
+- repository failure
+- duplicate/idempotency conflict
+- consolidation failure
+
+Do not silently swallow errors.
+
+Retryability must be explicit.
+
+==================================================
+18. CONFIGURATION
+==================================================
+
+Add configuration only where necessary.
+
+Follow existing Zod configuration conventions.
+
+Potential configuration:
+
+MEMORY_CONSOLIDATION_ENABLED
+MEMORY_CONSOLIDATION_MIN_RECORDS
+MEMORY_CONSOLIDATION_MAX_RECORDS
+MEMORY_CONSOLIDATION_ALLOWED_TYPES
+
+Use exact naming conventions consistent with existing AG-002
+configuration.
+
+Do not duplicate policy/configuration unnecessarily.
+
+==================================================
+19. TEST SUITE
+==================================================
+
+Create comprehensive Sprint 5B tests.
+
+Minimum behavioral coverage:
+
+A. service construction
+B. basic candidate detection
+C. candidate grouping
+D. minimum candidate threshold
+E. maximum candidate limit
+F. successful consolidation
+G. no consolidation when disabled
+H. no consolidation with insufficient candidates
+I. priority preservation
+J. CRITICAL + LOW
+K. HIGH + MEDIUM
+L. MEDIUM + LOW
+M. lifecycle filtering
+N. deleted filtering
+O. expired filtering
+P. archived behavior
+Q. authorization
+R. organization isolation
+S. workspace isolation
+T. project isolation
+U. namespace isolation
+V. security clearance
+W. missing actor
+X. invalid actor
+Y. version preservation
+Z. stale version conflict
+AA. non-destructive source preservation
+AB. deterministic output
+AC. deterministic provenance
+AD. idempotency
+AE. duplicate consolidation attempt
+AF. sanitization
+AG. nested secret sanitization
+AH. mixed-case secret sanitization
+AI. event emission
+AJ. event sanitization
+AK. statistics
+AL. repository failure
+AM. retryable error
+AN. non-retryable error
+AO. large candidate set
+AP. duplicate-heavy input
+AQ. concurrent consolidation attempts
+AR. immutability
+
+Tests must verify REAL behavior.
+
+Do not create placeholder tests.
+
+==================================================
+20. IMMUTABILITY
+==================================================
+
+The service must not mutate:
+
+- source MemoryRecord objects
+- source metadata
+- actor context
+- policy input
+- candidate arrays
+
+Use deep snapshots before and after operations.
+
+==================================================
+21. STRESS TESTS
+==================================================
+
+Add reasonable stress coverage for:
+
+- hundreds of candidates
+- duplicate-heavy candidates
+- many consolidation groups
+- large metadata
+- repeated/idempotent requests
+- concurrent consolidation attempts
+
+Do not introduce unnecessary performance complexity.
+
+==================================================
+22. BACKWARD COMPATIBILITY
+==================================================
+
+Before coding:
+
+Record:
+
+- current git status
+- current test count
+- current typecheck state
+- current build state
+
+After implementation:
+
+Run the full test suite.
+
+Sprint 5A must continue to work.
+
+AG-002 Sprints 1–4 must continue to work.
+
+AG-001 must remain untouched.
+
+==================================================
+23. QUALITY GATES
+==================================================
+
+Run:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Report the exact results.
+
+If errors existed before Sprint 5B:
+
+- prove their previous existence
+- identify exact files
+- ensure Sprint 5B did not introduce new errors
+
+Do not simply label errors "pre-existing" without evidence.
+
+==================================================
+24. RECOVERY RULE
+==================================================
+
+If implementation causes type errors:
+
+DO NOT delete the implementation.
+
+Instead:
+
+1. inspect errors
+2. fix contracts/imports/types
+3. reuse existing interfaces
+4. simplify unnecessary abstractions
+5. run focused tests
+6. run complete suite
+
+Never solve implementation problems by removing functionality.
+
+==================================================
+25. FILE SCOPE
+==================================================
+
+Allowed:
+
+src/agents/ag-002-memory-manager/**
+tests/unit/agents/ag-002-memory-manager/**
+docs/ag-002-memory-manager-sprint5b-v1.md
+prompts/prompts26
+
+Do NOT modify AG-001.
+
+Do NOT modify unrelated modules.
+
+==================================================
+26. ACCEPTANCE CRITERIA
+==================================================
+
+Sprint 5B is COMPLETE only when:
+
+[ ] MemoryConsolidationService exists
+[ ] actual implementation exists
+[ ] candidate detection works
+[ ] policy validation works
+[ ] authorization enforced
+[ ] scope isolation enforced
+[ ] security enforced
+[ ] lifecycle enforced
+[ ] version safety enforced
+[ ] priority preservation works
+[ ] non-destructive source preservation works
+[ ] deterministic output works
+[ ] idempotency handled
+[ ] provenance works
+[ ] sanitization works
+[ ] events work where required
+[ ] statistics work
+[ ] typed errors work
+[ ] configuration works
+[ ] comprehensive tests exist
+[ ] stress tests exist
+[ ] immutability verified
+[ ] existing tests remain intact
+[ ] Sprint 5A remains intact
+[ ] AG-001 untouched
+[ ] no external integrations
+[ ] typecheck passes
+[ ] lint passes
+[ ] build passes
+
+If ANY criterion fails:
+
+Report exactly:
+
+SPRINT 5B STILL PARTIAL
+
+and list every failed criterion.
+
+Do NOT claim completion.
+
+==================================================
+27. FINAL REPORT
+==================================================
+
+At the end provide:
+
+1. Files created
+2. Files modified
+3. Files deleted
+4. Current test count before Sprint 5B
+5. New Sprint 5B test count
+6. Final total test count
+7. Candidate detection implementation
+8. Consolidation implementation
+9. Security verification
+10. Lifecycle verification
+11. Version/concurrency verification
+12. Non-destructive verification
+13. Idempotency verification
+14. Sanitization verification
+15. Event verification
+16. Statistics verification
+17. Typecheck result
+18. Lint result
+19. Build result
+20. Known limitations
+21. Exact git status
+22. Confirmation AG-001 was untouched
+23. Confirmation Sprint 5A was preserved
+24. Confirmation no external integrations were added
+
+DO NOT COMMIT.
+DO NOT PUSH.

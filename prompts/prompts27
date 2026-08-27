@@ -1,0 +1,716 @@
+AG-002 MEMORY MANAGER — SPRINT 6
+PERSISTENCE, STORAGE ABSTRACTION & DURABLE REPOSITORY READINESS
+
+You are continuing the existing AG-002 Memory Manager implementation.
+
+CURRENT STATUS:
+
+- AG-001 Sprints 1–9 + hardening are complete.
+- AG-002 Sprints 1–4 are complete.
+- AG-002 Sprint 5A Context Integration Engine is complete.
+- AG-002 Sprint 5B Memory Consolidation Engine is complete.
+- Sprint 5A + 5B have been committed and pushed.
+- Current known baseline: 946 passing tests.
+- Existing pre-existing errors in retrieval/scorer-related files must not be
+  incorrectly attributed to Sprint 6.
+
+==================================================
+SOURCE OF TRUTH
+==================================================
+
+Before coding, read:
+
+- docs/shared-memory-architecture-v1.md
+- docs/ag-002-memory-manager-sprint1-v1.md
+- docs/ag-002-memory-manager-sprint2-v1.md
+- docs/ag-002-memory-manager-sprint3-v1.md
+- docs/ag-002-memory-manager-sprint4-v1.md
+- docs/ag-002-memory-manager-sprint5a-v1.md
+- docs/ag-002-memory-manager-sprint5b-v1.md
+- src/agents/ag-002-memory-manager/
+- tests/unit/agents/ag-002-memory-manager/
+
+Also inspect the current repository implementation and git history.
+
+==================================================
+CRITICAL RULES
+==================================================
+
+1. DO NOT modify AG-001.
+
+2. DO NOT delete existing AG-002 implementation.
+
+3. DO NOT rewrite Sprint 1–5.
+
+4. DO NOT remove Sprint 5A ContextIntegrationService.
+
+5. DO NOT remove Sprint 5B MemoryConsolidationService.
+
+6. DO NOT weaken or delete tests.
+
+7. DO NOT use @ts-ignore.
+
+8. DO NOT use @ts-expect-error.
+
+9. DO NOT use `any` to bypass TypeScript errors.
+
+10. DO NOT add PostgreSQL yet.
+
+11. DO NOT add Neon yet.
+
+12. DO NOT add Prisma yet.
+
+13. DO NOT add Qdrant/vector database yet.
+
+14. DO NOT add embeddings.
+
+15. DO NOT add OpenClaw integration.
+
+16. DO NOT add external APIs.
+
+17. DO NOT add LLM integration.
+
+18. DO NOT commit.
+
+19. DO NOT push.
+
+20. If implementation creates errors, FIX the implementation.
+    Never delete the feature simply because it is difficult to type.
+
+==================================================
+SPRINT 6 OBJECTIVE
+==================================================
+
+Strengthen the AG-002 persistence/storage architecture so that the
+Memory Manager has a clean durable-storage boundary without actually
+introducing an external database.
+
+The goal is:
+
+Application Services
+        ↓
+Memory Repository Contract
+        ↓
+Storage Abstraction
+        ↓
+Current In-Memory Implementation
+        ↓
+Future Durable Adapter
+
+Sprint 6 should make the architecture READY for a future database
+adapter while keeping the current implementation fully functional.
+
+This sprint is NOT a database implementation.
+
+==================================================
+1. INSPECT CURRENT STORAGE
+==================================================
+
+First inspect the existing:
+
+- MemoryRepository
+- storage interfaces
+- in-memory repository
+- memory service
+- lifecycle service
+- retrieval service
+- consolidation service
+- versioning
+- event system
+- configuration
+
+Document what already exists.
+
+Do NOT create duplicate repository interfaces.
+
+If the existing architecture already provides a capability,
+reuse it and only add missing contracts.
+
+==================================================
+2. STORAGE CONTRACT
+==================================================
+
+Create or strengthen a clear storage abstraction.
+
+The repository contract should support the operations actually
+required by AG-002.
+
+Where appropriate:
+
+- create
+- get by ID
+- get by namespace/key
+- list/search candidates
+- update
+- version-safe update
+- delete
+- archive
+- restore where already supported
+- count/statistics if required
+- existence check
+
+Do not add meaningless CRUD methods just for completeness.
+
+All operations must remain typed.
+
+==================================================
+3. QUERY / FILTER CONTRACT
+==================================================
+
+Create a deterministic repository query abstraction for the
+operations already needed by:
+
+- MemoryService
+- RetrievalService
+- ContextIntegrationService
+- ConsolidationService
+- LifecycleService
+
+Support existing concepts such as:
+
+- namespace
+- memory type
+- priority
+- lifecycle state
+- organization
+- workspace
+- project
+- created/updated timestamps
+- actor scope where appropriate
+
+Do not duplicate authorization.
+
+Repository filtering is not a replacement for AuthorizationService.
+
+Authorization must remain enforced at the service/security boundary.
+
+==================================================
+4. PAGINATION
+==================================================
+
+If the current repository architecture does not already have safe
+pagination, introduce a typed pagination abstraction.
+
+Support deterministic pagination.
+
+Prefer cursor-based pagination if it naturally fits the existing
+architecture.
+
+If offset pagination is already established, do not redesign the
+whole repository just to change it.
+
+Pagination must have:
+
+- deterministic ordering
+- limit validation
+- safe maximum
+- continuation/cursor semantics where applicable
+
+Do not create a database-specific pagination implementation.
+
+==================================================
+5. VERSION-SAFE WRITES
+==================================================
+
+Strengthen repository-level optimistic concurrency.
+
+Support operations such as:
+
+update(recordId, expectedVersion, patch)
+
+or the equivalent existing contract.
+
+A stale expected version must result in a typed conflict error.
+
+Never silently overwrite newer data.
+
+This must work with the existing Sprint 5B consolidation logic.
+
+==================================================
+6. IMMUTABILITY
+==================================================
+
+Repository reads must not expose mutable internal references.
+
+Verify that:
+
+- returned records cannot mutate stored records
+- metadata cannot mutate stored state
+- nested objects are protected
+- input objects are not mutated during writes
+
+Use defensive copying where required.
+
+Do not over-engineer with unnecessary deep cloning everywhere;
+use the existing architecture's safe immutability conventions.
+
+==================================================
+7. TRANSACTION BOUNDARY
+==================================================
+
+Do NOT implement real database transactions.
+
+Instead, define a clean abstraction for atomic operations if the
+existing architecture requires one.
+
+The abstraction should allow a future durable adapter to provide
+transaction semantics.
+
+The in-memory implementation may provide the strongest practical
+equivalent without pretending to be a database.
+
+Do not claim ACID guarantees that the in-memory adapter cannot provide.
+
+==================================================
+8. ATOMIC CONSOLIDATION SUPPORT
+==================================================
+
+Review Sprint 5B consolidation.
+
+Ensure repository contracts can safely support:
+
+- reading candidate versions
+- creating consolidated records
+- detecting conflicts
+- preserving source records
+- optional archive operations
+
+Do not rewrite Sprint 5B.
+
+Make only the minimal repository changes needed.
+
+Add integration tests proving consolidation remains safe.
+
+==================================================
+9. ATOMIC LIFECYCLE SUPPORT
+==================================================
+
+Review Sprint 2 lifecycle behavior.
+
+Ensure lifecycle transitions can use version-safe repository updates.
+
+Test:
+
+- active → expired
+- active → archived
+- valid transition
+- stale version
+- deleted/expired protection
+
+Do not revive deleted or expired records accidentally.
+
+==================================================
+10. STORAGE SERIALIZATION
+==================================================
+
+If the existing storage layer has serialization/deserialization
+contracts, strengthen them.
+
+Requirements:
+
+- deterministic serialization
+- safe deserialization
+- validation
+- no prototype pollution
+- no secret leakage
+- version compatibility
+
+Do NOT create a database schema.
+
+Do NOT create Prisma models.
+
+Do NOT add migrations.
+
+==================================================
+11. STORAGE HEALTH / CAPABILITIES
+==================================================
+
+Add a typed capability/health contract if useful to the existing
+architecture.
+
+Potential capabilities:
+
+- read
+- write
+- versionedWrite
+- delete
+- archive
+- query
+- pagination
+- transactions
+
+The capability model must reflect what the current adapter really
+supports.
+
+Do not claim capabilities that are not implemented.
+
+==================================================
+12. CONFIGURATION
+==================================================
+
+Use existing AG-002 Zod configuration conventions.
+
+Only add configuration actually required for storage abstraction.
+
+Potential settings:
+
+- storage backend identifier
+- maximum page size
+- version conflict behavior
+- storage validation mode
+
+Do not introduce unnecessary environment variables.
+
+The default backend must remain the current in-memory implementation.
+
+==================================================
+13. ERROR HANDLING
+==================================================
+
+Use typed AG-002 errors.
+
+Handle:
+
+- record not found
+- duplicate record
+- invalid query
+- invalid pagination
+- version conflict
+- unsupported operation
+- serialization failure
+- storage failure
+- invalid record
+
+Clearly classify retryable vs non-retryable errors.
+
+Do not leak sensitive data in errors.
+
+==================================================
+14. SECURITY
+==================================================
+
+Storage abstraction must NOT bypass the security layer.
+
+Important distinction:
+
+Repository:
+    stores/retrieves data
+
+AuthorizationService:
+    decides whether actor may access data
+
+Service layer:
+    enforces authorization before exposing data
+
+Do not move authorization responsibility into the repository
+unless an existing contract explicitly requires it.
+
+Storage errors/logs must not expose:
+
+- apiKey
+- password
+- token
+- secret
+- credential
+- pwd
+- passphrase
+
+==================================================
+15. OBSERVABILITY
+==================================================
+
+Add safe repository/storage metrics where useful:
+
+- operation
+- success/failure
+- duration
+- count
+- page size
+- conflict count
+
+Never log raw memory content.
+
+Never log sensitive metadata.
+
+==================================================
+16. TESTING
+==================================================
+
+Create comprehensive Sprint 6 tests.
+
+Minimum:
+
+Repository:
+
+A. create
+B. read
+C. update
+D. delete
+E. archive
+F. not-found
+G. duplicate
+H. query
+I. filtering
+J. deterministic ordering
+K. pagination
+L. invalid pagination
+M. maximum page size
+N. version-safe update
+O. stale version conflict
+P. concurrent update conflict
+Q. immutability
+R. nested metadata immutability
+S. serialization
+T. deserialization
+U. malformed data
+V. capability reporting
+W. health behavior
+
+Lifecycle integration:
+
+X. lifecycle update
+Y. lifecycle version conflict
+Z. lifecycle immutability
+
+Consolidation integration:
+
+AA. consolidation repository writes
+AB. source preservation
+AC. consolidation conflict
+AD. repeated consolidation
+AE. idempotency
+AF. priority preservation
+
+Security:
+
+AG. unauthorized access remains denied
+AH. scope isolation
+AI. security-level isolation
+AJ. sensitive data does not leak through storage errors/logs
+
+Stress:
+
+AK. large record set
+AL. many queries
+AM. duplicate-heavy data
+AN. concurrent version conflicts
+AO. large nested metadata
+
+==================================================
+17. TEST THE REAL IN-MEMORY ADAPTER
+==================================================
+
+The existing in-memory implementation must actually implement the
+new/strengthened repository contract.
+
+Do not create a fake adapter that only satisfies TypeScript.
+
+Behavior must be tested.
+
+==================================================
+18. BACKWARD COMPATIBILITY
+==================================================
+
+Before coding record:
+
+- git status
+- npm test count
+- typecheck state
+- lint state
+- build state
+
+After coding:
+
+Run the FULL suite.
+
+Sprint 1–5A–5B must continue to work.
+
+The expected baseline is approximately:
+
+946 passing tests
+
+Do not assume the number without running it.
+
+==================================================
+19. NO TEST MANIPULATION
+==================================================
+
+Do NOT:
+
+- delete tests
+- skip tests
+- weaken assertions
+- alter expected results merely to pass
+- hide errors
+- mark failing tests as expected without architectural reason
+
+==================================================
+20. EXISTING ERROR BASELINE
+==================================================
+
+If the repository currently has pre-existing typecheck/lint/build
+errors:
+
+1. establish the baseline before changes
+2. record exact errors
+3. implement Sprint 6
+4. verify no new errors were introduced
+
+Do not fix unrelated legacy errors unless required for Sprint 6.
+
+Clearly separate:
+
+PRE-EXISTING ERRORS
+
+from:
+
+SPRINT 6 ERRORS
+
+==================================================
+21. FILE SCOPE
+==================================================
+
+Allowed:
+
+src/agents/ag-002-memory-manager/**
+tests/unit/agents/ag-002-memory-manager/**
+tests/integration/agents/ag-002-memory-manager/**
+docs/ag-002-memory-manager-sprint6-v1.md
+prompts/prompts27
+
+Do NOT modify AG-001.
+
+Avoid unrelated project files.
+
+==================================================
+22. IMPLEMENTATION DISCIPLINE
+==================================================
+
+Work incrementally:
+
+PHASE A:
+Inspect current repository/storage architecture.
+
+PHASE B:
+Implement missing/strengthened contracts.
+
+PHASE C:
+Update the existing in-memory adapter.
+
+PHASE D:
+Add focused repository tests.
+
+PHASE E:
+Integrate with lifecycle/consolidation where required.
+
+PHASE F:
+Run full regression suite.
+
+PHASE G:
+Run typecheck/lint/build.
+
+Do not implement everything blindly in one large rewrite.
+
+==================================================
+23. STOP CONDITION
+==================================================
+
+If you discover that a requested storage capability is already
+implemented correctly:
+
+DO NOT duplicate it.
+
+Document it and test it if necessary.
+
+If a capability cannot be safely implemented without introducing
+a major architecture redesign or database dependency:
+
+STOP that portion and document it as a deferred decision.
+
+Do not invent a fake implementation.
+
+==================================================
+24. ACCEPTANCE CRITERIA
+==================================================
+
+Sprint 6 is COMPLETE only when:
+
+[ ] Storage/repository contract is clear
+[ ] Existing in-memory adapter implements it
+[ ] Query/filter contract works
+[ ] Pagination works if required
+[ ] Deterministic ordering works
+[ ] Version-safe writes work
+[ ] Stale version conflicts work
+[ ] Immutability is enforced
+[ ] Serialization is safe
+[ ] Deserialization is validated
+[ ] Lifecycle integration remains safe
+[ ] Consolidation integration remains safe
+[ ] Non-destructive source preservation remains intact
+[ ] Security boundaries remain intact
+[ ] Sensitive information cannot leak
+[ ] Capability/health contract works if implemented
+[ ] Configuration is validated
+[ ] Typed errors are used
+[ ] Repository tests exist
+[ ] Integration tests exist
+[ ] Stress tests exist
+[ ] Existing Sprint 1–5 tests pass
+[ ] No tests deleted
+[ ] No tests weakened
+[ ] AG-001 untouched
+[ ] No external database added
+[ ] No external API added
+[ ] No LLM added
+[ ] No vector DB added
+[ ] Typecheck passes or only verified pre-existing errors remain
+[ ] Lint passes or only verified pre-existing errors remain
+[ ] Build passes or only verified pre-existing errors remain
+
+If ANY criterion fails:
+
+REPORT:
+
+SPRINT 6 STILL PARTIAL
+
+Then list every failed criterion.
+
+Do NOT claim completion.
+
+==================================================
+25. FINAL REPORT
+==================================================
+
+At the end provide:
+
+1. Current baseline before Sprint 6
+2. Files created
+3. Files modified
+4. Files deleted
+5. Repository/storage changes
+6. Query/filter changes
+7. Pagination changes
+8. Versioning changes
+9. Immutability verification
+10. Serialization verification
+11. Lifecycle integration verification
+12. Consolidation integration verification
+13. Security verification
+14. Test count before
+15. New Sprint 6 test count
+16. Final total test count
+17. npm test result
+18. npm run typecheck result
+19. npm run lint result
+20. npm run build result
+21. Pre-existing errors
+22. Sprint 6 errors, if any
+23. Known limitations
+24. Exact git status
+25. Confirmation AG-001 was untouched
+26. Confirmation Sprint 5A/5B were preserved
+27. Confirmation no database/external integration was added
+
+DO NOT COMMIT.
+DO NOT PUSH.

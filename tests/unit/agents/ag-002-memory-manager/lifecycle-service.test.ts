@@ -40,6 +40,10 @@ import type {
   MemoryRecord,
   MemoryRecordFilter,
 } from '../../../../src/agents/ag-002-memory-manager/types/index.js';
+import type {
+  RepositoryPage,
+  RepositoryQuery,
+} from '../../../../src/agents/ag-002-memory-manager/repositories/query.js';
 import { clientActor, createTestConfig, makeRecord, memoryManagerActor } from './fixtures.js';
 
 const S = MemoryLifecycleState;
@@ -91,6 +95,26 @@ class RacingRepository implements MemoryRepository {
 
   async exists(namespace: MemoryNamespace, key: MemoryKey): Promise<boolean> {
     return this.inner.exists(namespace, key);
+  }
+
+  async getById(id: string): Promise<MemoryRecord | undefined> {
+    return this.inner.getById(id);
+  }
+
+  async query(query: RepositoryQuery): Promise<RepositoryPage> {
+    return this.inner.query(query);
+  }
+
+  capabilities() {
+    return this.inner.capabilities();
+  }
+
+  health() {
+    return this.inner.health();
+  }
+
+  metrics() {
+    return this.inner.metrics();
   }
 }
 

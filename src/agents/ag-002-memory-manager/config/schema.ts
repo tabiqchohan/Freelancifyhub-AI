@@ -46,6 +46,11 @@ export const DEFAULT_MEMORY_CONSOLIDATION_ALLOWED_TYPES = [
   'LONG_TERM',
 ] as const;
 
+/** Default storage backend identifier (Sprint 6 — stays in-memory). */
+export const DEFAULT_MEMORY_STORAGE_BACKEND = 'in-memory';
+/** Default maximum page size for repository pagination (Sprint 6, prompt §4). */
+export const DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE = 50;
+
 /** Default size limits shared by validation and config defaults. */
 export const DEFAULT_MEMORY_LIMITS: MemorySizeLimits = {
   maxContentBytes: DEFAULT_MEMORY_MAX_CONTENT_BYTES,
@@ -172,6 +177,14 @@ export const MemoryConfigSchema = z.object({
     .default(DEFAULT_MEMORY_CONSOLIDATION_MAX_RECORDS),
   /** Memory types eligible for consolidation (comma-separated, prompt §18). */
   MEMORY_CONSOLIDATION_ALLOWED_TYPES: commaSeparatedMemoryTypes,
+  /** Storage backend identifier (Sprint 6). Default must stay `in-memory`. */
+  MEMORY_STORAGE_BACKEND: z.string().min(1).default(DEFAULT_MEMORY_STORAGE_BACKEND),
+  /** Maximum page size for repository pagination (validated, prompt §4). */
+  MEMORY_STORAGE_MAX_PAGE_SIZE: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE),
 });
 
 export type MemoryConfig = z.infer<typeof MemoryConfigSchema>;

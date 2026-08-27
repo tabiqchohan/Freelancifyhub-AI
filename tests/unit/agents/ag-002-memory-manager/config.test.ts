@@ -7,6 +7,8 @@ import {
   DEFAULT_MEMORY_MAX_METADATA_KEYS,
   DEFAULT_MEMORY_RETRIEVAL_MAX_RESULTS,
   DEFAULT_MEMORY_RETENTION_PROJECT_ARCHIVE_MS,
+  DEFAULT_MEMORY_STORAGE_BACKEND,
+  DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE,
   DEFAULT_MEMORY_TTL_CONVERSATION_MS,
   DEFAULT_MEMORY_TTL_TEMPORARY_MS,
   MemoryConfigSchema,
@@ -88,5 +90,28 @@ describe('default constants mirror the architecture', () => {
     expect(DEFAULT_MEMORY_MAX_METADATA_KEYS).toBe(64);
     expect(DEFAULT_MEMORY_LIFECYCLE_EVALUATION_ENABLED).toBe(true);
     expect(DEFAULT_MEMORY_LIFECYCLE_EVALUATION_BATCH_LIMIT).toBe(100);
+    expect(DEFAULT_MEMORY_STORAGE_BACKEND).toBe('in-memory');
+    expect(DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE).toBe(50);
+  });
+});
+
+describe('Sprint 6 - storage config fields', () => {
+  it('defaults the storage backend to in-memory with a sane page size', () => {
+    const config = MemoryConfigSchema.parse({});
+    expect(config.MEMORY_STORAGE_BACKEND).toBe(DEFAULT_MEMORY_STORAGE_BACKEND);
+    expect(config.MEMORY_STORAGE_MAX_PAGE_SIZE).toBe(DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE);
+  });
+
+  it('parses explicit storage configuration values', () => {
+    const config = MemoryConfigSchema.parse({
+      MEMORY_STORAGE_BACKEND: 'in-memory',
+      MEMORY_STORAGE_MAX_PAGE_SIZE: '25',
+    });
+    expect(config.MEMORY_STORAGE_BACKEND).toBe('in-memory');
+    expect(config.MEMORY_STORAGE_MAX_PAGE_SIZE).toBe(25);
+  });
+
+  it('rejects an invalid page size', () => {
+    expect(() => MemoryConfigSchema.parse({ MEMORY_STORAGE_MAX_PAGE_SIZE: '0' })).toThrow();
   });
 });
