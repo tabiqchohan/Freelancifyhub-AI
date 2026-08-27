@@ -1,0 +1,568 @@
+AG-002 MEMORY MANAGER — SPRINT 5A
+CONTEXT INTEGRATION ENGINE
+
+You are continuing an existing production-oriented TypeScript
+multi-agent architecture.
+
+IMPORTANT:
+AG-002 Sprints 1–4 are COMPLETE.
+
+Current baseline:
+- AG-001 must NOT be modified
+- AG-002 Sprint 1–4 functionality must NOT be broken
+- Current test baseline: 866 passing
+- Sprint 4 RetrievalService is implemented
+- Sprint 4 provides RetrievalService, RetrievalResult,
+  TokenEstimator, QueryNormalizer, scoring, filtering,
+  deduplication, budgeting and sanitization primitives
+
+==================================================
+CRITICAL RULES
+==================================================
+
+1. DO NOT delete existing implementation files.
+
+2. DO NOT remove functionality because it causes TypeScript
+   errors.
+
+3. DO NOT weaken or delete tests.
+
+4. DO NOT use @ts-ignore.
+
+5. DO NOT use @ts-expect-error.
+
+6. DO NOT use `any` to bypass type errors.
+
+7. DO NOT modify AG-001.
+
+8. DO NOT implement Sprint 5B Consolidation Engine yet.
+
+9. DO NOT implement AG-003 or AG-004.
+
+10. DO NOT implement LLM, embeddings, Qdrant, OpenClaw,
+    external APIs, Stripe, PostgreSQL or FreelancifyHub integration.
+
+11. DO NOT redesign Sprint 1–4 architecture.
+
+12. Reuse existing interfaces and services wherever possible.
+
+13. Do not report COMPLETE until the acceptance criteria
+    and quality gates are actually satisfied.
+
+14. Do NOT commit or push.
+
+==================================================
+PHASE 0 — INSPECT BEFORE CODING
+==================================================
+
+Before modifying anything, inspect:
+
+- docs/shared-memory-architecture-v1.md
+- docs/ag-002-memory-manager-sprint1-v1.md
+- docs/ag-002-memory-manager-sprint2-v1.md
+- docs/ag-002-memory-manager-sprint3-v1.md
+- docs/ag-002-memory-manager-sprint4-v1.md
+- src/agents/ag-002-memory-manager/
+- tests/unit/agents/ag-002-memory-manager/
+
+Also inspect the current git status.
+
+Determine:
+
+A. What Sprint 5 types already exist
+B. What Sprint 5 files currently exist
+C. What was previously attempted and removed
+D. What existing Sprint 4 functionality can be reused
+E. Which interfaces are already available
+
+DO NOT delete anything during this inspection.
+
+==================================================
+SPRINT 5A OBJECTIVE
+==================================================
+
+Implement ONLY:
+
+AG-002 Context Integration Engine
+
+Create a production-quality:
+
+ContextIntegrationService
+
+Its responsibility is to transform authorized RetrievalService
+results into deterministic, safe, prioritized context suitable
+for consumption by the future orchestration layer.
+
+This is NOT an LLM summarizer.
+
+This is NOT a vector search engine.
+
+This is deterministic context assembly.
+
+==================================================
+1. SERVICE CONTRACT
+==================================================
+
+Create an interface-driven ContextIntegrationService.
+
+It should accept existing retrieval results and context
+configuration.
+
+It should return a deterministic ContextIntegrationResponse.
+
+Do not duplicate RetrievalService functionality.
+
+Reuse existing:
+
+- RetrievalService
+- RetrievalResult
+- MemoryRecord
+- TokenEstimator
+- sanitization
+- priority definitions
+- authorization/security infrastructure
+- lifecycle filtering
+- existing configuration patterns
+
+==================================================
+2. CONTEXT SECTIONS
+==================================================
+
+Build context sections according to existing AG-002 architecture.
+
+Use existing memory types rather than inventing new ones.
+
+Where appropriate support:
+
+- USER
+- PROJECT
+- WORKSPACE
+- ORGANIZATION
+- CONVERSATION
+- SESSION
+- KNOWLEDGE_REFERENCE
+- TEMPORARY
+
+Do not invent memory types if they are not already defined.
+
+Each generated section should have deterministic:
+
+- section type
+- priority
+- records
+- estimated tokens
+- ordering
+- truncation state
+
+==================================================
+3. DETERMINISTIC ORDERING
+==================================================
+
+Context ordering MUST be deterministic.
+
+Use stable ordering based on existing metadata.
+
+Recommended precedence:
+
+1. section priority
+2. memory priority
+3. relevance score
+4. timestamp/version
+5. stable namespace/key identifier
+
+Never depend on object insertion order accidentally.
+
+The same input must produce the same output.
+
+==================================================
+4. PRIORITY PRESERVATION
+==================================================
+
+Existing priority levels:
+
+CRITICAL
+HIGH
+MEDIUM
+LOW
+
+When budget is insufficient:
+
+CRITICAL must be preserved whenever technically possible.
+
+Then:
+
+HIGH
+MEDIUM
+LOW
+
+Lower priority information must never displace higher priority
+information.
+
+Record exactly what was:
+
+- selected
+- truncated
+- excluded
+
+==================================================
+5. CONTEXT BUDGET
+==================================================
+
+Reuse the existing TokenEstimator.
+
+Do NOT create another token estimation algorithm if one already
+exists.
+
+The final context must respect the configured context budget.
+
+Test:
+
+- normal budget
+- tiny budget
+- zero/invalid budget according to existing config policy
+- large budget
+- budget pressure
+
+Ensure deterministic behavior.
+
+==================================================
+6. DEDUPLICATION
+==================================================
+
+Perform context-level deduplication using existing memory
+identity semantics.
+
+Prefer:
+
+namespace + key
+
+and respect version/relevance/priority according to the existing
+architecture.
+
+When duplicates exist:
+
+- retain the best valid representation
+- preserve CRITICAL information
+- maintain deterministic behavior
+- report deduplication statistics
+
+Never mutate the source records.
+
+==================================================
+7. SAFE CONTEXT ASSEMBLY
+==================================================
+
+Context snippets must be safe.
+
+Reuse the existing sanitization mechanism.
+
+Sensitive information must never leak.
+
+Test at minimum:
+
+- apiKey
+- password
+- token
+- secret
+- credential
+- pwd
+- passphrase
+
+Test nested metadata and mixed-case variants.
+
+Do not rely only on formatter-level sanitization.
+
+Sanitize at the context trust boundary.
+
+==================================================
+8. IMMUTABILITY
+==================================================
+
+The service MUST NOT mutate:
+
+- RetrievalResult
+- MemoryRecord
+- metadata
+- actor context
+- nested objects
+
+Add explicit immutability tests using deep snapshots.
+
+==================================================
+9. STATISTICS
+==================================================
+
+Return deterministic statistics including, where applicable:
+
+- input count
+- authorized count
+- filtered count
+- duplicate count
+- selected count
+- truncated count
+- excluded count
+- estimated tokens
+- budget
+- sections generated
+
+Do not expose sensitive memory contents in statistics.
+
+==================================================
+10. ERROR HANDLING
+==================================================
+
+Use existing AG-002 typed error conventions.
+
+Handle:
+
+- invalid request
+- missing/invalid context
+- invalid budget
+- invalid retrieval result
+- security failure
+- configuration failure
+
+Do not silently swallow errors.
+
+Do not expose secrets in error messages.
+
+==================================================
+11. CONFIGURATION
+==================================================
+
+Follow the existing AG-002 Zod configuration architecture.
+
+Add only configuration actually required by Context Integration.
+
+Examples may include:
+
+- feature enabled/disabled
+- context budget
+- maximum sections
+- maximum records per section
+- snippet length
+
+Do not create unnecessary configuration.
+
+Use sensible validated defaults.
+
+==================================================
+12. TESTS
+==================================================
+
+Create dedicated ContextIntegrationService tests.
+
+Minimum tests:
+
+A. Basic context assembly
+B. Empty input
+C. Single result
+D. Multiple sections
+E. Section ordering
+F. Priority ordering
+G. CRITICAL preservation
+H. HIGH preservation
+I. MEDIUM/LOW budget eviction
+J. Tiny budget
+K. Large budget
+L. Deterministic output
+M. Deduplication
+N. Duplicate priority handling
+O. Relevance ordering
+P. Sanitization
+Q. Nested secret sanitization
+R. Case-insensitive secret sanitization
+S. Immutability
+T. Invalid request
+U. Invalid budget
+V. Large result set
+W. Large metadata
+X. Deep nested metadata
+Y. Statistics correctness
+Z. Feature disabled behavior
+
+Do NOT write tests that merely assert the function exists.
+
+Tests must verify actual behavior.
+
+==================================================
+13. SECURITY TESTS
+==================================================
+
+Explicitly verify that these values never appear in the final
+serialized context:
+
+apiKey
+password
+token
+secret
+credential
+pwd
+passphrase
+
+Test:
+
+- record content
+- metadata
+- nested objects
+- multiple records
+- multiple sections
+
+==================================================
+14. PERFORMANCE / STRESS
+==================================================
+
+Add at least reasonable stress coverage for:
+
+- hundreds/thousands of retrieval results
+- duplicate-heavy input
+- large metadata
+- tiny context budget
+- many sections
+
+Do not introduce premature optimization.
+
+==================================================
+15. BACKWARD COMPATIBILITY
+==================================================
+
+Before coding, record the current test count.
+
+After coding run the complete test suite.
+
+Existing Sprint 1–4 tests must continue to pass.
+
+Do not:
+
+- delete tests
+- skip tests
+- weaken assertions
+- alter unrelated tests merely to make them pass
+
+==================================================
+16. QUALITY GATES
+==================================================
+
+Run all:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Report the ACTUAL result of every command.
+
+If existing errors are discovered:
+
+- identify exact file
+- identify exact error
+- determine whether it existed before Sprint 5A
+- do not simply label it "pre-existing" without verification
+
+==================================================
+17. FILE SCOPE
+==================================================
+
+Allowed:
+
+src/agents/ag-002-memory-manager/**
+tests/unit/agents/ag-002-memory-manager/**
+docs/ag-002-memory-manager-sprint5a-v1.md
+prompts/prompts25
+
+Do NOT modify AG-001.
+
+Avoid unrelated project files.
+
+==================================================
+18. IMPORTANT RECOVERY RULE
+==================================================
+
+If an implementation causes many TypeScript errors:
+
+DO NOT delete the implementation.
+
+Instead:
+
+1. inspect the exact errors
+2. fix imports/types/interfaces
+3. reuse existing contracts
+4. reduce unnecessary abstractions
+5. run focused tests
+6. then run the full suite
+
+Never solve compilation problems by removing the feature.
+
+==================================================
+19. STOP CONDITIONS
+==================================================
+
+If you discover that an architectural decision required for
+Context Integration is genuinely missing, STOP and report it.
+
+Do not invent a major architecture.
+
+Small implementation details may be chosen consistently with
+existing architecture.
+
+==================================================
+20. FINAL ACCEPTANCE
+==================================================
+
+Sprint 5A is COMPLETE only when:
+
+[ ] ContextIntegrationService exists
+[ ] interface/contract exists
+[ ] actual behavior implemented
+[ ] existing RetrievalService reused
+[ ] deterministic ordering works
+[ ] priority preservation works
+[ ] context budget enforced
+[ ] deduplication works
+[ ] sanitization works
+[ ] nested secrets protected
+[ ] immutability verified
+[ ] statistics implemented
+[ ] typed errors implemented
+[ ] configuration validated
+[ ] stress tests added
+[ ] all Sprint 5A tests pass
+[ ] all existing AG-002 tests pass
+[ ] no AG-001 changes
+[ ] no tests deleted
+[ ] no tests weakened
+[ ] typecheck passes
+[ ] lint passes
+[ ] build passes
+
+If ANY item fails, report:
+
+SPRINT 5A STILL PARTIAL
+
+and provide the exact failure.
+
+==================================================
+FINAL REPORT FORMAT
+==================================================
+
+At the end report:
+
+1. Files created
+2. Files modified
+3. Files deleted (MUST be NONE unless explicitly justified)
+4. Existing test count before
+5. New test count
+6. Final test count
+7. ContextIntegrationService behavior
+8. Security verification
+9. Budget verification
+10. Typecheck result
+11. Lint result
+12. Build result
+13. Known limitations
+14. Git status
+15. Confirmation that AG-001 was untouched
+16. Confirmation that no external integrations were added
+
+DO NOT COMMIT.
+DO NOT PUSH.

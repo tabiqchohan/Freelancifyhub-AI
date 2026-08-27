@@ -18,6 +18,16 @@ export const DEFAULT_MEMORY_RETRIEVAL_MAX_RESULTS = 50;
 export const DEFAULT_MEMORY_LIFECYCLE_EVALUATION_ENABLED = true;
 /** Cap on records evaluated per `runBatch` invocation (no global scheduler). */
 export const DEFAULT_MEMORY_LIFECYCLE_EVALUATION_BATCH_LIMIT = 100;
+/** Context integration is enabled by default (Sprint 5A, prompt §11). */
+export const DEFAULT_MEMORY_CONTEXT_INTEGRATION_ENABLED = true;
+/** Default context budget (tokens) for the assembled context (prompt §5). */
+export const DEFAULT_MEMORY_CONTEXT_MAX_TOKENS = 8192;
+/** Default maximum number of generated context sections (prompt §11). */
+export const DEFAULT_MEMORY_CONTEXT_MAX_SECTIONS = 8;
+/** Default maximum records per context section (prompt §11). */
+export const DEFAULT_MEMORY_CONTEXT_MAX_RECORDS_PER_SECTION = 20;
+/** Default snippet length for records emitted into the context (prompt §11). */
+export const DEFAULT_MEMORY_CONTEXT_SNIPPET_LENGTH = 200;
 
 /** Default size limits shared by validation and config defaults. */
 export const DEFAULT_MEMORY_LIMITS: MemorySizeLimits = {
@@ -91,6 +101,34 @@ export const MemoryConfigSchema = z.object({
   MEMORY_RIGHT_TO_FORGET_ENABLED: booleanFromString,
   /** Feature flag: event-log replay recovery (spec §17). */
   MEMORY_EVENT_LOG_REPLAY_ENABLED: booleanFromString,
+  /** Feature flag: context integration (Sprint 5A, prompt §11). */
+  MEMORY_CONTEXT_INTEGRATION_ENABLED: booleanFromString.default(
+    DEFAULT_MEMORY_CONTEXT_INTEGRATION_ENABLED,
+  ),
+  /** Context budget (tokens) enforced by the Context Integration Engine (prompt §5). */
+  MEMORY_CONTEXT_MAX_TOKENS: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .default(DEFAULT_MEMORY_CONTEXT_MAX_TOKENS),
+  /** Maximum number of context sections generated (prompt §11). */
+  MEMORY_CONTEXT_MAX_SECTIONS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_CONTEXT_MAX_SECTIONS),
+  /** Maximum records per context section (prompt §11). */
+  MEMORY_CONTEXT_MAX_RECORDS_PER_SECTION: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_CONTEXT_MAX_RECORDS_PER_SECTION),
+  /** Snippet length for records emitted into the context (prompt §11). */
+  MEMORY_CONTEXT_SNIPPET_LENGTH: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_CONTEXT_SNIPPET_LENGTH),
 });
 
 export type MemoryConfig = z.infer<typeof MemoryConfigSchema>;

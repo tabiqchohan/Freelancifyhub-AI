@@ -57,3 +57,20 @@ export type {
   MemoryLifecycleBatchInput,
   MemoryLifecycleRunResult,
 } from './services/lifecycle.service.js';
+
+export {
+  ContextIntegrationServiceImpl,
+  createContextIntegrationService,
+} from './services/context-integration.service.js';
+export type {
+  ContextIntegrationService,
+  ContextIntegrationServiceOptions,
+  ContextIntegrationRequest,
+  ContextIntegrationPipelineConfig,
+  ContextIntegrationResponse,
+  ContextSection,
+  ContextSectionRequest,
+  ContextRecordEntry,
+  ContextIntegrationStatistics,
+  ContextIntegrationMetadata,
+} from './services/context-integration.service.js';
