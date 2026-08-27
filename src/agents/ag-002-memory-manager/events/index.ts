@@ -25,6 +25,8 @@ export enum MemoryEventType {
   Deleted = 'MEMORY_DELETED',
   Retrieved = 'MEMORY_RETRIEVED',
   Summarized = 'MEMORY_SUMMARIZED',
+  // Sprint 5B: Memory consolidation event
+  MemoryConsolidated = 'MEMORY_CONSOLIDATED',
   // Sprint 3: Security audit events
   AccessAllowed = 'MEMORY_ACCESS_ALLOWED',
   AccessDenied = 'MEMORY_ACCESS_DENIED',
@@ -65,6 +67,14 @@ export interface MemoryEvent {
   readonly denialCode?: string;
   readonly actorId?: string;
   readonly actorType?: string;
+  /** Sprint 5B: Consolidation correlation id. */
+  readonly consolidationId?: string;
+  /** Sprint 5B: Safe source memory ids that were consolidated. */
+  readonly sourceIds?: readonly MemoryId[];
+  /** Sprint 5B: Id of the consolidated output record. */
+  readonly outputId?: MemoryId;
+  /** Sprint 5B: Number of candidate records in the group. */
+  readonly candidateGroupSize?: number;
 }
 
 /** Emits correlated memory events without coupling to a sink (spec §21). */

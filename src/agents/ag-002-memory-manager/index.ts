@@ -74,3 +74,19 @@ export type {
   ContextIntegrationStatistics,
   ContextIntegrationMetadata,
 } from './services/context-integration.service.js';
+
+export {
+  MemoryConsolidationServiceImpl,
+  createMemoryConsolidationService,
+} from './services/consolidation.service.js';
+export type {
+  MemoryConsolidationService,
+  MemoryConsolidationServiceOptions,
+  MemoryConsolidationRequest,
+  MemoryConsolidationPolicy,
+  MemoryConsolidationGroup,
+  MemoryConsolidationCandidateResult,
+  MemoryConsolidationEvaluation,
+  MemoryConsolidationResult,
+  MemoryConsolidationStatistics,
+} from './services/consolidation.service.js';

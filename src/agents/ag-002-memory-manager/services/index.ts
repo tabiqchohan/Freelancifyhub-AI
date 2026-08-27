@@ -21,3 +21,19 @@ export type {
   MemoryLifecycleServiceDependencies,
   MemoryLifecycleServiceOptions,
 } from './lifecycle.service.js';
+export {
+  MemoryConsolidationServiceImpl,
+  createMemoryConsolidationService,
+} from './consolidation.service.js';
+export type {
+  MemoryConsolidationPolicy,
+  MemoryConsolidationRequest,
+  MemoryConsolidationGroup,
+  MemoryConsolidationCandidateResult,
+  MemoryConsolidationEvaluation,
+  MemoryConsolidationResult,
+  MemoryConsolidationStatistics,
+  MemoryConsolidationSourceRef,
+  MemoryConsolidationService,
+  MemoryConsolidationServiceOptions,
+} from './consolidation.service.js';

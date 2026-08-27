@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { MemoryType } from '../enums/index.js';
 import type { MemorySizeLimits } from '../types/index.js';
 
 /** Default conversation retention window (spec §17: 30 days). */
@@ -28,6 +29,22 @@ export const DEFAULT_MEMORY_CONTEXT_MAX_SECTIONS = 8;
 export const DEFAULT_MEMORY_CONTEXT_MAX_RECORDS_PER_SECTION = 20;
 /** Default snippet length for records emitted into the context (prompt §11). */
 export const DEFAULT_MEMORY_CONTEXT_SNIPPET_LENGTH = 200;
+/** Memory consolidation is enabled by default (Sprint 5B, prompt §18). */
+export const DEFAULT_MEMORY_CONSOLIDATION_ENABLED = true;
+/** Minimum candidate records required to form a consolidation group. */
+export const DEFAULT_MEMORY_CONSOLIDATION_MIN_RECORDS = 2;
+/** Maximum records consolidated per operation (bounded, prompt §5). */
+export const DEFAULT_MEMORY_CONSOLIDATION_MAX_RECORDS = 20;
+/** Memory types eligible for consolidation by default (Sprint 5B, prompt §18). */
+export const DEFAULT_MEMORY_CONSOLIDATION_ALLOWED_TYPES = [
+  'CONVERSATION',
+  'PROJECT',
+  'WORKSPACE',
+  'ORGANIZATION',
+  'USER',
+  'KNOWLEDGE_REFERENCE',
+  'LONG_TERM',
+] as const;
 
 /** Default size limits shared by validation and config defaults. */
 export const DEFAULT_MEMORY_LIMITS: MemorySizeLimits = {
@@ -40,7 +57,17 @@ const booleanFromString = z
   .default('true')
   .transform((value) => value === 'true');
 
-/**
+/** Comma-separated memory-type list (e.g. `"PROJECT,WORKSPACE"`) → enum array. */
+const commaSeparatedMemoryTypes = z
+  .string()
+  .default(DEFAULT_MEMORY_CONSOLIDATION_ALLOWED_TYPES.join(','))
+  .transform((value) =>
+    value
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0),
+  )
+  .pipe(z.array(z.nativeEnum(MemoryType))); /**
  * Typed runtime configuration for the Memory Manager (spec §17). Fields are
  * driven by environment variables with safe defaults. No secrets are defined
  * here. Keys map to the architecture dot-style settings:
@@ -129,6 +156,22 @@ export const MemoryConfigSchema = z.object({
     .int()
     .positive()
     .default(DEFAULT_MEMORY_CONTEXT_SNIPPET_LENGTH),
+  /** Feature flag: memory consolidation (Sprint 5B, prompt §18). */
+  MEMORY_CONSOLIDATION_ENABLED: booleanFromString.default(DEFAULT_MEMORY_CONSOLIDATION_ENABLED),
+  /** Minimum candidate records required to form a consolidation group. */
+  MEMORY_CONSOLIDATION_MIN_RECORDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_CONSOLIDATION_MIN_RECORDS),
+  /** Maximum records consolidated per operation (prompt §5). */
+  MEMORY_CONSOLIDATION_MAX_RECORDS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_CONSOLIDATION_MAX_RECORDS),
+  /** Memory types eligible for consolidation (comma-separated, prompt §18). */
+  MEMORY_CONSOLIDATION_ALLOWED_TYPES: commaSeparatedMemoryTypes,
 });
 
 export type MemoryConfig = z.infer<typeof MemoryConfigSchema>;
