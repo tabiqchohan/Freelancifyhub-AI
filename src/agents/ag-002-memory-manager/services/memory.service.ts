@@ -21,6 +21,7 @@ import {
 import {
   MemoryAccessDeniedError,
   MemoryConfigurationError,
+  MemoryConflictError,
   MemoryLifecycleTransitionError,
   MemoryNotFoundError,
   MemoryStorageError,
@@ -46,10 +47,13 @@ import type {
 import type {
   IsoTimestamp,
   MemoryContent,
+  MemoryKey,
   MemoryMetadata,
+  MemoryNamespace,
   MemoryOwner,
   MemoryRecord,
   MemoryRecordFilter,
+  MemoryRetentionPolicy,
   MemorySource,
 } from '../types/index.js';
 import { createMemoryId, createTraceId } from '../utils/ids.js';
@@ -81,6 +85,12 @@ import {
   type MemoryLifecycleRunResult,
   type MemoryLifecycleService,
 } from './lifecycle.service.js';
+import {
+  memoryCreateFingerprint,
+  MemoryIdempotencyRegistry,
+  optionalIdempotencyKey,
+} from './idempotency.js';
+import { MemoryCache, CachedMemoryRepository } from '../cache/index.js';
 import type { AuthorizationService } from '../security/index.js';
 import { createAuthorizationService, MEMORY_ACCESS_MATRIX } from '../security/index.js';
 
@@ -100,6 +110,26 @@ export interface CreateMemoryInput {
   readonly reason: string;
   readonly traceId?: string;
   readonly source?: MemorySource;
+  /** Caller-supplied idempotency key (Sprint 10). Prevents duplicate creation. */
+  readonly idempotencyKey?: string;
+}
+
+/** Internal validated/fingerprinted create context (Sprint 10). */
+interface CreateMemoryInternal {
+  readonly namespace: MemoryNamespace;
+  readonly key: MemoryKey;
+  readonly type: MemoryType;
+  readonly owner: MemoryOwner;
+  readonly content: MemoryContent;
+  readonly metadata: MemoryMetadata;
+  readonly priority: MemoryPriority;
+  readonly securityLevel: MemorySecurityLevel;
+  readonly retention: MemoryRetentionPolicy;
+  readonly ttlMs?: number;
+  readonly reason: string;
+  readonly createdAt: IsoTimestamp;
+  readonly fingerprint: string;
+  readonly idempotencyKey?: string;
 }
 
 /** Input to {@link MemoryManager.getMemory} (spec §15 Load Memory). */
@@ -262,6 +292,10 @@ export class MemoryManagerService implements MemoryManager {
   private readonly retrievalEngine: MemoryRetrievalEngine;
   private readonly lifecycleService: MemoryLifecycleService;
   private readonly authorizationService: AuthorizationService;
+  /** Sprint 10 — idempotent-create registry (process-local, namespace-scoped). */
+  private readonly idempotencyRegistry: MemoryIdempotencyRegistry;
+  /** Sprint 10 — in-flight guard for concurrent identical creates (key → promise). */
+  private readonly idempotencyInFlight = new Map<string, Promise<MemoryRecord>>();
 
   constructor(options: MemoryManagerServiceOptions) {
     this.assertDependencies(options);
@@ -270,14 +304,14 @@ export class MemoryManagerService implements MemoryManager {
     this.events = options.events ?? new InMemoryMemoryEventEmitter();
     this.clock = options.clock ?? systemClock;
 
-    this.repository = options.repository;
+    this.repository = this.maybeCacheRepository(options.repository);
     this.accessPolicy = options.accessPolicy;
     this.lifecycle = options.lifecycle;
     this.retrievalEngine = options.retrievalEngine;
     this.lifecycleService =
       options.lifecycleService ??
       createMemoryLifecycleService({
-        repository: options.repository,
+        repository: this.repository,
         lifecycle: options.lifecycle,
         retention: new DefaultMemoryRetentionEvaluator(),
         accessPolicy: options.accessPolicy,
@@ -287,6 +321,7 @@ export class MemoryManagerService implements MemoryManager {
         events: this.events,
       });
     this.authorizationService = options.authorizationService ?? createAuthorizationService();
+    this.idempotencyRegistry = new MemoryIdempotencyRegistry();
   }
 
   async createMemory(input: CreateMemoryInput): Promise<MemoryRecord> {
@@ -311,8 +346,10 @@ export class MemoryManagerService implements MemoryManager {
     const reason = validateReason(input.reason);
     const createdAt = this.nowIso();
 
-    const draftForAuth: MemoryRecord = {
-      id: createMemoryId(),
+    const idempotencyKey = optionalIdempotencyKey(input.idempotencyKey);
+    const fingerprint = memoryCreateFingerprint({ namespace, key, content, metadata });
+
+    const internal: CreateMemoryInternal = {
       namespace,
       key,
       type,
@@ -321,14 +358,103 @@ export class MemoryManagerService implements MemoryManager {
       metadata,
       priority,
       securityLevel,
-      createdAt,
-      updatedAt: createdAt,
-      expiresAt: this.expiryOf(createdAt, ttlMs),
-      ttlMs,
       retention,
+      ttlMs,
+      reason,
+      createdAt,
+      fingerprint,
+      idempotencyKey,
+    };
+
+    if (idempotencyKey !== undefined) {
+      // Serialize concurrent identical creates keyed by (namespace, key) so the
+      // second caller deterministically replays the first result instead of
+      // racing against the non-atomic in-memory create.
+      const guard = `${namespace}\u0000${idempotencyKey}`;
+      const inFlight = this.idempotencyInFlight.get(guard);
+      if (inFlight !== undefined) {
+        const existing = await inFlight;
+        if (
+          existing.key === key &&
+          existing.namespace === namespace &&
+          this.recordFingerprintMatches(existing, fingerprint)
+        ) {
+          this.emit(MemoryEventType.Retrieved, existing, input.actor.group, { traceId });
+          return existing;
+        }
+        throw new MemoryConflictError(
+          `Idempotency key ${idempotencyKey} was already used by a different create request`,
+          {
+            code: 'MEMORY_IDEMPOTENCY_CONFLICT_ERROR',
+            details: { namespace, idempotencyKey },
+          },
+        );
+      }
+      const run = this.performCreate(input, internal).finally(() => {
+        this.idempotencyInFlight.delete(guard);
+      });
+      this.idempotencyInFlight.set(guard, run);
+      return run;
+    }
+
+    return this.performCreate(input, internal);
+  }
+
+  private async performCreate(
+    input: CreateMemoryInput,
+    v: CreateMemoryInternal,
+  ): Promise<MemoryRecord> {
+    const traceId = this.traceIdOf(input.traceId);
+    const namespace = v.namespace;
+    const key = v.key;
+    const idempotencyKey = v.idempotencyKey;
+    const fingerprint = v.fingerprint;
+
+    // Idempotency (Sprint 10): a caller-provided key that has already been
+    // satisfied returns the existing record without re-creating it or re-emitting.
+    if (idempotencyKey !== undefined) {
+      const prior = this.idempotencyRegistry.get(namespace, idempotencyKey);
+      if (prior !== undefined) {
+        if (
+          prior.key === key &&
+          prior.namespace === namespace &&
+          prior.fingerprint === fingerprint
+        ) {
+          const existing = await this.repository.get(namespace, key);
+          if (existing !== undefined) {
+            this.emit(MemoryEventType.Retrieved, existing, input.actor.group, { traceId });
+            this.logger.info({ namespace, key, idempotency: 'replayed' }, 'memory create replayed');
+            return existing;
+          }
+        }
+        throw new MemoryConflictError(
+          `Idempotency key ${idempotencyKey} was already used by a different create request`,
+          {
+            code: 'MEMORY_IDEMPOTENCY_CONFLICT_ERROR',
+            details: { namespace, idempotencyKey },
+          },
+        );
+      }
+    }
+
+    const draftForAuth: MemoryRecord = {
+      id: createMemoryId(),
+      namespace: v.namespace,
+      key: v.key,
+      type: v.type,
+      owner: v.owner,
+      content: v.content,
+      metadata: v.metadata,
+      priority: v.priority,
+      securityLevel: v.securityLevel,
+      createdAt: v.createdAt,
+      updatedAt: v.createdAt,
+      expiresAt: this.expiryOf(v.createdAt, v.ttlMs),
+      ttlMs: v.ttlMs,
+      retention: v.retention,
       version: 1,
       lifecycle: MemoryLifecycleState.Created,
-      reason,
+      reason: v.reason,
       traceId,
       source: input.source,
     };
@@ -336,22 +462,22 @@ export class MemoryManagerService implements MemoryManager {
 
     const draft: MemoryRecord = {
       id: createMemoryId(),
-      namespace,
-      key,
-      type,
-      owner,
-      content,
-      metadata,
-      priority,
-      securityLevel,
-      createdAt,
-      updatedAt: createdAt,
-      expiresAt: this.expiryOf(createdAt, ttlMs),
-      ttlMs,
-      retention,
+      namespace: v.namespace,
+      key: v.key,
+      type: v.type,
+      owner: v.owner,
+      content: v.content,
+      metadata: v.metadata,
+      priority: v.priority,
+      securityLevel: v.securityLevel,
+      createdAt: v.createdAt,
+      updatedAt: v.createdAt,
+      expiresAt: this.expiryOf(v.createdAt, v.ttlMs),
+      ttlMs: v.ttlMs,
+      retention: v.retention,
       version: 1,
       lifecycle: MemoryLifecycleState.Created,
-      reason,
+      reason: v.reason,
       traceId,
       source: input.source,
     };
@@ -361,10 +487,34 @@ export class MemoryManagerService implements MemoryManager {
     this.lifecycle.transition(MemoryLifecycleState.Created, MemoryLifecycleState.Active);
     const active: MemoryRecord = { ...draft, lifecycle: MemoryLifecycleState.Active };
 
-    await this.repository.create(active);
-    this.emit(MemoryEventType.Created, active, input.actor.group);
-    this.logger.info(sanitizeMemoryRecordForLogs(active), 'memory created');
-    return active;
+    let created: MemoryRecord;
+    try {
+      created = await this.repository.create(active);
+    } catch (error) {
+      // A concurrent identical create may have won the namespace/key race. If an
+      // idempotency key was supplied and the existing record still matches the
+      // logical fingerprint, return it rather than surfacing a spurious conflict.
+      if (error instanceof MemoryConflictError && idempotencyKey !== undefined) {
+        const existing = await this.repository.get(namespace, key);
+        if (existing !== undefined && this.recordFingerprintMatches(existing, fingerprint)) {
+          this.emit(MemoryEventType.Retrieved, existing, input.actor.group, { traceId });
+          return existing;
+        }
+      }
+      throw error;
+    }
+
+    if (idempotencyKey !== undefined) {
+      this.idempotencyRegistry.set(namespace, idempotencyKey, {
+        namespace,
+        key,
+        fingerprint,
+      });
+    }
+
+    this.emit(MemoryEventType.Created, created, input.actor.group);
+    this.logger.info(sanitizeMemoryRecordForLogs(created), 'memory created');
+    return created;
   }
 
   async getMemory(input: GetMemoryInput): Promise<MemoryRecord> {
@@ -763,6 +913,34 @@ export class MemoryManagerService implements MemoryManager {
     input: MemoryLifecycleBatchInput,
   ): Promise<readonly MemoryLifecycleRunResult[]> {
     return this.lifecycleService.runBatch(input);
+  }
+
+  /**
+   * Wraps the repository in a read-through cache when caching is enabled.
+   * When disabled, returns the repository untouched (transparent mode).
+   */
+  private maybeCacheRepository(repository: MemoryRepository): MemoryRepository {
+    if (!this.config.MEMORY_CACHE_ENABLED) {
+      return repository;
+    }
+    const cache = new MemoryCache<MemoryRecord>({
+      enabled: true,
+      maxEntries: this.config.MEMORY_CACHE_MAX_ENTRIES,
+      ttlMs: this.config.MEMORY_CACHE_TTL_MS,
+    });
+    return new CachedMemoryRepository(repository, cache);
+  }
+
+  /** True when the stored record is logically identical to the create fingerprint. */
+  private recordFingerprintMatches(record: MemoryRecord, fingerprint: string): boolean {
+    return (
+      memoryCreateFingerprint({
+        namespace: record.namespace,
+        key: record.key,
+        content: record.content,
+        metadata: record.metadata,
+      }) === fingerprint
+    );
   }
 
   /** Fails closed at construction when a required dependency is missing. */

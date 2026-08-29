@@ -590,13 +590,40 @@ export class MemoryConsolidationServiceImpl implements MemoryConsolidationServic
     context: { consolidationId: string },
   ): boolean {
     const existingConsolidation = existing.metadata?.consolidation as
-      { consolidationId?: unknown } | undefined;
-    return (
-      existing.key === candidate.key &&
-      existing.namespace === candidate.namespace &&
-      (existingConsolidation?.consolidationId === context.consolidationId ||
-        existing.source?.kind === 'summarization')
-    );
+      { consolidationId?: unknown; sources?: unknown } | undefined;
+    if (
+      existing.key !== candidate.key ||
+      existing.namespace !== candidate.namespace ||
+      (existingConsolidation?.consolidationId !== context.consolidationId &&
+        existing.source?.kind !== 'summarization')
+    ) {
+      return false;
+    }
+    // Sprint 10 — stale-source detection: an existing consolidation is only
+    // "the same" when its source provenance still matches the current sources.
+    // If a source was updated (version bumped) after consolidation, the stored
+    // result is stale and must not be silently returned as fresh.
+    return this.sourcesMatch(existingConsolidation?.sources, candidate);
+  }
+
+  /** True when the existing consolidated provenance matches the candidate sources. */
+  private sourcesMatch(existingSources: unknown, candidate: MemoryRecord): boolean {
+    const candidateMeta = candidate.metadata?.consolidation as
+      { sources?: { id?: unknown; version?: unknown }[] } | undefined;
+    const candidateSources = candidateMeta?.sources ?? [];
+    if (!Array.isArray(existingSources)) {
+      // Legacy consolidated records without provenance are treated as matching,
+      // preserving backward-compatible idempotency for pre-Sprint-10 records.
+      return true;
+    }
+    const toKey = (list: { id?: unknown; version?: unknown }[]): string[] =>
+      list.map((s) => `${String(s.id)}@${String(s.version)}`).sort();
+    const a = toKey(existingSources as { id?: unknown; version?: unknown }[]);
+    const b = toKey(candidateSources as { id?: unknown; version?: unknown }[]);
+    if (a.length !== b.length) {
+      return false;
+    }
+    return a.every((value, i) => value === b[i]);
   }
 
   private applyRecordCap(records: readonly MemoryRecord[], cap: number): MemoryRecord[] {

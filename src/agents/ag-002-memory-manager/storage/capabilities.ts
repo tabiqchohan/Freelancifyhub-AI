@@ -15,7 +15,22 @@ export type StorageCapability =
   | 'archive'
   | 'query'
   | 'pagination'
-  | 'transactions';
+  | 'transactions'
+  | 'durable'
+  | 'idempotent'
+  | 'transactional';
+
+/** The durable-capability set a backend must declare to be considered durable. */
+export const DURABLE_STORAGE_CAPABILITIES: readonly StorageCapability[] = [
+  'durable',
+  'versionedWrite',
+  'query',
+];
+
+/** True when the capability signals process-restart survival semantics. */
+export function isDurableCapability(capability: StorageCapability): boolean {
+  return capability === 'durable';
+}
 
 /** Declared capabilities of a storage adapter. */
 export interface MemoryStorageCapabilities {
@@ -73,6 +88,35 @@ export function createInMemoryCapabilities(backend = 'in-memory'): MemoryStorage
       'query',
       'pagination',
       'transactions',
+    ],
+    supports(capability: StorageCapability): boolean {
+      return this.capabilities.includes(capability);
+    },
+  };
+}
+
+/**
+ * Declares capabilities for a durable backend (Sprint 10). Distinct from
+ * {@link createInMemoryCapabilities}: it advertises `durable`, `transactional`
+ * and `idempotent` so callers can branch on real persistence semantics.
+ * A backend MUST NOT call this unless it genuinely survives process restarts.
+ */
+export function createDurableCapabilities(backend: string): MemoryStorageCapabilities {
+  return {
+    name: 'durable-storage-capabilities',
+    backend,
+    capabilities: [
+      'read',
+      'write',
+      'versionedWrite',
+      'delete',
+      'archive',
+      'query',
+      'pagination',
+      'transactions',
+      'transactional',
+      'durable',
+      'idempotent',
     ],
     supports(capability: StorageCapability): boolean {
       return this.capabilities.includes(capability);

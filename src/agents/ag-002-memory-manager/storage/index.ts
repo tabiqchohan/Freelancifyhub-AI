@@ -61,3 +61,4 @@ export function tierForRecord(record: MemoryRecord): StorageTier {
 
 export * from './capabilities.js';
 export * from './factory.js';
+export * from './durable.js';

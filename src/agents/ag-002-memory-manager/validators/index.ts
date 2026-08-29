@@ -118,6 +118,18 @@ export function validateTraceId(input: unknown): string {
   return validateWithSchema(memoryTraceId, input);
 }
 
+/** Idempotency-key schema (Sprint 10): non-empty, bounded, no forbidden whitespace-only. */
+const memoryIdempotencyKeySchema = z
+  .string()
+  .min(1, 'idempotency key must not be empty')
+  .max(128, 'idempotency key is too long')
+  .refine((value) => value.trim().length > 0, 'idempotency key must not be whitespace-only');
+
+/** Validates a caller-provided idempotency key (Sprint 10). */
+export function validateMemoryIdempotencyKey(input: unknown): string {
+  return validateWithSchema(memoryIdempotencyKeySchema, input);
+}
+
 /**
  * Validates TTL cross-consistency: timestamps must be valid, and when both a
  * TTL and an expiry are present they must agree (expiry = created + ttl).

@@ -13,6 +13,7 @@ export * from './retention/index.js';
 export * from './classification/index.js';
 export * from './storage/index.js';
 export * from './repositories/index.js';
+export * from './cache/index.js';
 export * from './retrieval/index.js';
 export * from './events/index.js';
 export * from './clock/index.js';
@@ -110,3 +111,10 @@ export type {
   MemoryReplayStartState,
   MemoryReplayState,
 } from './services/replay.service.js';
+
+export {
+  MemoryIdempotencyRegistry,
+  memoryCreateFingerprint,
+  stableStringDigest,
+  MemoryIdempotencyValidationError,
+} from './services/idempotency.js';

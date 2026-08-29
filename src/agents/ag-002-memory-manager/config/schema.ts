@@ -50,6 +50,14 @@ export const DEFAULT_MEMORY_CONSOLIDATION_ALLOWED_TYPES = [
 export const DEFAULT_MEMORY_STORAGE_BACKEND = 'in-memory';
 /** Default maximum page size for repository pagination (Sprint 6, prompt §4). */
 export const DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE = 50;
+/** No durable backend is wired by default (Sprint 10 identified boundary). */
+export const DEFAULT_MEMORY_STORAGE_DURABLE_BACKEND = '';
+/** Retrieval/read cache is enabled by default (Sprint 10, prompt §4). */
+export const DEFAULT_MEMORY_CACHE_ENABLED = true;
+/** Default maximum cache entries before LRU eviction (Sprint 10, bounded). */
+export const DEFAULT_MEMORY_CACHE_MAX_ENTRIES = 512;
+/** Default cache TTL in milliseconds (Sprint 10). */
+export const DEFAULT_MEMORY_CACHE_TTL_MS = 60_000;
 
 /** Event log / audit trail is enabled by default (Sprint 7, prompt §19). */
 export const DEFAULT_MEMORY_EVENT_LOG_ENABLED = true;
@@ -201,6 +209,18 @@ export const MemoryConfigSchema = z.object({
     .int()
     .positive()
     .default(DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE),
+  /** Durable backend identifier consumed when MEMORY_STORAGE_BACKEND=durable (Sprint 10). */
+  MEMORY_STORAGE_DURABLE_BACKEND: z.string().default(DEFAULT_MEMORY_STORAGE_DURABLE_BACKEND),
+  /** Feature flag: read/retrieval cache (Sprint 10, prompt §4). */
+  MEMORY_CACHE_ENABLED: booleanFromString.default(DEFAULT_MEMORY_CACHE_ENABLED),
+  /** Maximum cache entries before LRU eviction (Sprint 10, bounded). */
+  MEMORY_CACHE_MAX_ENTRIES: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_CACHE_MAX_ENTRIES),
+  /** Cache entry TTL in milliseconds (Sprint 10). */
+  MEMORY_CACHE_TTL_MS: z.coerce.number().int().nonnegative().default(DEFAULT_MEMORY_CACHE_TTL_MS),
   /** Feature flag: event log / audit trail (Sprint 7, prompt §19). */
   MEMORY_EVENT_LOG_ENABLED: booleanFromString.default(DEFAULT_MEMORY_EVENT_LOG_ENABLED),
   /** Maximum page size for EventLog pagination (validated, Sprint 7). */
