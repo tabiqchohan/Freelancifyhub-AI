@@ -1,6 +1,13 @@
 import { MemoryValidationError } from '../errors/index.js';
 import type { MemoryLifecycleState } from '../enums/index.js';
-import type { IsoTimestamp, MemoryId, RequestId, TraceId } from '../types/index.js';
+import type {
+  IsoTimestamp,
+  MemoryId,
+  MemoryKey,
+  MemoryNamespace,
+  RequestId,
+  TraceId,
+} from '../types/index.js';
 import type {
   MemoryEventCategory,
   MemoryEventId,
@@ -21,6 +28,8 @@ export interface EventLogFilter {
   readonly type?: MemoryEventType;
   readonly eventTypes?: readonly MemoryEventType[];
   readonly memoryId?: MemoryId;
+  readonly namespace?: MemoryNamespace;
+  readonly key?: MemoryKey;
   readonly actorId?: string;
   readonly organizationId?: string;
   readonly workspaceId?: string;
@@ -119,6 +128,12 @@ export function eventMatchesFilter(event: StoredMemoryEvent, filter: EventLogFil
     return false;
   }
   if (filter.memoryId !== undefined && event.memoryId !== filter.memoryId) {
+    return false;
+  }
+  if (filter.namespace !== undefined && event.namespace !== filter.namespace) {
+    return false;
+  }
+  if (filter.key !== undefined && event.key !== filter.key) {
     return false;
   }
   if (filter.actorId !== undefined && event.actorId !== filter.actorId) {

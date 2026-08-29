@@ -30,6 +30,8 @@ export interface MemoryStorageAdapter {
   getById(id: MemoryId): Promise<MemoryRecord | undefined>;
   write(record: MemoryRecord, tier?: StorageTier): Promise<void>;
   remove(namespace: MemoryNamespace, key: MemoryKey): Promise<boolean>;
+  /** Sprint 9 — physically removes every record in a namespace (DSR erasure). */
+  removeByNamespace(namespace: MemoryNamespace): Promise<number>;
   list(tier?: StorageTier, filter?: MemoryRecordFilter): Promise<readonly MemoryRecord[]>;
   /** Declares the capabilities this adapter actually supports (prompt §11). */
   capabilities(): MemoryStorageCapabilities;

@@ -25,6 +25,8 @@ export enum MemoryEventType {
   Expired = 'MEMORY_EXPIRED',
   Archived = 'MEMORY_ARCHIVED',
   Deleted = 'MEMORY_DELETED',
+  Restored = 'MEMORY_RESTORED',
+  Erased = 'MEMORY_ERASED',
   Retrieved = 'MEMORY_RETRIEVED',
   Summarized = 'MEMORY_SUMMARIZED',
   // Sprint 5B: Memory consolidation event
@@ -37,6 +39,9 @@ export enum MemoryEventType {
   UpdateDenied = 'MEMORY_UPDATE_DENIED',
   DeleteDenied = 'MEMORY_DELETE_DENIED',
   ArchiveDenied = 'MEMORY_ARCHIVE_DENIED',
+  // Sprint 9: Restore / erasure denial events
+  RestoreDenied = 'MEMORY_RESTORE_DENIED',
+  EraseDenied = 'MEMORY_ERASE_DENIED',
 }
 
 /**

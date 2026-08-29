@@ -196,6 +196,8 @@ export class InMemoryEventLog implements EventLogContract {
       type: query.type,
       eventTypes: query.eventTypes,
       memoryId: query.memoryId,
+      namespace: query.namespace,
+      key: query.key,
       actorId: query.actorId,
       organizationId: query.organizationId,
       workspaceId: query.workspaceId,

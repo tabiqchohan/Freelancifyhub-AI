@@ -108,7 +108,7 @@ export class StubMemoryManagerContract implements MemoryManagerContract {
     if (!this.record) throw new Error('no record loaded');
     return this.record;
   }
-  async restoreMemory() {
+  async restoreMemory(): Promise<MemoryRecord> {
     throw new Error('stub restore unsupported');
   }
   async queryMemory() {

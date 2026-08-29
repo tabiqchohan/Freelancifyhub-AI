@@ -101,6 +101,14 @@ class RacingRepository implements MemoryRepository {
     return this.inner.getById(id);
   }
 
+  async eraseById(id: string): Promise<boolean> {
+    return this.inner.eraseById(id);
+  }
+
+  async eraseByNamespace(namespace: MemoryNamespace): Promise<number> {
+    return this.inner.eraseByNamespace(namespace);
+  }
+
   async query(query: RepositoryQuery): Promise<RepositoryPage> {
     return this.inner.query(query);
   }

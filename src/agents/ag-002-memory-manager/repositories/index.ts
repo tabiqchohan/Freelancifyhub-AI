@@ -50,6 +50,10 @@ export interface MemoryRepository {
   ): Promise<MemoryRecord>;
   /** Physically removes a record; returns whether it existed. */
   delete(namespace: MemoryNamespace, key: MemoryKey): Promise<boolean>;
+  /** Sprint 9 — physically erases a record by id (DSR). Idempotent: false when absent. */
+  eraseById(id: MemoryId): Promise<boolean>;
+  /** Sprint 9 — physically erases every record in a namespace (DSR). Idempotent. */
+  eraseByNamespace(namespace: MemoryNamespace): Promise<number>;
   list(filter?: MemoryRecordFilter): Promise<readonly MemoryRecord[]>;
   /**
    * Deterministic paginated query over the repository (Sprint 6, prompt §3-§4).

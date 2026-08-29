@@ -127,6 +127,30 @@ export class InMemoryMemoryRepository implements MemoryRepository {
     return removed;
   }
 
+  async eraseById(id: MemoryId): Promise<boolean> {
+    const address = this.ids.get(id);
+    if (address === undefined) {
+      return false;
+    }
+    const [namespace, key] = address.split('\u0000') as [string, string];
+    const removed = await this.storage.remove(namespace, key);
+    if (removed) {
+      this.ids.delete(id);
+    }
+    return removed;
+  }
+
+  async eraseByNamespace(namespace: MemoryNamespace): Promise<number> {
+    const prefix = `${namespace}\u0000`;
+    const removed = await this.storage.removeByNamespace(namespace);
+    for (const [id, storedAddress] of this.ids) {
+      if (storedAddress.startsWith(prefix)) {
+        this.ids.delete(id);
+      }
+    }
+    return removed;
+  }
+
   async list(filter?: MemoryRecordFilter): Promise<readonly MemoryRecord[]> {
     return this.storage.list(undefined, filter);
   }

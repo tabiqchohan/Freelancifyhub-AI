@@ -42,6 +42,10 @@ export type {
   DeleteMemoryInput,
   DeleteMemoryResult,
   ArchiveMemoryInput,
+  RestoreMemoryInput,
+  EraseMemoryByIdInput,
+  EraseMemoryByNamespaceInput,
+  EraseMemoryResult,
   RetrieveMemoryInput,
 } from './services/memory.service.js';
 
@@ -91,3 +95,18 @@ export type {
   MemoryConsolidationResult,
   MemoryConsolidationStatistics,
 } from './services/consolidation.service.js';
+
+export {
+  MemoryReplayServiceImpl,
+  createMemoryReplayService,
+  replayMemoryStream,
+} from './services/replay.service.js';
+export type {
+  MemoryReplayInput,
+  MemoryReplayNamespaceInput,
+  MemoryReplayResult,
+  MemoryReplayService,
+  MemoryReplayServiceOptions,
+  MemoryReplayStartState,
+  MemoryReplayState,
+} from './services/replay.service.js';

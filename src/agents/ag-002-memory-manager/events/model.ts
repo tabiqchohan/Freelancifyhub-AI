@@ -80,7 +80,10 @@ export function categoryForType(type: MemoryEventType): MemoryEventCategory {
     case MemoryEventType.Expired:
     case MemoryEventType.Archived:
     case MemoryEventType.Deleted:
+    case MemoryEventType.Restored:
       return 'lifecycle';
+    case MemoryEventType.Erased:
+      return 'security';
     case MemoryEventType.Retrieved:
       return 'retrieval';
     case MemoryEventType.Summarized:
@@ -93,6 +96,8 @@ export function categoryForType(type: MemoryEventType): MemoryEventCategory {
     case MemoryEventType.UpdateDenied:
     case MemoryEventType.DeleteDenied:
     case MemoryEventType.ArchiveDenied:
+    case MemoryEventType.RestoreDenied:
+    case MemoryEventType.EraseDenied:
       return 'security';
     default:
       return 'memory';
@@ -108,6 +113,8 @@ export function severityForType(type: MemoryEventType): MemoryEventSeverity {
     case MemoryEventType.UpdateDenied:
     case MemoryEventType.DeleteDenied:
     case MemoryEventType.ArchiveDenied:
+    case MemoryEventType.RestoreDenied:
+    case MemoryEventType.EraseDenied:
       return 'warning';
     default:
       return 'info';
@@ -124,6 +131,8 @@ export function sourceForType(type: MemoryEventType): MemoryEventSource {
     case MemoryEventType.UpdateDenied:
     case MemoryEventType.DeleteDenied:
     case MemoryEventType.ArchiveDenied:
+    case MemoryEventType.RestoreDenied:
+    case MemoryEventType.EraseDenied:
       return 'security';
     case MemoryEventType.MemoryConsolidated:
     case MemoryEventType.Summarized:
@@ -136,7 +145,10 @@ export function sourceForType(type: MemoryEventType): MemoryEventSource {
     case MemoryEventType.Expired:
     case MemoryEventType.Archived:
     case MemoryEventType.Deleted:
+    case MemoryEventType.Restored:
       return 'lifecycle';
+    case MemoryEventType.Erased:
+      return 'security';
     default:
       return 'system';
   }

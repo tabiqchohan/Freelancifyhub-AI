@@ -1,5 +1,4 @@
 import type { MemoryManager } from '../services/memory.service.js';
-import { MemoryUnsupportedOperationError } from '../errors/index.js';
 import type { ContextIntegrationService } from '../services/context-integration.service.js';
 import type { ContextIntegrationRequest } from '../services/context-integration.service.js';
 import type { MemoryConsolidationService } from '../services/consolidation.service.js';
@@ -71,17 +70,11 @@ export class MemoryManagerContractAdapter implements MemoryManagerContract {
   }
 
   /**
-   * Restore is a deferred operation: the architecture has no MEMORY_RESTORED
-   * lifecycle op (prompt §27), so this boundary fails closed rather than
-   * inventing an unsupported archive→active transition.
+   * Restore an archived memory back to ACTIVE via the real lifecycle transition
+   * (Sprint 9). Authorized by the real MemoryManager with the Restore permission.
    */
-  async restoreMemory(
-    _input: Parameters<MemoryManagerContract['restoreMemory']>[0],
-  ): Promise<never> {
-    throw new MemoryUnsupportedOperationError(
-      'Memory restore is not supported in Sprint 8 (deferred; no MEMORY_RESTORED lifecycle op)',
-      { details: { operation: 'restoreMemory' } },
-    );
+  restoreMemory(input: Parameters<MemoryManager['restoreMemory']>[0]) {
+    return this.manager.restoreMemory(input);
   }
 
   async queryMemory(input: Parameters<MemoryManagerContract['queryMemory']>[0]) {

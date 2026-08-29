@@ -10,11 +10,13 @@ import {
 import type { MemoryConfig } from '../config/schema.js';
 import { memoryConfig } from '../config/index.js';
 import {
+  MemoryActorGroup,
   MemoryLifecycleState,
+  MemoryOwnerKind,
   MemoryPermission,
+  MemorySecurityLevel,
+  MemoryType,
   type MemoryPriority,
-  type MemorySecurityLevel,
-  type MemoryType,
 } from '../enums/index.js';
 import {
   MemoryAccessDeniedError,
@@ -56,6 +58,7 @@ import { sanitizeMemoryRecordForLogs } from '../utils/sanitize.js';
 import {
   validateMemoryActor,
   validateMemoryContent,
+  validateMemoryId,
   validateMemoryKey,
   validateMemoryMetadata,
   validateMemoryNamespace,
@@ -79,7 +82,7 @@ import {
   type MemoryLifecycleService,
 } from './lifecycle.service.js';
 import type { AuthorizationService } from '../security/index.js';
-import { createAuthorizationService } from '../security/index.js';
+import { createAuthorizationService, MEMORY_ACCESS_MATRIX } from '../security/index.js';
 
 /** Input to {@link MemoryManager.createMemory} (spec §15 Save Memory). */
 export interface CreateMemoryInput {
@@ -150,6 +153,38 @@ export interface ArchiveMemoryInput {
   readonly traceId?: string;
 }
 
+/** Input to {@link MemoryManager.restoreMemory} (Sprint 9, spec §5). */
+export interface RestoreMemoryInput {
+  readonly actor: MemoryActor;
+  readonly namespace: string;
+  readonly key: string;
+  readonly reason: string;
+  readonly traceId?: string;
+}
+
+/** Input to {@link MemoryManager.eraseMemoryById} (Sprint 9 DSR right-to-forget). */
+export interface EraseMemoryByIdInput {
+  readonly actor: MemoryActor;
+  readonly memoryId: string;
+  readonly reason: string;
+  readonly traceId?: string;
+}
+
+/** Input to {@link MemoryManager.eraseMemoryByNamespace} (Sprint 9 DSR). */
+export interface EraseMemoryByNamespaceInput {
+  readonly actor: MemoryActor;
+  readonly namespace: string;
+  readonly reason: string;
+  readonly traceId?: string;
+}
+
+/** Result of a Sprint 9 erasure operation (never carries the erased payload). */
+export interface EraseMemoryResult {
+  readonly erased: number;
+  readonly status: 'erased';
+  readonly scope: { readonly id: string };
+}
+
 /** Input to {@link MemoryManager.retrieveMemory} (spec §15 Search Memory). */
 export interface RetrieveMemoryInput {
   readonly actor: MemoryActor;
@@ -169,6 +204,12 @@ export interface MemoryManager {
   updateMemory(input: UpdateMemoryInput): Promise<MemoryRecord>;
   deleteMemory(input: DeleteMemoryInput): Promise<DeleteMemoryResult>;
   archiveMemory(input: ArchiveMemoryInput): Promise<MemoryRecord>;
+  /** Sprint 9 — restore an ARCHIVED memory back to ACTIVE (version-safe, authorized). */
+  restoreMemory(input: RestoreMemoryInput): Promise<MemoryRecord>;
+  /** Sprint 9 — physically erase a single memory record by id (DSR right-to-forget). */
+  eraseMemoryById(input: EraseMemoryByIdInput): Promise<EraseMemoryResult>;
+  /** Sprint 9 — physically erase every record in a namespace (DSR right-to-forget). */
+  eraseMemoryByNamespace(input: EraseMemoryByNamespaceInput): Promise<EraseMemoryResult>;
   retrieveMemory(input: RetrieveMemoryInput): Promise<readonly MemoryRetrievalResult[]>;
   /** Evaluates retention for a single record without mutating it (Sprint 2). */
   evaluateLifecycle(input: MemoryLifecycleInput): Promise<MemoryRetentionEvaluation>;
@@ -500,6 +541,180 @@ export class MemoryManagerService implements MemoryManager {
     return archived;
   }
 
+  /**
+   * Sprint 9 — restore an ARCHIVED memory back to ACTIVE. Authorized with a
+   * delete-class privilege (`Delete`), namespace/ownership/security
+   * constrained, and version-safe. Idempotent: an already-ACTIVE
+   * record is returned unchanged. Permanently erased/deleted memory cannot be
+   * restored (the erased record is physically absent → not found; `Deleted` is
+   * terminal per the lifecycle contract).
+   */
+  async restoreMemory(input: RestoreMemoryInput): Promise<MemoryRecord> {
+    const namespace = validateMemoryNamespace(input.namespace);
+    const key = validateMemoryKey(input.key);
+    const traceId = this.traceIdOf(input.traceId);
+    const reason = validateReason(input.reason);
+
+    const current = await this.repository.get(namespace, key);
+    if (current === undefined) {
+      throw new MemoryNotFoundError(`Memory not found at namespace ${namespace} key ${key}`, {
+        details: { namespace, key },
+      });
+    }
+    if (current.lifecycle === MemoryLifecycleState.Deleted || isMemoryExpired(current)) {
+      throw new MemoryNotFoundError(
+        `Memory not found (${current.lifecycle}) at ${namespace}/${key}`,
+        {
+          details: { namespace, key, lifecycle: current.lifecycle },
+        },
+      );
+    }
+
+    this.assertCan(input.actor, MemoryPermission.Delete, this.targetOf(current));
+
+    // Idempotent: an already-ACTIVE record has nothing to restore.
+    if (current.lifecycle === MemoryLifecycleState.Active) {
+      return current;
+    }
+
+    if (!this.lifecycle.canTransition(current.lifecycle, MemoryLifecycleState.Active)) {
+      throw new MemoryLifecycleTransitionError(
+        `Cannot restore memory in lifecycle ${current.lifecycle}`,
+        { details: { from: current.lifecycle, to: MemoryLifecycleState.Active } },
+      );
+    }
+
+    const restored: MemoryRecord = {
+      ...current,
+      lifecycle: MemoryLifecycleState.Active,
+      reason,
+      traceId,
+      updatedAt: this.nowIso(),
+      version: current.version + 1,
+    };
+    validateMemoryRecord(restored, this.limits());
+    const stored = await this.repository.update(namespace, key, current.version, restored);
+    this.emit(MemoryEventType.Restored, stored, input.actor.group, {
+      reason,
+      previousVersion: current.version,
+    });
+    this.logger.info(sanitizeMemoryRecordForLogs(stored), 'memory restored');
+    return stored;
+  }
+
+  /** Sprint 9 — physically erase a single memory record by id (DSR right-to-forget). */
+  async eraseMemoryById(input: EraseMemoryByIdInput): Promise<EraseMemoryResult> {
+    this.assertRightToForgetEnabled();
+    const memoryId = validateMemoryId(input.memoryId);
+    const reason = validateReason(input.reason);
+    const traceId = this.traceIdOf(input.traceId);
+
+    const record = await this.repository.getById(memoryId);
+    if (record === undefined) {
+      // Idempotent: absent (never created or already erased) is a successful no-op.
+      return { erased: 0, status: 'erased', scope: { id: memoryId } };
+    }
+
+    this.assertCanErase(input.actor, this.targetOf(record));
+
+    const removed = await this.repository.eraseById(memoryId);
+    if (!removed) {
+      throw new MemoryStorageError(`Failed to erase memory ${memoryId}`, {
+        details: { memoryId },
+      });
+    }
+    this.emit(MemoryEventType.Erased, record, input.actor.group, {
+      reason,
+      memoryId: record.id,
+    });
+    this.logger.info(
+      { memoryId, namespace: record.namespace, key: record.key, traceId, erased: true },
+      'memory erased',
+    );
+    return { erased: 1, status: 'erased', scope: { id: memoryId } };
+  }
+
+  /** Sprint 9 — physically erase every record in a namespace (DSR right-to-forget). */
+  async eraseMemoryByNamespace(input: EraseMemoryByNamespaceInput): Promise<EraseMemoryResult> {
+    this.assertRightToForgetEnabled();
+    const namespace = validateMemoryNamespace(input.namespace);
+    const reason = validateReason(input.reason);
+    const traceId = this.traceIdOf(input.traceId);
+
+    // Conservative DSR authorization: namespace scope + elevated Delete capability.
+    if (!(input.actor.namespaces ?? []).includes(namespace)) {
+      this.emitSecurityEvent(
+        MemoryEventType.EraseDenied,
+        {
+          namespace,
+          type: MemoryType.User,
+          securityLevel: MemorySecurityLevel.Internal,
+          lifecycle: MemoryLifecycleState.Active,
+        },
+        input.actor,
+        {
+          permission: MemoryPermission.Delete,
+          denialReason: 'Actor scope does not include the target namespace',
+          denialCode: 'SCOPE_VIOLATION',
+        },
+      );
+      throw new MemoryAccessDeniedError('Erase access denied: namespace out of actor scope', {
+        details: { namespace, actorGroup: input.actor.group },
+      });
+    }
+    if (
+      input.actor.group !== MemoryActorGroup.MemoryManager &&
+      input.actor.group !== MemoryActorGroup.Admin
+    ) {
+      this.emitSecurityEvent(
+        MemoryEventType.EraseDenied,
+        {
+          namespace,
+          type: MemoryType.User,
+          securityLevel: MemorySecurityLevel.Internal,
+          lifecycle: MemoryLifecycleState.Active,
+        },
+        input.actor,
+        {
+          permission: MemoryPermission.Delete,
+          denialReason: 'DSR erasure requires elevated privileges',
+          denialCode: 'INSUFFICIENT_PERMISSION',
+        },
+      );
+      throw new MemoryAccessDeniedError(
+        'Erase access denied: DSR erasure requires elevated privileges',
+        {
+          details: { namespace, actorGroup: input.actor.group },
+        },
+      );
+    }
+    this.emitSecurityEvent(
+      MemoryEventType.AccessAllowed,
+      {
+        namespace,
+        type: MemoryType.User,
+        securityLevel: MemorySecurityLevel.Internal,
+        lifecycle: MemoryLifecycleState.Active,
+      },
+      input.actor,
+      {
+        permission: MemoryPermission.Delete,
+        reason: 'allowed',
+      },
+    );
+
+    const records = await this.repository.list({ namespace });
+    const erased = await this.repository.eraseByNamespace(namespace);
+    for (const record of records) {
+      this.emit(MemoryEventType.Erased, record, input.actor.group, {
+        reason,
+        memoryId: record.id,
+      });
+    }
+    this.logger.info({ namespace, traceId, erased, reason }, 'namespace memory erased');
+    return { erased, status: 'erased', scope: { id: namespace } };
+  }
+
   async retrieveMemory(input: RetrieveMemoryInput): Promise<readonly MemoryRetrievalResult[]> {
     const namespace = validateMemoryNamespace(input.namespace);
     const traceId = this.traceIdOf(input.traceId);
@@ -592,6 +807,95 @@ export class MemoryManagerService implements MemoryManager {
     }
   }
 
+  /**
+   * Sprint 9 — dedicated fail-closed authorization for DSR erasure. Erasure is a
+   * delete-class, terminal operation that may legitimately target records in any
+   * lifecycle (including already-soft-deleted), so it deliberately bypasses the
+   * generic LifecycleStatePolicy while still enforcing matrix permission, namespace
+   * scope, ownership and security clearance. Cross-tenant erasure is impossible.
+   */
+  private assertCanErase(actor: MemoryActor, target: MemoryAccessCheckTarget): void {
+    validateMemoryActor(actor);
+    const deny = (code: string, reason: string): never => {
+      this.emitSecurityEvent(MemoryEventType.EraseDenied, target, actor, {
+        permission: MemoryPermission.Delete,
+        denialReason: reason,
+        denialCode: code,
+      });
+      throw new MemoryAccessDeniedError(reason ?? 'Erase access denied', {
+        code,
+        details: {
+          permission: MemoryPermission.Delete,
+          namespace: target.namespace,
+          type: target.type,
+          actorGroup: actor.group,
+        },
+      });
+    };
+
+    if (!(actor.namespaces ?? []).includes(target.namespace)) {
+      deny('SCOPE_VIOLATION', `Actor scope does not include namespace ${target.namespace}`);
+    }
+
+    const matrixGranted = (MEMORY_ACCESS_MATRIX[actor.group]?.[target.type] ?? []).includes(
+      MemoryPermission.Delete,
+    );
+    if (!matrixGranted) {
+      deny('INSUFFICIENT_PERMISSION', `Actor group lacks Delete permission on ${target.type}`);
+    }
+
+    if (target.owner) {
+      const { kind, id } = target.owner;
+      if (kind === MemoryOwnerKind.System || kind === MemoryOwnerKind.Agent) {
+        if (
+          actor.group !== MemoryActorGroup.MemoryManager &&
+          actor.group !== MemoryActorGroup.Admin
+        ) {
+          deny('OWNERSHIP_VIOLATION', 'System/agent owned memory requires elevated privileges');
+        }
+      } else if (kind === MemoryOwnerKind.Project) {
+        if (actor.projectIds?.[0] !== id) {
+          deny('OWNERSHIP_VIOLATION', `Actor does not own project ${id}`);
+        }
+      } else if (kind === MemoryOwnerKind.Workspace) {
+        if (actor.workspaceId !== id) {
+          deny('OWNERSHIP_VIOLATION', `Actor does not own workspace ${id}`);
+        }
+      } else if (kind === MemoryOwnerKind.Organization) {
+        if (actor.organizationId !== id) {
+          deny('OWNERSHIP_VIOLATION', `Actor does not own organization ${id}`);
+        }
+      }
+    }
+
+    const actorClearance = actor.securityClearance ?? MemorySecurityLevel.Internal;
+    if (
+      target.securityLevel === MemorySecurityLevel.Confidential &&
+      actorClearance !== MemorySecurityLevel.Confidential
+    ) {
+      deny(
+        'SECURITY_LEVEL_VIOLATION',
+        `Actor clearance insufficient for ${target.securityLevel} memory`,
+      );
+    }
+
+    this.emitSecurityEvent(MemoryEventType.AccessAllowed, target, actor, {
+      permission: MemoryPermission.Delete,
+      reason: 'allowed',
+    });
+  }
+
+  private assertRightToForgetEnabled(): void {
+    if (!this.config.MEMORY_RIGHT_TO_FORGET_ENABLED) {
+      throw new MemoryConfigurationError(
+        'DSR right-to-forget erasure is disabled by configuration',
+        {
+          details: { key: 'MEMORY_RIGHT_TO_FORGET_ENABLED' },
+        },
+      );
+    }
+  }
+
   private throwForPermission(
     permission: MemoryPermission,
     reason: string | undefined,
@@ -619,6 +923,8 @@ export class MemoryManagerService implements MemoryManager {
         throw new MemoryAccessDeniedError(reason ?? 'Delete access denied', { details });
       case MemoryPermission.Archive:
         throw new MemoryAccessDeniedError(reason ?? 'Archive access denied', { details });
+      case MemoryPermission.Restore:
+        throw new MemoryAccessDeniedError(reason ?? 'Restore access denied', { details });
       default:
         throw new MemoryAccessDeniedError(reason ?? 'Access denied', { details });
     }
@@ -696,6 +1002,7 @@ export class MemoryManagerService implements MemoryManager {
       hard?: boolean;
       count?: number;
       previousVersion?: number;
+      memoryId?: string;
     },
   ): void {
     this.events.emit({
@@ -706,6 +1013,7 @@ export class MemoryManagerService implements MemoryManager {
       namespace: record.namespace,
       key: record.key,
       actorGroup,
+      memoryId: extras?.memoryId ?? ('id' in record ? record.id : undefined),
       version: 'version' in record ? record.version : undefined,
       previousVersion: extras?.previousVersion,
       reason: extras?.reason,

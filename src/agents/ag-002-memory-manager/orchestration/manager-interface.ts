@@ -47,14 +47,14 @@ export interface MemoryManagerContract {
   archiveMemory(input: ArchiveMemoryInput): Promise<MemoryRecord>;
   getMemory(input: GetMemoryInput): Promise<MemoryRecord>;
 
-  /** Restore an archived memory via the real lifecycle transition. */
+  /** Restore an archived memory via the real lifecycle transition (Sprint 9). */
   restoreMemory(input: {
     actor: MemoryActor;
     namespace: MemoryNamespace;
     key: string;
     reason: string;
     traceId?: string;
-  }): Promise<unknown>;
+  }): Promise<MemoryRecord>;
 
   /** Bounded, authorized record query (never exposes repository directly). */
   queryMemory(input: {

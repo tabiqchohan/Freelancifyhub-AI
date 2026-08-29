@@ -89,6 +89,28 @@ export class InMemoryStorageAdapter implements MemoryStorageAdapter {
     return removed;
   }
 
+  async removeByNamespace(namespace: MemoryNamespace): Promise<number> {
+    const prefix = `${namespace}\u0000`;
+    const addresses: string[] = [];
+    for (const address of this.records.keys()) {
+      if (address.startsWith(prefix)) {
+        addresses.push(address);
+      }
+    }
+    for (const address of addresses) {
+      this.records.delete(address);
+      this.tiers.delete(address);
+      for (const [id, storedAddress] of this.idAddress) {
+        if (storedAddress === address) {
+          this.idAddress.delete(id);
+        }
+      }
+    }
+    const removed = addresses.length;
+    this.metricsState.writes += removed;
+    return removed;
+  }
+
   async list(tier?: StorageTier, filter?: MemoryRecordFilter): Promise<readonly MemoryRecord[]> {
     this.metricsState.queries += 1;
     const results: MemoryRecord[] = [];
