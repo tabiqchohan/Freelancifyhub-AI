@@ -16,6 +16,7 @@ export * from './repositories/index.js';
 export * from './retrieval/index.js';
 export * from './events/index.js';
 export * from './clock/index.js';
+export * from './orchestration/index.js';
 export * from './utils/ids.js';
 
 export { InMemoryStorageAdapter } from './storage/in-memory.js';

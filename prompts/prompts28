@@ -1,0 +1,935 @@
+AG-002 MEMORY MANAGER — SPRINT 7
+EVENT LOG, AUDIT TRAIL & EVENT-DRIVEN MEMORY LIFECYCLE
+
+You are continuing the existing AG-002 Memory Manager implementation.
+
+CURRENT STATUS
+================
+
+AG-001:
+- Sprints 1–9 + hardening complete.
+- DO NOT MODIFY AG-001.
+
+AG-002:
+- Sprint 1 Foundation complete.
+- Sprint 2 Lifecycle complete.
+- Sprint 3 Access Control & Security complete.
+- Sprint 4 Retrieval complete.
+- Sprint 5A Context Integration complete.
+- Sprint 5B Memory Consolidation complete.
+- Sprint 6 Persistence / Storage Abstraction complete.
+- Sprint 6 committed and pushed as:
+
+47aa9e7
+
+Current verified baseline:
+- 974 tests passing.
+- Existing typecheck/lint/build errors are pre-existing.
+- One known pre-existing flaky Sprint 5A deterministic-output test uses Math.random().
+- Do not attribute these baseline issues to Sprint 7.
+
+==================================================
+SOURCE OF TRUTH
+==================================================
+
+Before writing code, inspect:
+
+- docs/shared-memory-architecture-v1.md
+- docs/ag-002-memory-manager-sprint1-v1.md
+- docs/ag-002-memory-manager-sprint2-v1.md
+- docs/ag-002-memory-manager-sprint3-v1.md
+- docs/ag-002-memory-manager-sprint4-v1.md
+- docs/ag-002-memory-manager-sprint5a-v1.md
+- docs/ag-002-memory-manager-sprint5b-v1.md
+- docs/ag-002-memory-manager-sprint6-v1.md
+
+Also inspect all current AG-002 source/test files.
+
+Pay special attention to:
+
+- events/index.ts
+- MemoryEvent
+- lifecycle service
+- memory service
+- authorization service
+- retrieval service
+- consolidation service
+- repository/storage abstraction
+- serialization
+- metrics/health
+- existing event-related tests
+
+Do not duplicate contracts that already exist.
+
+==================================================
+SPRINT 7 OBJECTIVE
+==================================================
+
+Build a robust, deterministic, append-only Event Log / Audit Trail
+abstraction for AG-002.
+
+The architecture should become:
+
+Memory Operations
+       ↓
+Memory Services
+       ↓
+Event Creation
+       ↓
+Event Validation
+       ↓
+Event Sanitization
+       ↓
+Event Log
+       ↓
+Query / Replay / Audit
+       ↓
+Future Durable Event Store
+
+The current implementation must remain in-process/in-memory.
+
+DO NOT implement Kafka.
+DO NOT implement Redis Streams.
+DO NOT implement PostgreSQL event storage.
+DO NOT implement external queues.
+DO NOT implement OpenClaw events.
+DO NOT implement external messaging.
+
+This sprint creates the abstraction and correct current implementation.
+
+==================================================
+1. INSPECT EXISTING EVENTS
+==================================================
+
+First inspect the current event implementation.
+
+Identify:
+
+- existing MemoryEvent types
+- existing event names
+- existing event payloads
+- existing security audit events
+- existing lifecycle events
+- existing consolidation events
+- existing event fields
+- current event emission locations
+
+Reuse existing event contracts wherever possible.
+
+Do NOT create duplicate event systems.
+
+==================================================
+2. CANONICAL EVENT MODEL
+==================================================
+
+Create/strengthen a canonical typed MemoryEvent model.
+
+Every event should have stable metadata where appropriate:
+
+- eventId
+- eventType
+- timestamp
+- memoryId when applicable
+- actorId when applicable
+- actorType when applicable
+- organizationId when applicable
+- workspaceId when applicable
+- projectId when applicable
+- requestId/correlationId when available
+- previousState when applicable
+- newState when applicable
+- version when applicable
+- source/service
+- severity/category
+- sanitized metadata
+
+Use existing naming conventions if they differ.
+
+Do not break existing consumers.
+
+==================================================
+3. EVENT TYPES
+==================================================
+
+Audit the existing event types.
+
+Ensure the event system can represent the existing lifecycle/security/
+memory operations.
+
+At minimum support existing concepts such as:
+
+MEMORY_CREATED
+MEMORY_READ
+MEMORY_UPDATED
+MEMORY_DELETED
+MEMORY_ARCHIVED
+MEMORY_RESTORED
+MEMORY_EXPIRED
+MEMORY_ACTIVATED
+MEMORY_CONSOLIDATED
+
+Security events already introduced in Sprint 3 must remain supported:
+
+ACCESS_ALLOWED
+ACCESS_DENIED
+READ_DENIED
+WRITE_DENIED
+UPDATE_DENIED
+DELETE_DENIED
+ARCHIVE_DENIED
+
+Do NOT blindly rename existing enum values.
+
+If the existing architecture uses different names, preserve compatibility
+and document the canonical mapping.
+
+==================================================
+4. EVENT VALIDATION
+==================================================
+
+Implement typed event validation.
+
+Validate:
+
+- event type
+- eventId
+- timestamp
+- required fields
+- IDs
+- lifecycle states
+- versions
+- actor context where required
+
+Reject malformed events.
+
+Use existing Zod conventions.
+
+Do not silently accept malformed audit events.
+
+==================================================
+5. EVENT SANITIZATION
+==================================================
+
+This is a SECURITY-CRITICAL requirement.
+
+Event payloads must never leak:
+
+- apiKey
+- API keys
+- password
+- token
+- secret
+- credential
+- pwd
+- passphrase
+- authorization headers
+- access tokens
+- refresh tokens
+
+Sanitization must be:
+
+- case-insensitive
+- nested
+- recursive
+- non-mutating
+- deterministic
+
+Use or extend the existing canonical sanitizer instead of creating
+another incompatible sanitizer.
+
+Ensure secrets cannot leak through:
+
+- event metadata
+- error details
+- actor metadata
+- operation payload
+- previous values
+- new values
+
+==================================================
+6. APPEND-ONLY EVENT LOG
+==================================================
+
+Create a typed EventLog contract.
+
+Example conceptual API:
+
+append(event)
+appendBatch(events)
+getById(eventId)
+query(query)
+count(query)
+latest(...)
+health(...)
+capabilities(...)
+
+Adapt this to the existing architecture.
+
+The EventLog must be append-only.
+
+Normal consumers must NOT be able to mutate historical events.
+
+No update(event).
+No delete(event).
+
+If future retention/deletion is required, model it as a policy rather
+than allowing arbitrary mutation of the audit trail.
+
+==================================================
+7. EVENT IMMUTABILITY
+==================================================
+
+EventLog must protect stored events from mutation.
+
+Test:
+
+- top-level mutation
+- nested payload mutation
+- metadata mutation
+- arrays
+- objects
+- actor context
+- returned query results
+
+Reading an event must never expose the internal mutable object.
+
+==================================================
+8. DETERMINISTIC EVENT IDs
+==================================================
+
+Event IDs must be unique.
+
+Prefer injected ID generation where appropriate so tests can be
+deterministic.
+
+Do NOT use Math.random() inside deterministic test paths.
+
+Where event IDs are derived from content, use a safe deterministic
+hash strategy.
+
+Do not sacrifice uniqueness merely for determinism.
+
+==================================================
+9. EVENT ORDERING
+==================================================
+
+Provide deterministic event ordering.
+
+Support ordering using:
+
+- timestamp
+- sequence/order
+- eventId as stable tiebreaker
+
+Do not rely solely on timestamps because multiple events may share
+the same timestamp.
+
+The EventLog must return the same ordering for the same stored events.
+
+==================================================
+10. CORRELATION
+==================================================
+
+Support correlation fields so one operation can be traced across events.
+
+Where available:
+
+- requestId
+- executionId
+- correlationId
+- actorId
+- memoryId
+
+Do not invent execution IDs where the caller already provides them.
+
+==================================================
+11. EVENT QUERY
+==================================================
+
+Implement typed deterministic query support.
+
+Useful filters:
+
+- eventType
+- memoryId
+- actorId
+- organizationId
+- workspaceId
+- projectId
+- requestId
+- correlationId
+- severity
+- category
+- timestamp range
+- version
+- lifecycle state
+
+Do not implement arbitrary untyped filter objects.
+
+==================================================
+12. PAGINATION
+==================================================
+
+Reuse the Sprint 6 pagination philosophy.
+
+Prefer deterministic cursor pagination.
+
+Requirements:
+
+- validated limit
+- configured maximum
+- stable ordering
+- fail-closed invalid cursor
+- no duplicate events between pages
+- no missing events between pages
+
+Do not duplicate Sprint 6 pagination utilities unnecessarily.
+
+If an existing generic pagination abstraction can be reused,
+reuse it.
+
+==================================================
+13. EVENT RETENTION
+==================================================
+
+Do NOT implement automatic deletion of audit events in this sprint.
+
+Instead create a typed retention policy abstraction if the existing
+architecture needs one.
+
+The policy must clearly distinguish:
+
+- active audit records
+- expired records
+- archival
+- legal/security retention
+
+Do not silently delete audit records.
+
+Document unresolved retention decisions.
+
+==================================================
+14. REPLAY / RECONSTRUCTION
+==================================================
+
+Create a safe event replay abstraction only if it fits the existing
+architecture.
+
+Replay must NOT mutate production memory automatically.
+
+Provide a deterministic way to inspect/reconstruct state from events.
+
+If full event-sourced reconstruction would require an architecture
+redesign, defer it and document the decision.
+
+Do not turn AG-002 into a full event-sourcing architecture.
+
+==================================================
+15. SERVICE INTEGRATION
+==================================================
+
+Integrate event logging with existing AG-002 operations where
+appropriate.
+
+Review:
+
+- MemoryService
+- LifecycleService
+- AuthorizationService
+- RetrievalService
+- ConsolidationService
+
+At minimum, events should correctly represent important state-changing
+and security-sensitive operations.
+
+Do not log every internal implementation detail.
+
+Avoid duplicate events.
+
+A denied authorization must not accidentally emit a successful
+operation event.
+
+==================================================
+16. SECURITY EVENT RULES
+==================================================
+
+Ensure:
+
+ALLOW:
+
+authorization allowed
+→ AccessAllowed where appropriate
+→ operation event only if operation actually succeeds
+
+DENY:
+
+authorization denied
+→ AccessDenied / specific denial event
+→ no fake successful memory operation event
+
+FAILED:
+
+operation fails
+→ failure event only where appropriate
+→ error data sanitized
+
+Never emit secrets.
+
+==================================================
+17. EVENT METRICS
+==================================================
+
+Add safe EventLog metrics where useful:
+
+- events appended
+- events rejected
+- events queried
+- query duration
+- append duration
+- validation failures
+- sanitization count
+- event type counts
+
+Never expose raw memory content through metrics.
+
+==================================================
+18. STORAGE ABSTRACTION
+==================================================
+
+Integrate EventLog with the storage abstraction philosophy from
+Sprint 6.
+
+Create a clean future adapter boundary.
+
+Possible abstraction:
+
+EventStore
+InMemoryEventStore
+EventLogService
+
+Use names consistent with the current repository.
+
+Current backend remains in-memory.
+
+Do NOT add:
+
+- database
+- Redis
+- Kafka
+- message broker
+- cloud event service
+
+==================================================
+19. CONFIGURATION
+==================================================
+
+Add only necessary Zod configuration.
+
+Potential examples:
+
+MEMORY_EVENT_LOG_ENABLED
+MEMORY_EVENT_LOG_MAX_PAGE_SIZE
+MEMORY_EVENT_LOG_MAX_BATCH_SIZE
+
+Do not add unnecessary flags.
+
+Defaults must preserve current behavior.
+
+==================================================
+20. ERROR HANDLING
+==================================================
+
+Use typed AG-002 errors.
+
+Support errors for:
+
+- invalid event
+- duplicate event ID
+- event not found
+- invalid cursor
+- invalid query
+- batch too large
+- unsupported event operation
+- event storage failure
+
+Correctly classify retryable vs non-retryable.
+
+Never leak secrets through errors.
+
+==================================================
+21. TESTING
+==================================================
+
+Create comprehensive Sprint 7 tests.
+
+Minimum categories:
+
+EVENT MODEL
+
+A. event creation
+B. event validation
+C. required fields
+D. invalid event rejection
+E. event type validation
+F. version validation
+
+EVENT LOG
+
+G. append
+H. appendBatch
+I. getById
+J. duplicate event ID
+K. not-found
+L. append-only behavior
+M. count
+
+IMMUTABILITY
+
+N. top-level mutation
+O. nested mutation
+P. metadata mutation
+Q. array mutation
+R. returned query mutation
+
+ORDERING
+
+S. timestamp ordering
+T. stable eventId tiebreak
+U. equal timestamps
+V. deterministic repeated queries
+
+QUERY
+
+W. eventType
+X. memoryId
+Y. actorId
+Z. organization
+AA. workspace
+AB. project
+AC. correlationId
+AD. timestamp range
+AE. combined filters
+
+PAGINATION
+
+AF. first page
+AG. next page
+AH. invalid cursor
+AI. limit validation
+AJ. max limit
+AK. no duplicate pages
+AL. no missing pages
+
+SECURITY
+
+AM. apiKey redaction
+AN. password redaction
+AO. token redaction
+AP. secret redaction
+AQ. credential redaction
+AR. pwd/passphrase redaction
+AS. nested secrets
+AT. mixed case
+AU. non-mutating sanitization
+
+INTEGRATION
+
+AV. lifecycle event
+AW. expiration event
+AX. archive event
+AY. restore event
+AZ. consolidation event
+BA. access allowed
+BB. access denied
+BC. failed operation
+BD. no false success event
+
+CORRELATION
+
+BE. requestId
+BF. executionId
+BG. correlationId
+BH. memoryId correlation
+
+STRESS
+
+BI. large event set
+BJ. large metadata
+BK. many queries
+BL. duplicate IDs
+BM. concurrent appends
+BN. pagination stress
+
+==================================================
+22. TEST DETERMINISM
+==================================================
+
+This sprint must NOT introduce Math.random()-based deterministic
+test behavior.
+
+Use:
+
+- FixedClock
+- injected ID generator
+- deterministic fixtures
+- stable ordering
+
+where needed.
+
+Do not modify the known Sprint 5A Math.random() issue unless
+absolutely required for Sprint 7.
+
+If you fix it, clearly report it as a separate pre-existing
+hardening fix.
+
+==================================================
+23. REGRESSION
+==================================================
+
+Before implementation:
+
+Record:
+
+- git status
+- npm test count
+- typecheck count/errors
+- lint count/errors
+- build count/errors
+
+After implementation:
+
+Run the FULL test suite.
+
+Expected baseline is approximately:
+
+974 passing
+
+Do not assume this number.
+
+Report exact results.
+
+==================================================
+24. NO TEST MANIPULATION
+==================================================
+
+Never:
+
+- delete tests
+- skip tests
+- weaken assertions
+- change expected behavior just to pass
+- hide errors
+- suppress TypeScript errors
+- add meaningless mocks
+
+==================================================
+25. FILE SCOPE
+==================================================
+
+Allowed:
+
+src/agents/ag-002-memory-manager/**
+tests/unit/agents/ag-002-memory-manager/**
+tests/integration/agents/ag-002-memory-manager/**
+docs/ag-002-memory-manager-sprint7-v1.md
+prompts/prompts28
+
+Do NOT modify AG-001.
+
+Avoid unrelated files.
+
+==================================================
+26. IMPLEMENTATION PHASES
+==================================================
+
+PHASE A:
+Inspect existing event contracts.
+
+PHASE B:
+Define/strengthen canonical event model.
+
+PHASE C:
+Implement validation + sanitization.
+
+PHASE D:
+Implement append-only in-memory EventLog.
+
+PHASE E:
+Implement query + deterministic pagination.
+
+PHASE F:
+Integrate lifecycle/security/consolidation events where required.
+
+PHASE G:
+Add metrics/health/capabilities.
+
+PHASE H:
+Run full regression suite.
+
+PHASE I:
+Run typecheck/lint/build.
+
+PHASE J:
+Write documentation.
+
+==================================================
+27. STOP / DEFER RULE
+==================================================
+
+If a requested feature already exists:
+
+DO NOT duplicate it.
+
+If full replay/event sourcing requires major redesign:
+
+DEFER IT.
+
+If durable event storage requires database infrastructure:
+
+DEFER IT.
+
+If a feature cannot be safely implemented without changing the
+architecture:
+
+DOCUMENT it as a deferred decision.
+
+Do not invent fake behavior.
+
+==================================================
+28. ACCEPTANCE CRITERIA
+==================================================
+
+Sprint 7 is COMPLETE only when:
+
+[ ] Canonical event model exists
+[ ] Existing event compatibility preserved
+[ ] Event validation works
+[ ] Event sanitization works
+[ ] Secrets cannot leak
+[ ] Append-only EventLog exists
+[ ] Duplicate IDs are rejected
+[ ] Events are immutable
+[ ] Deterministic ordering works
+[ ] Query filters work
+[ ] Cursor pagination works
+[ ] Invalid cursors fail closed
+[ ] Correlation fields work
+[ ] Lifecycle events work
+[ ] Security audit events work
+[ ] Consolidation events work
+[ ] No false success events occur
+[ ] Metrics/health/capabilities are truthful
+[ ] Configuration is validated
+[ ] Typed errors are used
+[ ] Unit tests exist
+[ ] Integration tests exist
+[ ] Stress tests exist
+[ ] Full existing AG-002 suite passes
+[ ] No tests deleted
+[ ] No tests weakened
+[ ] AG-001 untouched
+[ ] Sprint 5A preserved
+[ ] Sprint 5B preserved
+[ ] Sprint 6 preserved
+[ ] No database added
+[ ] No external event broker added
+[ ] No LLM added
+[ ] No vector database added
+[ ] No OpenClaw integration added
+[ ] No new Sprint 7 type errors
+[ ] No new Sprint 7 lint errors
+[ ] No new Sprint 7 build errors
+
+If ANY criterion fails:
+
+REPORT:
+
+SPRINT 7 STILL PARTIAL
+
+Do NOT claim completion.
+
+==================================================
+29. DOCUMENTATION
+==================================================
+
+Create:
+
+docs/ag-002-memory-manager-sprint7-v1.md
+
+Include:
+
+- Executive Summary
+- Existing Event Architecture
+- Canonical Event Model
+- Event Types
+- Validation
+- Sanitization
+- EventLog Contract
+- Storage Adapter
+- Query Model
+- Pagination
+- Ordering
+- Correlation
+- Security
+- Metrics
+- Lifecycle Integration
+- Consolidation Integration
+- Replay Decision
+- Retention Decision
+- Configuration
+- Error Handling
+- Testing
+- Risks
+- Deferred Decisions
+- Acceptance Criteria
+- Compatibility Report
+
+==================================================
+30. FINAL REPORT
+==================================================
+
+At completion report:
+
+1. Baseline test count
+2. Final test count
+3. New Sprint 7 test count
+4. Files created
+5. Files modified
+6. Files deleted
+7. Event model changes
+8. EventLog implementation
+9. Validation changes
+10. Sanitization changes
+11. Query/filter changes
+12. Pagination changes
+13. Ordering changes
+14. Correlation changes
+15. Lifecycle integration
+16. Security integration
+17. Consolidation integration
+18. Metrics/health/capabilities
+19. Configuration
+20. npm test result
+21. npm run typecheck result
+22. npm run lint result
+23. npm run build result
+24. Pre-existing errors
+25. Sprint 7 errors
+26. Known limitations
+27. Deferred decisions
+28. Exact git status
+29. Confirmation AG-001 untouched
+30. Confirmation Sprints 1–6 preserved
+31. Confirmation no external integrations added
+
+==================================================
+31. GIT RULE
+==================================================
+
+DO NOT COMMIT.
+
+DO NOT PUSH.
+
+Leave the Sprint 7 changes uncommitted.
+
+Wait for explicit approval before commit/push.

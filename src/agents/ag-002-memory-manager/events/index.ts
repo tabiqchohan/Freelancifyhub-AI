@@ -2,8 +2,10 @@ import type { MemoryActorGroup, MemoryLifecycleState } from '../enums/index.js';
 import type {
   IsoTimestamp,
   MemoryId,
+  MemoryJsonValue,
   MemoryKey,
   MemoryNamespace,
+  RequestId,
   TraceId,
 } from '../types/index.js';
 
@@ -37,11 +39,34 @@ export enum MemoryEventType {
   ArchiveDenied = 'MEMORY_ARCHIVE_DENIED',
 }
 
+/**
+ * Sprint 7 — canonical, transport-agnostic scalar types for the event log /
+ * audit trail. These are additive and do not change the existing emit surface.
+ */
+
+/** Unique identifier of a stored audit event. */
+export type MemoryEventId = string;
+
+/** Provenance of an audit event (canonical mapping to the emitting subsystem). */
+export type MemoryEventSource =
+  'memory' | 'lifecycle' | 'security' | 'retrieval' | 'consolidation' | 'system';
+
+/** Categorical severity used for audit classification (Sprint 7). */
+export type MemoryEventSeverity = 'info' | 'warning' | 'critical';
+
+/** Coarse event category for querying (Sprint 7). */
+export type MemoryEventCategory =
+  'memory' | 'lifecycle' | 'security' | 'retrieval' | 'consolidation' | 'system';
+
 /** A single, correlated memory event. Never carries content. */
 export interface MemoryEvent {
+  /** Canonical, unique event identifier (Sprint 7). Populated by the log. */
+  readonly eventId?: MemoryEventId;
   readonly type: MemoryEventType;
   readonly traceId: TraceId;
   readonly occurredAt: IsoTimestamp;
+  /** Canonical timestamp alias for `occurredAt` (Sprint 7). */
+  readonly timestamp?: IsoTimestamp;
   readonly namespace: MemoryNamespace;
   readonly key: MemoryKey;
   /** Record id when the event refers to a stored record. */
@@ -75,6 +100,18 @@ export interface MemoryEvent {
   readonly outputId?: MemoryId;
   /** Sprint 5B: Number of candidate records in the group. */
   readonly candidateGroupSize?: number;
+  /** Sprint 7: Canonical correlation metadata (additive, non-breaking). */
+  readonly requestId?: RequestId;
+  readonly correlationId?: string;
+  readonly organizationId?: string;
+  readonly workspaceId?: string;
+  readonly projectId?: string;
+  readonly source?: MemoryEventSource;
+  readonly service?: string;
+  readonly severity?: MemoryEventSeverity;
+  readonly category?: MemoryEventCategory;
+  /** Sprint 7: sanitized, content-free event metadata. Never raw content. */
+  readonly metadata?: Readonly<Record<string, MemoryJsonValue>>;
 }
 
 /** Emits correlated memory events without coupling to a sink (spec §21). */
@@ -113,3 +150,9 @@ export class InMemoryMemoryEventEmitter implements MemoryEventEmitter {
     this.recorded.length = 0;
   }
 }
+
+export * from './model.js';
+export * from './validation.js';
+export * from './query.js';
+export * from './log.js';
+export * from './sanitize.js';

@@ -51,6 +51,22 @@ export const DEFAULT_MEMORY_STORAGE_BACKEND = 'in-memory';
 /** Default maximum page size for repository pagination (Sprint 6, prompt §4). */
 export const DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE = 50;
 
+/** Event log / audit trail is enabled by default (Sprint 7, prompt §19). */
+export const DEFAULT_MEMORY_EVENT_LOG_ENABLED = true;
+/** Default maximum page size for EventLog pagination (Sprint 7). */
+export const DEFAULT_MEMORY_EVENT_LOG_MAX_PAGE_SIZE = 50;
+/** Default maximum events per appendBatch (Sprint 7, bounded). */
+export const DEFAULT_MEMORY_EVENT_LOG_MAX_BATCH_SIZE = 100;
+
+/** Master Orchestrator memory integration is DISABLED by default (Sprint 8). */
+export const DEFAULT_MEMORY_ORCHESTRATOR_INTEGRATION_ENABLED = false;
+/** Default timeout for the memory retrieval step during orchestration (ms). */
+export const DEFAULT_MEMORY_ORCHESTRATOR_RETRIEVAL_TIMEOUT_MS = 500;
+/** Default timeout for the context integration step during orchestration (ms). */
+export const DEFAULT_MEMORY_ORCHESTRATOR_CONTEXT_TIMEOUT_MS = 250;
+/** Default write-back policy for orchestration-triggered memory (safe: none). */
+export const DEFAULT_MEMORY_ORCHESTRATOR_WRITE_BACK = 'NONE';
+
 /** Default size limits shared by validation and config defaults. */
 export const DEFAULT_MEMORY_LIMITS: MemorySizeLimits = {
   maxContentBytes: DEFAULT_MEMORY_MAX_CONTENT_BYTES,
@@ -185,6 +201,40 @@ export const MemoryConfigSchema = z.object({
     .int()
     .positive()
     .default(DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE),
+  /** Feature flag: event log / audit trail (Sprint 7, prompt §19). */
+  MEMORY_EVENT_LOG_ENABLED: booleanFromString.default(DEFAULT_MEMORY_EVENT_LOG_ENABLED),
+  /** Maximum page size for EventLog pagination (validated, Sprint 7). */
+  MEMORY_EVENT_LOG_MAX_PAGE_SIZE: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_EVENT_LOG_MAX_PAGE_SIZE),
+  /** Maximum events per appendBatch (validated, bounded, Sprint 7). */
+  MEMORY_EVENT_LOG_MAX_BATCH_SIZE: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_EVENT_LOG_MAX_BATCH_SIZE),
+  /** Master Orchestrator memory integration feature flag (Sprint 8). */
+  MEMORY_ORCHESTRATOR_INTEGRATION_ENABLED: booleanFromString.default(
+    DEFAULT_MEMORY_ORCHESTRATOR_INTEGRATION_ENABLED,
+  ),
+  /** Bounded execution timeout for the memory retrieval step (Sprint 8). */
+  MEMORY_ORCHESTRATOR_RETRIEVAL_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_ORCHESTRATOR_RETRIEVAL_TIMEOUT_MS),
+  /** Bounded execution timeout for the context integration step (Sprint 8). */
+  MEMORY_ORCHESTRATOR_CONTEXT_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .positive()
+    .default(DEFAULT_MEMORY_ORCHESTRATOR_CONTEXT_TIMEOUT_MS),
+  /** Write-back policy for orchestration-triggered memory (Sprint 8). */
+  MEMORY_ORCHESTRATOR_WRITE_BACK: z
+    .enum(['NONE', 'EXPLICIT', 'EVENT_BASED', 'SELECTIVE'])
+    .default(DEFAULT_MEMORY_ORCHESTRATOR_WRITE_BACK),
 });
 
 export type MemoryConfig = z.infer<typeof MemoryConfigSchema>;

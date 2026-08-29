@@ -1,0 +1,994 @@
+AG-002 MEMORY MANAGER — SPRINT 8
+MASTER ORCHESTRATOR INTEGRATION & PRODUCTION HARDENING
+
+You are continuing the existing Freelancify AI agent architecture.
+
+==================================================
+CURRENT STATUS
+==================================================
+
+AG-001 Master Orchestrator:
+- Sprints 1–9 complete.
+- Hardening complete.
+- Real MasterOrchestratorService exists.
+- DO NOT MODIFY AG-001 implementation unless an additive interface
+  compatibility change is absolutely required.
+- Prefer AG-002-side adapters/contracts.
+
+AG-002 Memory Manager:
+- Sprint 1 Foundation ✅
+- Sprint 2 Lifecycle ✅
+- Sprint 3 Access Control & Security ✅
+- Sprint 4 Retrieval Engine ✅
+- Sprint 5A Context Integration ✅
+- Sprint 5B Consolidation ✅
+- Sprint 6 Persistence / Storage Abstraction ✅
+- Sprint 7 Event Log / Audit Trail ✅
+
+Latest AG-002 baseline:
+- 1048 tests passing
+- 64 Sprint 7 event-log tests
+- Typecheck: 18 pre-existing errors
+- Lint: 27 pre-existing errors
+- Build: 2 pre-existing errors
+
+Sprint 7 was NOT committed/pushed.
+
+IMPORTANT:
+Do NOT assume the exact numbers above are still current.
+Run the baseline first and report the actual current numbers.
+
+==================================================
+SPRINT 8 OBJECTIVE
+==================================================
+
+Integrate AG-002 Memory Manager with the existing AG-001 Master
+Orchestrator through clean injectable contracts.
+
+The target architecture:
+
+                 ┌─────────────────────┐
+                 │ AG-001 Orchestrator │
+                 └──────────┬──────────┘
+                            │
+                     Memory Contract
+                            │
+                            ▼
+                 ┌─────────────────────┐
+                 │ AG-002 Memory       │
+                 │ Manager             │
+                 └──────────┬──────────┘
+                            │
+       ┌────────────────────┼────────────────────┐
+       ▼                    ▼                    ▼
+ Retrieval              Context              Event Log
+       │                Integration               │
+       └────────────────────┼────────────────────┘
+                            ▼
+                    Storage Abstraction
+
+The integration must remain:
+
+- dependency-injected
+- transport-independent
+- deterministic
+- fail-closed
+- security-aware
+- backward compatible
+- testable without external services
+
+==================================================
+1. SOURCE OF TRUTH
+==================================================
+
+Before implementation inspect:
+
+AG-001:
+- docs/master-orchestrator-specification-v1.md
+- docs/ag-001-orchestrator-integration-v1.md
+- src/agents/ag-001-master-orchestrator/
+
+AG-002:
+- docs/shared-memory-architecture-v1.md
+- docs/ag-002-memory-manager-sprint1-v1.md
+- docs/ag-002-memory-manager-sprint2-v1.md
+- docs/ag-002-memory-manager-sprint3-v1.md
+- docs/ag-002-memory-manager-sprint4-v1.md
+- docs/ag-002-memory-manager-sprint5a-v1.md
+- docs/ag-002-memory-manager-sprint5b-v1.md
+- docs/ag-002-memory-manager-sprint6-v1.md
+- docs/ag-002-memory-manager-sprint7-v1.md
+
+Also inspect all current AG-002 source and tests.
+
+DO NOT invent contracts that already exist.
+
+==================================================
+2. IMPORTANT ARCHITECTURAL RULE
+==================================================
+
+AG-001 must NOT directly depend on AG-002 implementation details.
+
+Create a narrow memory capability contract.
+
+Conceptually:
+
+MemoryManagerContract
+
+with capabilities such as:
+
+- retrieve(...)
+- buildContext(...)
+- createMemory(...)
+- updateMemory(...)
+- deleteMemory(...)
+- archiveMemory(...)
+- restoreMemory(...)
+- consolidate(...)
+- getMemory(...)
+- queryMemory(...)
+- health(...)
+- capabilities(...)
+
+Use the actual existing APIs where possible.
+
+Do not expose repository/storage internals to AG-001.
+
+==================================================
+3. ORCHESTRATOR MEMORY CONTEXT
+==================================================
+
+Create an adapter/context contract allowing AG-001 to request relevant
+memory for an orchestration request.
+
+Input should support, where already available:
+
+- actor
+- requestId
+- executionId
+- namespace
+- project/workspace scope
+- memory types
+- priorities
+- query
+- token/context budget
+
+Do not duplicate RequestContext unnecessarily.
+
+Prefer mapping existing AG-001 RequestContext into AG-002 retrieval
+requests.
+
+==================================================
+4. MEMORY RETRIEVAL DURING ORCHESTRATION
+==================================================
+
+Implement the integration flow:
+
+Orchestration Request
+        ↓
+Intent Detection
+        ↓
+Context Preparation
+        ↓
+Memory Retrieval
+        ↓
+Memory Context Integration
+        ↓
+Routing / Planning / Execution
+        ↓
+Aggregation
+        ↓
+Memory Event / optional persistence
+
+The exact ordering must respect the existing AG-001 lifecycle.
+
+Do NOT rewrite AG-001's execution pipeline.
+
+If the current AG-001 architecture has no memory stage, create an
+adapter/hook rather than modifying the core engine unnecessarily.
+
+==================================================
+5. OPTIONAL MEMORY BEHAVIOR
+==================================================
+
+Memory integration must be configurable.
+
+Default behavior must preserve current AG-001 behavior if memory is
+disabled/unavailable.
+
+Add validated configuration such as:
+
+MEMORY_ORCHESTRATOR_INTEGRATION_ENABLED
+
+and only other necessary settings.
+
+Default:
+
+false OR the safest existing architecture-compatible value.
+
+Do not silently change existing production behavior.
+
+Document the decision.
+
+==================================================
+6. FAIL-SAFE BEHAVIOR
+==================================================
+
+Memory retrieval failure must NOT automatically destroy an otherwise
+valid orchestration request unless the architecture explicitly marks
+memory as mandatory.
+
+Define clear policies:
+
+MEMORY_DISABLED
+MEMORY_AVAILABLE
+MEMORY_EMPTY
+MEMORY_UNAVAILABLE
+MEMORY_SECURITY_DENIED
+MEMORY_TIMEOUT
+MEMORY_INVALID_RESPONSE
+
+For optional memory:
+
+Memory failure
+→ log safe failure
+→ continue orchestration without memory
+
+For mandatory memory, if introduced by policy:
+
+Memory failure
+→ fail closed
+→ typed error
+
+Do not invent mandatory behavior without justification.
+
+==================================================
+7. SECURITY BOUNDARY
+==================================================
+
+The integration must preserve AG-002 security guarantees.
+
+Before memory enters AG-001 context:
+
+- authorization already applied
+- lifecycle filtering applied
+- security-level filtering applied
+- sensitive data sanitized
+- snippets bounded
+- metadata sanitized
+
+AG-001 must never receive unauthorized memory.
+
+Do NOT bypass AuthorizationService.
+
+Do NOT directly read repositories from AG-001.
+
+Do NOT expose secrets.
+
+==================================================
+8. ACTOR PROPAGATION
+==================================================
+
+Actor context must be preserved from AG-001 → AG-002.
+
+Where available propagate:
+
+- actorId
+- actorType
+- role
+- organizationId
+- workspaceId
+- projectIds
+- securityClearance
+
+Do not fabricate missing actor attributes.
+
+If required security context is missing:
+
+fail closed for protected memory access.
+
+==================================================
+9. CORRELATION
+==================================================
+
+Memory operations triggered by orchestration should preserve:
+
+- requestId
+- executionId
+- correlationId
+
+Use existing IDs.
+
+Do not generate competing IDs.
+
+Event log entries should make it possible to answer:
+
+"Which orchestration caused this memory operation?"
+
+==================================================
+10. CONTEXT ASSEMBLY
+==================================================
+
+Reuse Sprint 5A ContextIntegrationService.
+
+Do NOT build a second context assembly engine.
+
+The integration should map:
+
+RetrievalResponse
+        ↓
+ContextIntegrationService
+        ↓
+Orchestrator Context
+
+Respect:
+
+- token budget
+- max sections
+- max records per section
+- snippet length
+- priority preservation
+- secret sanitization
+
+Never bypass the existing context integration service.
+
+==================================================
+11. MEMORY WRITE-BACK POLICY
+==================================================
+
+Do NOT automatically persist every user request or every response.
+
+Create a typed policy boundary for future memory write-back.
+
+Possible categories:
+
+- NONE
+- EXPLICIT
+- EVENT_BASED
+- SELECTIVE
+
+Default to the safest existing behavior.
+
+If write-back is implemented, it must be:
+
+- authorization checked
+- sanitized
+- scoped
+- bounded
+- deterministic
+- auditable
+
+Do not create uncontrolled memory growth.
+
+==================================================
+12. MEMORY FROM EXECUTION RESULTS
+==================================================
+
+If execution results are considered for memory:
+
+DO NOT persist raw execution output automatically.
+
+Create a transformation/sanitization boundary.
+
+Ensure:
+
+- secrets removed
+- credentials removed
+- huge payloads bounded
+- irrelevant metadata removed
+- authorization preserved
+
+If this requires a future summarization/LLM service, defer it.
+
+No LLM integration in Sprint 8.
+
+==================================================
+13. EVENT INTEGRATION
+==================================================
+
+Use Sprint 7 EventLog.
+
+Orchestration-triggered memory operations should generate appropriate
+events.
+
+Examples:
+
+MEMORY_READ
+MEMORY_CREATED
+MEMORY_UPDATED
+MEMORY_ARCHIVED
+MEMORY_CONSOLIDATED
+ACCESS_ALLOWED
+ACCESS_DENIED
+
+Preserve:
+
+- requestId
+- executionId
+- correlationId
+- actor context
+- memoryId
+
+Avoid duplicate event emission.
+
+==================================================
+14. HEALTH & CAPABILITIES
+==================================================
+
+Expose an integration health contract.
+
+Example conceptual result:
+
+memoryIntegration:
+  enabled
+  available
+  retrievalAvailable
+  contextIntegrationAvailable
+  eventLogAvailable
+  storageAvailable
+
+Do not claim a capability that is not actually implemented.
+
+Use existing AG-002 health/capabilities contracts.
+
+==================================================
+15. TIMEOUTS
+==================================================
+
+Memory operations must have bounded execution.
+
+Do not allow memory retrieval to block the orchestrator indefinitely.
+
+Reuse existing timeout abstractions if available.
+
+Define:
+
+- retrieval timeout
+- context integration timeout
+
+Do not create a competing global timeout architecture.
+
+If AG-001 already owns the authoritative deadline, respect it.
+
+Never extend the orchestrator deadline silently.
+
+==================================================
+16. CANCELLATION
+==================================================
+
+If the orchestration request is cancelled:
+
+- memory operations should stop where possible
+- no post-cancellation write-back
+- no corrupted state
+- no false success events
+
+Use existing cancellation contracts.
+
+Do not invent a second cancellation system.
+
+==================================================
+17. IDEMPOTENCY
+==================================================
+
+Repeated orchestration calls with the same request identity must not
+cause uncontrolled duplicate memory writes.
+
+If write-back is implemented:
+
+- use requestId/correlationId where appropriate
+- make operation behavior deterministic
+- duplicate handling must be explicit
+
+Read/retrieval operations should remain safe to repeat.
+
+==================================================
+18. MEMORY CONTEXT CONTRACT
+==================================================
+
+Create a clean result contract for AG-001.
+
+Conceptually:
+
+MemoryContextResult
+
+containing:
+
+- enabled
+- status
+- sections
+- recordCount
+- tokenCount
+- truncated
+- trace/correlation information
+- warnings
+
+Never expose internal repository objects.
+
+Do not leak raw sensitive metadata.
+
+==================================================
+19. ERROR TRANSLATION
+==================================================
+
+AG-002 errors must not leak internal implementation details into
+AG-001.
+
+Create a clean integration error mapping.
+
+Categories should distinguish:
+
+- configuration
+- authorization
+- unavailable
+- timeout
+- cancellation
+- invalid response
+- internal failure
+
+Preserve retryability where meaningful.
+
+Never leak secrets.
+
+==================================================
+20. OBSERVABILITY
+==================================================
+
+Add safe metrics/logging around integration:
+
+- memory retrieval count
+- memory retrieval success/failure
+- empty retrievals
+- authorization denials
+- context records supplied
+- context truncation
+- retrieval latency
+- context integration latency
+- memory unavailable count
+
+Do NOT log:
+
+- memory contents
+- passwords
+- API keys
+- tokens
+- credentials
+- raw sensitive metadata
+
+==================================================
+21. PERFORMANCE
+==================================================
+
+Set reasonable deterministic targets.
+
+Memory retrieval should not become an uncontrolled bottleneck.
+
+Avoid:
+
+- N+1 repository calls
+- duplicate retrieval
+- repeated context assembly
+- unnecessary serialization
+- repeated authorization work
+
+Reuse existing AG-002 pipeline.
+
+Do not prematurely optimize.
+
+Measure using tests/fixtures where practical.
+
+==================================================
+22. CACHING
+==================================================
+
+Do NOT introduce distributed caching.
+
+If local request-scoped caching is useful, it must be:
+
+- bounded
+- deterministic
+- request-scoped
+- invalidated with request lifetime
+
+Do not add Redis or external caching.
+
+If unnecessary, defer caching.
+
+==================================================
+23. TEST DOUBLES
+==================================================
+
+Create deterministic test doubles for:
+
+- MemoryManagerContract
+- retrieval
+- context integration
+- event log
+- failures
+- timeout
+- cancellation
+
+Do NOT mock away the core behavior in integration tests.
+
+At least some tests must use real AG-002 services.
+
+==================================================
+24. TESTING — REQUIRED
+==================================================
+
+Add comprehensive tests.
+
+BASELINE:
+
+A. baseline test count
+B. no regressions
+
+CONTRACT:
+
+C. memory contract
+D. missing dependency
+E. invalid dependency
+F. capability reporting
+
+CONTEXT:
+
+G. memory disabled
+H. memory enabled
+I. memory empty
+J. memory unavailable
+K. memory authorization denied
+L. memory timeout
+M. invalid memory response
+
+SECURITY:
+
+N. unauthorized memory never reaches AG-001
+O. security-level filtering
+P. secret sanitization
+Q. nested secret sanitization
+R. actor propagation
+S. missing actor security context fails closed
+
+CORRELATION:
+
+T. requestId propagation
+U. executionId propagation
+V. correlationId propagation
+W. event correlation
+
+PIPELINE:
+
+X. retrieval before execution
+Y. context integration
+Z. routing unaffected
+AA. planning unaffected
+AB. execution unaffected
+AC. aggregation unaffected
+
+FAILURE:
+
+AD. optional memory failure continues orchestration
+AE. mandatory failure if policy exists
+AF. typed error mapping
+AG. no secret leakage in errors/logs
+
+TIMEOUT:
+
+AH. retrieval timeout
+AI. context timeout
+AJ. orchestrator deadline respected
+
+CANCELLATION:
+
+AK. cancellation before memory
+AL. cancellation during memory
+AM. no post-cancel write-back
+
+WRITE-BACK:
+
+AN. disabled write-back
+AO. explicit write-back
+AP. authorization
+AQ. sanitization
+AR. duplicate/idempotent request
+
+EVENTS:
+
+AS. read event
+AT. write event
+AU. denied event
+AV. correlation
+AW. no duplicate events
+
+HEALTH:
+
+AX. healthy
+AY. unavailable
+AZ. capability mismatch
+
+STRESS:
+
+BA. large retrieval result
+BB. context budget pressure
+BC. repeated retrieval
+BD. concurrent orchestrations
+BE. memory unavailable under concurrency
+
+==================================================
+25. INTEGRATION TEST REQUIREMENT
+==================================================
+
+At least 10 tests must exercise REAL AG-002 components.
+
+Do not make all integration tests mocks.
+
+Recommended:
+
+1. real retrieval
+2. real authorization
+3. real security filtering
+4. real context integration
+5. real event log
+6. real lifecycle filtering
+7. real sanitization
+8. real correlation
+9. real timeout behavior
+10. real full memory-context flow
+
+Use deterministic fixtures.
+
+==================================================
+26. NO EXTERNAL INTEGRATIONS
+==================================================
+
+Absolutely do NOT add:
+
+- PostgreSQL
+- Neon
+- Prisma
+- Redis
+- Kafka
+- OpenClaw transport
+- OpenAI API
+- Anthropic API
+- Gemini API
+- external LLM
+- vector DB
+- Qdrant
+- cloud memory service
+- Stripe
+- social media APIs
+
+This sprint is architecture/in-process integration only.
+
+==================================================
+27. AG-001 MODIFICATION RULE
+==================================================
+
+Prefer ZERO AG-001 source modifications.
+
+If integration cannot be completed otherwise:
+
+STOP and report exactly why.
+
+Do not silently redesign AG-001.
+
+If a tiny additive compatibility export is needed, document:
+
+- file
+- change
+- reason
+- why AG-002 adapter cannot solve it
+
+==================================================
+28. CONFIGURATION
+==================================================
+
+Add only necessary configuration.
+
+Use Zod.
+
+Potential:
+
+MEMORY_ORCHESTRATOR_INTEGRATION_ENABLED
+MEMORY_ORCHESTRATOR_RETRIEVAL_TIMEOUT_MS
+MEMORY_ORCHESTRATOR_CONTEXT_TIMEOUT_MS
+
+Use safe defaults.
+
+Do not create redundant timeout settings if existing AG-002
+configuration already provides the needed behavior.
+
+==================================================
+29. DOCUMENTATION
+==================================================
+
+Create:
+
+docs/ag-002-memory-manager-sprint8-v1.md
+
+Include:
+
+1. Executive Summary
+2. Integration Architecture
+3. Contract Design
+4. AG-001 → AG-002 Mapping
+5. Actor Propagation
+6. Retrieval Flow
+7. Context Flow
+8. Security Boundary
+9. Event Correlation
+10. Failure Policies
+11. Timeout Policy
+12. Cancellation
+13. Idempotency
+14. Write-back Policy
+15. Health/Capabilities
+16. Observability
+17. Performance
+18. Testing
+19. Compatibility
+20. Deferred Decisions
+21. Risks
+22. Acceptance Criteria
+23. File Change Report
+24. Verification Report
+
+==================================================
+30. ACCEPTANCE CRITERIA
+==================================================
+
+Sprint 8 is COMPLETE only if:
+
+[ ] AG-002 integration contract exists
+[ ] AG-001 does not depend on AG-002 internals
+[ ] Memory retrieval can be requested by orchestration
+[ ] ContextIntegrationService is reused
+[ ] Existing retrieval pipeline is reused
+[ ] Authorization is preserved
+[ ] Security filtering is preserved
+[ ] Actor context propagates
+[ ] requestId propagates
+[ ] executionId propagates
+[ ] correlationId propagates
+[ ] Events correlate correctly
+[ ] Secrets cannot reach AG-001 context
+[ ] Memory disabled behavior is safe
+[ ] Memory unavailable behavior is defined
+[ ] Timeout is bounded
+[ ] Cancellation is handled
+[ ] No post-cancel unsafe write
+[ ] Write-back is policy controlled
+[ ] No uncontrolled memory growth
+[ ] Health/capabilities are truthful
+[ ] Typed integration errors exist
+[ ] Observability is safe
+[ ] No external integrations
+[ ] No LLM integration
+[ ] No database
+[ ] No vector DB
+[ ] No Redis/Kafka
+[ ] Real AG-002 integration tests exist
+[ ] At least 10 real integration tests pass
+[ ] Full regression suite passes
+[ ] No tests deleted
+[ ] No tests weakened
+[ ] No AG-001 modifications OR any modification explicitly justified
+[ ] No new typecheck errors
+[ ] No new lint errors
+[ ] No new build errors
+[ ] Documentation complete
+
+If ANY criterion fails:
+
+REPORT:
+
+SPRINT 8 STILL PARTIAL
+
+Do NOT claim completion.
+
+==================================================
+31. REGRESSION GATES
+==================================================
+
+Run:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Compare against the baseline.
+
+Clearly separate:
+
+PRE-EXISTING ERRORS
+
+from:
+
+SPRINT 8 ERRORS
+
+Do not hide baseline errors.
+
+==================================================
+32. GIT SCOPE
+==================================================
+
+Allowed:
+
+src/agents/ag-002-memory-manager/**
+tests/unit/agents/ag-002-memory-manager/**
+tests/integration/agents/ag-002-memory-manager/**
+docs/ag-002-memory-manager-sprint8-v1.md
+prompts/prompts29
+
+Prefer no AG-001 source modifications.
+
+Do not modify unrelated projects.
+
+==================================================
+33. GIT RULE
+==================================================
+
+DO NOT COMMIT.
+
+DO NOT PUSH.
+
+Leave all Sprint 8 changes uncommitted.
+
+Wait for explicit approval.
+
+==================================================
+34. FINAL REPORT
+==================================================
+
+At completion report:
+
+1. Baseline test count
+2. Final test count
+3. New test count
+4. Real AG-002 integration test count
+5. Files created
+6. Files modified
+7. Files deleted
+8. Integration contract
+9. AG-001 mapping
+10. Retrieval integration
+11. Context integration
+12. Actor propagation
+13. Security enforcement
+14. Sanitization
+15. Correlation
+16. Event integration
+17. Failure handling
+18. Timeout
+19. Cancellation
+20. Idempotency
+21. Write-back policy
+22. Health/capabilities
+23. Observability
+24. Configuration
+25. Typecheck result
+26. Lint result
+27. Build result
+28. Test result
+29. Pre-existing errors
+30. Sprint 8 errors
+31. Known limitations
+32. Deferred decisions
+33. Exact git status
+34. AG-001 modification report
+35. Confirmation Sprints 1–7 preserved
+36. Confirmation no external integrations added
+37. Confirmation no tests deleted/weakened
+
+FINAL STATUS MUST BE ONE OF:
+
+SPRINT 8 COMPLETE
+
+OR
+
+SPRINT 8 STILL PARTIAL
+
+Do not claim COMPLETE unless every required acceptance criterion
+is satisfied.

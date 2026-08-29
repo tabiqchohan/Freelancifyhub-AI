@@ -125,3 +125,40 @@ export class MemoryConflictError extends MemoryError {
     super(message, { ...options, code: options.code ?? 'MEMORY_CONFLICT_ERROR' });
   }
 }
+
+/**
+ * Sprint 7 — Raised when an audit event fails validation (malformed event).
+ * Non-retryable: a malformed event will not become valid on retry.
+ */
+export class MemoryEventValidationError extends MemoryError {
+  constructor(message: string, options: MemoryErrorOptions = {}) {
+    super(message, { ...options, code: options.code ?? 'MEMORY_EVENT_VALIDATION_ERROR' });
+  }
+}
+
+/**
+ * Sprint 7 — Raised when an event with an already-present id is appended to the
+ * append-only EventLog. Non-retryable (409 semantics for the audit trail).
+ */
+export class MemoryDuplicateEventError extends MemoryError {
+  constructor(message: string, options: MemoryErrorOptions = {}) {
+    super(message, { ...options, code: options.code ?? 'MEMORY_DUPLICATE_EVENT_ERROR' });
+  }
+}
+
+/** Sprint 7 — Raised when a requested audit event does not exist. */
+export class MemoryEventNotFoundError extends MemoryError {
+  constructor(message: string, options: MemoryErrorOptions = {}) {
+    super(message, { ...options, code: options.code ?? 'MEMORY_EVENT_NOT_FOUND_ERROR' });
+  }
+}
+
+/**
+ * Sprint 7 — Raised when an operation is not supported by the EventLog (e.g.
+ * mutate/delete historical events). The audit trail is append-only by design.
+ */
+export class MemoryUnsupportedOperationError extends MemoryError {
+  constructor(message: string, options: MemoryErrorOptions = {}) {
+    super(message, { ...options, code: options.code ?? 'MEMORY_UNSUPPORTED_OPERATION_ERROR' });
+  }
+}
