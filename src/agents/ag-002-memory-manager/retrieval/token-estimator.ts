@@ -2,9 +2,11 @@
  * Token estimator contract for context budgeting (Sprint 4, prompt §17).
  * Provides deterministic token estimation without external dependencies.
  */
+import type { MemoryRecord } from '../types/index.js';
+
 export interface TokenEstimator {
   readonly name: string;
-  estimate(record: import('../types/index.js').MemoryRecord): number;
+  estimate(record: MemoryRecord): number;
   estimateText(text: string): number;
 }
 
@@ -21,22 +23,22 @@ export class SimpleTokenEstimator implements TokenEstimator {
     this.charsPerToken = charsPerToken;
   }
 
-  estimate(record: import('../types/index.js').MemoryRecord): number {
+  estimate(record: MemoryRecord): number {
     let total = 0;
-    
+
     // Content
     if (record.content) {
-      total += this.estimateText(typeof record.content === 'string' 
-        ? record.content 
-        : JSON.stringify(record.content));
+      total += this.estimateText(
+        typeof record.content === 'string' ? record.content : JSON.stringify(record.content),
+      );
     }
-    
+
     // Key
     total += this.estimateText(record.key);
-    
+
     // Type
     total += this.estimateText(record.type);
-    
+
     // Metadata
     for (const [key, value] of Object.entries(record.metadata ?? {})) {
       total += this.estimateText(key);
@@ -44,16 +46,16 @@ export class SimpleTokenEstimator implements TokenEstimator {
         total += this.estimateText(value);
       }
     }
-    
+
     // Namespace
     total += this.estimateText(record.namespace);
-    
+
     // Owner
     if (record.owner) {
       total += this.estimateText(record.owner.kind);
       total += this.estimateText(record.owner.id);
     }
-    
+
     return total;
   }
 

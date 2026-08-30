@@ -1,15 +1,37 @@
 import { describe, expect, it, beforeEach } from 'vitest';
 
 import {
+  MemoryActorGroup,
   MemoryLifecycleState,
   MemoryPriority,
   MemorySecurityLevel,
   MemoryType,
 } from '../../../../src/agents/ag-002-memory-manager/enums/index.js';
 import type { MemoryRecord } from '../../../../src/agents/ag-002-memory-manager/types/index.js';
+import type { AuthorizationService } from '../../../../src/agents/ag-002-memory-manager/security/index.js';
 import { makeActor, makeRecord, memoryManagerActor } from './fixtures.js';
 import { createRetrievalService } from '../../../../src/agents/ag-002-memory-manager/services/retrieval.service.js';
 import { InMemoryMemoryRepository } from '../../../../src/agents/ag-002-memory-manager/repositories/in-memory.js';
+
+interface CreateRecordsOptions {
+  count?: number;
+  namespace?: string;
+  key?: string;
+  type?: MemoryType;
+  priority?: MemoryPriority;
+  securityLevel?: MemorySecurityLevel;
+  content?: MemoryRecord['content'];
+}
+
+const allowAllAuthorizer: AuthorizationService = {
+  name: 'test-allow-all',
+  authorize: () => ({ allowed: true }),
+};
+
+const denyAllAuthorizer: AuthorizationService = {
+  name: 'test-deny-all',
+  authorize: () => ({ allowed: false }),
+};
 
 describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §17, §27)', () => {
   let repo: InMemoryMemoryRepository;
@@ -19,16 +41,13 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
     repo = new InMemoryMemoryRepository();
     service = createRetrievalService({
       repository: repo,
-      authorizationService: {
-        authorize: () => ({ allowed: true }),
-      } as any,
-      config: {},
+      authorizationService: allowAllAuthorizer,
       clock: undefined,
       logger: undefined,
     });
   });
 
-  const createRecords = (overrides: Partial<MemoryRecord> = {}) => {
+  const createRecords = (overrides: CreateRecordsOptions = {}) => {
     const records: MemoryRecord[] = [];
     const ns = overrides.namespace ?? 'user:1';
     for (let i = 0; i < (overrides.count ?? 3); i++) {
@@ -40,7 +59,6 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
           priority: overrides.priority ?? MemoryPriority.Medium,
           securityLevel: overrides.securityLevel ?? MemorySecurityLevel.Internal,
           content: overrides.content ?? { text: `content_${i}` },
-          ...overrides,
         }),
       );
     }
@@ -209,7 +227,7 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
   describe('authorization filtering', () => {
     it('excludes records from unauthorized namespaces', async () => {
       const unauthorizedActor = makeActor(
-        'client',
+        MemoryActorGroup.Client,
         ['user:99'], // not in allow-list
         { securityClearance: MemorySecurityLevel.Confidential },
       );
@@ -233,14 +251,9 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
         }),
       );
 
-      const strictAuthService = {
-        authorize: (_: any) => ({ allowed: false }),
-      } as any;
-
       const strictService = createRetrievalService({
         repository: repo,
-        authorizationService: strictAuthService,
-        config: {},
+        authorizationService: denyAllAuthorizer,
         clock: undefined,
         logger: undefined,
       });
@@ -299,11 +312,9 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
         }),
       );
 
-      const lowClearanceActor = makeActor(
-        'client',
-        ['user:1'],
-        { securityClearance: MemorySecurityLevel.Internal },
-      );
+      const lowClearanceActor = makeActor(MemoryActorGroup.Client, ['user:1'], {
+        securityClearance: MemorySecurityLevel.Internal,
+      });
 
       const results = await service.retrieve({
         actor: lowClearanceActor,
@@ -625,7 +636,7 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
       });
 
       expect(results.results.length).toBeGreaterThan(0);
-      const snippet = results.results[0].snippet;
+      const snippet = results.results[0]!.snippet;
       expect(snippet).toBeDefined();
       // Snippet should be truncated at 200 chars
       if (snippet) {
@@ -663,7 +674,7 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
         query: 'test',
       });
 
-      const snippet = results.results[0].snippet;
+      const snippet = results.results[0]!.snippet;
       expect(snippet).toBeDefined();
       expect(snippet).not.toContain('sk-live');
     });
@@ -685,7 +696,7 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
         query: 'test',
       });
 
-      const snippet = results.results[0].snippet;
+      const snippet = results.results[0]!.snippet;
       expect(snippet).toBeDefined();
       expect(snippet).not.toContain('supersecret');
     });
@@ -707,7 +718,7 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
         query: 'test',
       });
 
-      const snippet = results.results[0].snippet;
+      const snippet = results.results[0]!.snippet;
       expect(snippet).toBeDefined();
       expect(snippet).not.toContain('token');
     });
@@ -741,7 +752,14 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
             namespace: 'user:1',
             key: `key_${i}`,
             type: MemoryType.User,
-            priority: MemoryPriority.Low + (i % 5), // Low to Critical
+            priority: (
+              [
+                MemoryPriority.Low,
+                MemoryPriority.Medium,
+                MemoryPriority.High,
+                MemoryPriority.Critical,
+              ] as const
+            )[i % 4], // cycle Low -> Critical
             content: { text: `content_${i}` },
           }),
         );

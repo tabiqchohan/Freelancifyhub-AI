@@ -1,6 +1,11 @@
 import type { MemoryNamespace, MemoryRecord, MemoryRecordFilter } from '../types/index.js';
-
-import { MemoryType } from '../enums/index.js';
+import type { MemoryType, MemoryPriority } from '../enums/index.js';
+import type { MemoryActor } from '../security/index.js';
+import type { MemoryRepository } from '../repositories/index.js';
+import type { AuthorizationService } from '../security/index.js';
+import type { MemoryConfig } from '../config/schema.js';
+import type { Clock } from '../clock/index.js';
+import type { Logger } from 'pino';
 
 /**
  * Future retrieval contract (spec §8, §19, prompt §13). Designed to support
@@ -49,7 +54,7 @@ export interface MemoryRetrievalEngine {
 
 /** A retrieval request with actor scoping and configuration. */
 export interface RetrievalRequest {
-  readonly actor: import('../security/index.js').MemoryActor;
+  readonly actor: MemoryActor;
   readonly query?: string;
   readonly namespace: MemoryNamespace;
   readonly types?: readonly MemoryType[];
@@ -60,7 +65,7 @@ export interface RetrievalRequest {
   readonly maxResults?: number;
   readonly minScore?: number;
   readonly contextBudgetTokens?: number;
-  readonly priorities?: readonly import('../enums/index.js').MemoryPriority[];
+  readonly priorities?: readonly MemoryPriority[];
   readonly filters?: MemoryRecordFilter;
   readonly traceId?: string;
 }
@@ -107,13 +112,16 @@ export interface RetrievalPipelineConfig {
   readonly maxResults: number;
   readonly minScore: number;
   readonly contextBudgetTokens: number;
-  readonly priorities?: readonly import('../enums/index.js').MemoryPriority[];
+  readonly priorities?: readonly MemoryPriority[];
 }
 
 /** Candidate retriever for future vector compatibility (prompt §28). */
 export interface CandidateRetriever {
   readonly name: string;
-  retrieve(query: MemoryRetrievalQuery, callerScope: readonly string[]): Promise<readonly MemoryRecord[]>;
+  retrieve(
+    query: MemoryRetrievalQuery,
+    callerScope: readonly string[],
+  ): Promise<readonly MemoryRecord[]>;
 }
 
 /** Scorer for deterministic relevance scoring (prompt §11). */
@@ -137,10 +145,10 @@ export interface QueryNormalizer {
 
 /** Retrieval service options. */
 export interface RetrievalServiceOptions {
-  readonly repository: import('../repositories/index.js').MemoryRepository;
-  readonly authorizationService: import('../security/index.js').AuthorizationService;
-  readonly config?: import('../config/schema.js').MemoryConfig;
-  readonly clock?: import('../clock/index.js').Clock;
-  readonly logger?: import('pino').Logger;
+  readonly repository: MemoryRepository;
+  readonly authorizationService: AuthorizationService;
+  readonly config?: MemoryConfig;
+  readonly clock?: Clock;
+  readonly logger?: Logger;
   readonly pipelineConfig?: Partial<RetrievalPipelineConfig>;
 }

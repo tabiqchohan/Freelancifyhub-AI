@@ -4,7 +4,8 @@ import { systemClock, type Clock } from '../clock/index.js';
 import type { MemoryConfig } from '../config/schema.js';
 import { memoryConfig } from '../config/index.js';
 import type { MemoryRepository } from '../repositories/index.js';
-import type { AuthorizationService } from '../security/index.js';
+import type { AuthorizationService, MemoryActor } from '../security/index.js';
+import { MemoryPermission } from '../enums/index.js';
 import type {
   RetrievalService,
   RetrievalRequest,
@@ -57,7 +58,7 @@ export class RetrievalServiceImpl implements RetrievalService {
 
     this.logger.info(
       { namespace: request.namespace, actorGroup: request.actor.group },
-      'Retrieval request started'
+      'Retrieval request started',
     );
 
     if (!request.namespace) {
@@ -76,55 +77,36 @@ export class RetrievalServiceImpl implements RetrievalService {
       request.actor.namespaces ?? [],
     );
 
-    this.logger.info(
-      { candidateCount: candidates.length },
-      'Candidates retrieved'
-    );
+    this.logger.info({ candidateCount: candidates.length }, 'Candidates retrieved');
 
     // Step 2: Lifecycle filtering - exclude DELETED/EXPIRED
     const { MemoryLifecycleState } = await import('../enums/index.js');
     const { isMemoryExpired } = await import('../retention/index.js');
 
     const lifecycleFiltered = candidates.filter(
-      (record) =>
-        record.lifecycle !== MemoryLifecycleState.Deleted &&
-        !isMemoryExpired(record)
+      (record) => record.lifecycle !== MemoryLifecycleState.Deleted && !isMemoryExpired(record),
     );
 
     this.logger.info(
       { lifecycleFilteredCount: lifecycleFiltered.length },
-      'After lifecycle filter'
+      'After lifecycle filter',
     );
 
     // Step 3: Authorization filtering (Sprint 3) - per-candidate, silent exclusion
     const actorNs = [...(request.actor.namespaces ?? [])];
-    const actorContext: { group: string; namespaces: string[] } = {
-      group: request.actor.group,
-      namespaces: actorNs,
-    };
+    const authorized = await this.authorizeCandidates(lifecycleFiltered, request.actor);
 
-    const authorized = await this.authorizeCandidates(lifecycleFiltered, actorContext as any);
-
-    this.logger.info(
-      { authorizedCount: authorized.length },
-      'After authorization filter'
-    );
+    this.logger.info({ authorizedCount: authorized.length }, 'After authorization filter');
 
     // Step 4: Scope filtering
     const scopeFiltered = this.filterByScope(authorized, [...actorNs]);
 
-    this.logger.info(
-      { scopeFilteredCount: scopeFiltered.length },
-      'After scope filter'
-    );
+    this.logger.info({ scopeFilteredCount: scopeFiltered.length }, 'After scope filter');
 
     // Step 5: Security-level filtering (fail-closed)
-    const securityFiltered = this.filterBySecurityLevel(scopeFiltered, request.actor as any);
+    const securityFiltered = this.filterBySecurityLevel(scopeFiltered, request.actor);
 
-    this.logger.info(
-      { securityFilteredCount: securityFiltered.length },
-      'After security filter'
-    );
+    this.logger.info({ securityFilteredCount: securityFiltered.length }, 'After security filter');
 
     // Step 5.5: Query normalization
     const normalizedQuery = this.normalizeQuery(request.query);
@@ -145,44 +127,29 @@ export class RetrievalServiceImpl implements RetrievalService {
       score: scorer.score(record, normalizedQuery ?? '', this.clock.getNow()),
     }));
 
-    this.logger.info(
-      { scoredCount: scored.length },
-      'After scoring'
-    );
+    this.logger.info({ scoredCount: scored.length }, 'After scoring');
 
     // Step 6: Minimum score filtering
     const minScore = request.minScore ?? 0;
     const scoredMin = scored.filter((item) => item.score >= minScore);
 
-    this.logger.info(
-      { scoredMinCount: scoredMin.length },
-      'After minScore filter'
-    );
+    this.logger.info({ scoredMinCount: scoredMin.length }, 'After minScore filter');
 
     // Step 7: Prioritization (sort by score desc, then priority)
     const prioritized = this.prioritize(scoredMin);
 
-    this.logger.info(
-      { prioritizedCount: prioritized.length },
-      'After prioritization'
-    );
+    this.logger.info({ prioritizedCount: prioritized.length }, 'After prioritization');
 
     // Step 8: Deduplication (by namespace:key)
     const deduplicated = this.deduplicate(prioritized);
 
-    this.logger.info(
-      { deduplicatedCount: deduplicated.length },
-      'After deduplication'
-    );
+    this.logger.info({ deduplicatedCount: deduplicated.length }, 'After deduplication');
 
     // Step 9: Result limit
     const effectiveLimit = request.maxResults ?? this.config.MEMORY_RETRIEVAL_MAX_RESULTS ?? 50;
     const limited = this.applyLimit(deduplicated, effectiveLimit);
 
-    this.logger.info(
-      { limitedCount: limited.length },
-      'After limit filter'
-    );
+    this.logger.info({ limitedCount: limited.length }, 'After limit filter');
 
     // Step 10: Context budgeting via SimpleTokenEstimator
     const tokenEstimator = new SimpleTokenEstimator();
@@ -190,7 +157,7 @@ export class RetrievalServiceImpl implements RetrievalService {
 
     this.logger.info(
       { budgetedCount: budgeted.results.length, truncated: budgeted.truncated },
-      'After context budget'
+      'After context budget',
     );
 
     // Step 11: Context assembly with snippets
@@ -216,7 +183,7 @@ export class RetrievalServiceImpl implements RetrievalService {
 
     this.logger.info(
       { results: results.length, durationMs: endTime - startTime, truncated: budgeted.truncated },
-      'Retrieval request completed'
+      'Retrieval request completed',
     );
 
     return response;
@@ -224,14 +191,14 @@ export class RetrievalServiceImpl implements RetrievalService {
 
   private async authorizeCandidates(
     candidates: MemoryRecord[],
-    actorContext: { group: string; namespaces: string[] }
+    actor: MemoryActor,
   ): Promise<MemoryRecord[]> {
     const authorized: MemoryRecord[] = [];
 
     for (const record of candidates) {
       const decision = this.authorizationService.authorize({
-        actor: actorContext as any,
-        permission: 'READ' as any,
+        actor,
+        permission: MemoryPermission.Read,
         target: {
           namespace: record.namespace,
           type: record.type,
@@ -249,21 +216,13 @@ export class RetrievalServiceImpl implements RetrievalService {
     return authorized;
   }
 
-  private filterByScope(
-    candidates: MemoryRecord[],
-    actorNamespaces: string[]
-  ): MemoryRecord[] {
+  private filterByScope(candidates: MemoryRecord[], actorNamespaces: string[]): MemoryRecord[] {
     if (actorNamespaces.length === 0) return [];
 
-    return candidates.filter(
-      (record) => actorNamespaces.includes(record.namespace)
-    );
+    return candidates.filter((record) => actorNamespaces.includes(record.namespace));
   }
 
-  private filterBySecurityLevel(
-    candidates: MemoryRecord[],
-    actor: { group: string; namespaces: string[]; securityClearance?: string }
-  ): MemoryRecord[] {
+  private filterBySecurityLevel(candidates: MemoryRecord[], actor: MemoryActor): MemoryRecord[] {
     const clearance = actor.securityClearance ?? 'INTERNAL';
 
     const clearanceOrder: Record<string, number> = {
@@ -286,7 +245,10 @@ export class RetrievalServiceImpl implements RetrievalService {
     return [...items].sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       const priorityOrder: Record<string, number> = {
-        CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1,
+        CRITICAL: 4,
+        HIGH: 3,
+        MEDIUM: 2,
+        LOW: 1,
       };
       return (priorityOrder[b.record.priority] ?? 0) - (priorityOrder[a.record.priority] ?? 0);
     });
@@ -309,7 +271,7 @@ export class RetrievalServiceImpl implements RetrievalService {
 
   private applyLimit(
     items: { record: MemoryRecord; score: number }[],
-    limit: number
+    limit: number,
   ): { record: MemoryRecord; score: number }[] {
     if (limit <= 0) return [];
     if (limit >= items.length) return [...items].sort((a, b) => b.score - a.score);
@@ -318,7 +280,7 @@ export class RetrievalServiceImpl implements RetrievalService {
 
   private applyContextBudget(
     items: { record: MemoryRecord; score: number }[],
-    tokenEstimator: SimpleTokenEstimator
+    tokenEstimator: SimpleTokenEstimator,
   ): {
     results: { record: MemoryRecord; score: number }[];
     truncated: boolean;
@@ -371,9 +333,7 @@ export class RetrievalServiceImpl implements RetrievalService {
       .replace(/password\s*:\s*\S+/gi, '[REDACTED]')
       .replace(/\btoken\s*:\s*\S+/gi, '[REDACTED]');
 
-    return text.length > 200
-      ? text.substring(0, 197) + '...'
-      : text;
+    return text.length > 200 ? text.substring(0, 197) + '...' : text;
   }
 
   private normalizeQuery(query: string | undefined): string | undefined {

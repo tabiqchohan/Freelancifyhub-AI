@@ -1,4 +1,4 @@
-import { MemoryPriority, MemoryType } from '../enums/index.js';
+import type { MemoryPriority, MemoryType } from '../enums/index.js';
 import type { Clock } from '../clock/index.js';
 import type { MemoryRecord } from '../types/index.js';
 
@@ -8,7 +8,7 @@ import type { MemoryRecord } from '../types/index.js';
  */
 export interface Scorer {
   readonly name: string;
-  score(record: import('../types/index.js').MemoryRecord, query: string, now: Date): number;
+  score(record: MemoryRecord, query: string, now: Date): number;
 }
 
 /**
@@ -47,7 +47,7 @@ export class DefaultScorer implements Scorer {
     };
   }
 
-  score(record: import('../types/index.js').MemoryRecord, query: string, now: Date = this.clock.getNow()): number {
+  score(record: MemoryRecord, query: string, now: Date = this.clock.getNow()): number {
     if (!query || query.trim().length === 0) {
       return this.baseScore(record, now);
     }
@@ -70,9 +70,15 @@ export class DefaultScorer implements Scorer {
     }
 
     // Token match signal
-    const queryTokens = normalizedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 0);
-    const contentTokens = content.toLowerCase().split(/\s+/).filter(t => t.length > 0);
-    const matchedTokens = queryTokens.filter(qt => contentTokens.some(ct => ct.includes(qt)));
+    const queryTokens = normalizedQuery
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
+    const contentTokens = content
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
+    const matchedTokens = queryTokens.filter((qt) => contentTokens.some((ct) => ct.includes(qt)));
     if (queryTokens.length > 0) {
       score += this.weights.tokenMatch * (matchedTokens.length / queryTokens.length);
     }
@@ -98,7 +104,7 @@ export class DefaultScorer implements Scorer {
     return Math.max(0, Math.min(1, score));
   }
 
-  private baseScore(record: import('../types/index.js').MemoryRecord, now: Date): number {
+  private baseScore(record: MemoryRecord, now: Date): number {
     return (
       this.weights.typeWeight * this.typeScore(record.type) +
       this.weights.recencyWeight * this.recencyScore(record, now) +
@@ -107,7 +113,7 @@ export class DefaultScorer implements Scorer {
     );
   }
 
-  private typeScore(type: import('../enums/index.js').MemoryType): number {
+  private typeScore(type: MemoryType): number {
     // Architecture-defined priorities (spec §4)
     switch (type) {
       case 'CONVERSATION':
@@ -130,22 +136,27 @@ export class DefaultScorer implements Scorer {
     }
   }
 
-  private recencyScore(record: import('../types/index.js').MemoryRecord, now: Date): number {
+  private recencyScore(record: MemoryRecord, now: Date): number {
     const recordTime = new Date(record.updatedAt).getTime();
     const ageMs = now.getTime() - recordTime;
     const ageDays = ageMs / (1000 * 60 * 60 * 24);
-    
+
     // Exponential decay: score = e^(-age/30) so 30 days -> ~0.37, 7 days -> ~0.79
     return Math.exp(-ageDays / 30);
   }
 
-  private priorityScore(priority: import('../enums/index.js').MemoryPriority): number {
+  private priorityScore(priority: MemoryPriority): number {
     switch (priority) {
-      case 'CRITICAL': return 1.0;
-      case 'HIGH': return 0.75;
-      case 'MEDIUM': return 0.5;
-      case 'LOW': return 0.25;
-      default: return 0.5;
+      case 'CRITICAL':
+        return 1.0;
+      case 'HIGH':
+        return 0.75;
+      case 'MEDIUM':
+        return 0.5;
+      case 'LOW':
+        return 0.25;
+      default:
+        return 0.5;
     }
   }
 
@@ -157,24 +168,24 @@ export class DefaultScorer implements Scorer {
       .replace(/[^\w\s]/g, '');
   }
 
-  private extractSearchableContent(record: import('../types/index.js').MemoryRecord): string {
+  private extractSearchableContent(record: MemoryRecord): string {
     const parts: string[] = [];
-    
+
     if (record.content) {
-      parts.push(typeof record.content === 'string' 
-        ? record.content 
-        : JSON.stringify(record.content));
+      parts.push(
+        typeof record.content === 'string' ? record.content : JSON.stringify(record.content),
+      );
     }
-    
+
     parts.push(record.key);
     parts.push(record.type);
-    
+
     for (const value of Object.values(record.metadata ?? {})) {
       if (typeof value === 'string') {
         parts.push(value);
       }
     }
-    
+
     return parts.join(' ');
   }
 }
