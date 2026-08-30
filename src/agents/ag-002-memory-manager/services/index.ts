@@ -55,3 +55,4 @@ export type {
   MemoryReplayStartState,
   MemoryReplayState,
 } from './replay.service.js';
+export { RetrievalServiceImpl, createRetrievalService } from './retrieval.service.js';

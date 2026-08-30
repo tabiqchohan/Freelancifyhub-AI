@@ -15,7 +15,14 @@ export type {
   ToolContextProvider,
   UserContextProvider,
   ProjectContextProvider,
+  MemoryContextLoadInput,
 } from './interfaces/providers.js';
+
+export {
+  MemoryContextProviderAdapter,
+  createMemoryContextProvider,
+} from './memory/memory-context-provider.js';
+export type { MemoryContextProviderAdapterOptions } from './memory/memory-context-provider.js';
 
 export { BudgetManager } from './budget/index.js';
 export type { BudgetResult, BudgetedSection } from './budget/index.js';

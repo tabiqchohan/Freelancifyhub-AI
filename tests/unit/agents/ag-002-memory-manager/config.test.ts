@@ -34,8 +34,6 @@ describe('MemoryConfigSchema - defaults (spec §17)', () => {
 
   it('defaults feature flags to enabled (spec §17)', () => {
     const config = MemoryConfigSchema.parse({});
-    expect(config.MEMORY_HYBRID_SEARCH_ENABLED).toBe(true);
-    expect(config.MEMORY_INCREMENTAL_SUMMARY_ENABLED).toBe(true);
     expect(config.MEMORY_RIGHT_TO_FORGET_ENABLED).toBe(true);
     expect(config.MEMORY_EVENT_LOG_REPLAY_ENABLED).toBe(true);
   });
@@ -44,13 +42,11 @@ describe('MemoryConfigSchema - defaults (spec §17)', () => {
     const config = MemoryConfigSchema.parse({
       MEMORY_TTL_CONVERSATION_MS: '60000',
       MEMORY_RETRIEVAL_MAX_RESULTS: '5',
-      MEMORY_HYBRID_SEARCH_ENABLED: 'false',
       MEMORY_LIFECYCLE_EVALUATION_ENABLED: 'false',
       MEMORY_LIFECYCLE_EVALUATION_BATCH_LIMIT: '25',
     });
     expect(config.MEMORY_TTL_CONVERSATION_MS).toBe(60000);
     expect(config.MEMORY_RETRIEVAL_MAX_RESULTS).toBe(5);
-    expect(config.MEMORY_HYBRID_SEARCH_ENABLED).toBe(false);
     expect(config.MEMORY_LIFECYCLE_EVALUATION_ENABLED).toBe(false);
     expect(config.MEMORY_LIFECYCLE_EVALUATION_BATCH_LIMIT).toBe(25);
   });
@@ -58,7 +54,7 @@ describe('MemoryConfigSchema - defaults (spec §17)', () => {
   it('rejects invalid values rather than silently accepting them', () => {
     expect(() => MemoryConfigSchema.parse({ MEMORY_TTL_CONVERSATION_MS: '-1' })).toThrow();
     expect(() => MemoryConfigSchema.parse({ MEMORY_RETRIEVAL_MAX_RESULTS: '0' })).toThrow();
-    expect(() => MemoryConfigSchema.parse({ MEMORY_HYBRID_SEARCH_ENABLED: 'maybe' })).toThrow();
+    expect(() => MemoryConfigSchema.parse({ MEMORY_RIGHT_TO_FORGET_ENABLED: 'maybe' })).toThrow();
     expect(() =>
       MemoryConfigSchema.parse({ MEMORY_LIFECYCLE_EVALUATION_BATCH_LIMIT: '0' }),
     ).toThrow();

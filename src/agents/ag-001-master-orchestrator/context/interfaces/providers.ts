@@ -1,3 +1,8 @@
+import type {
+  MemoryActorGroup,
+  MemoryNamespace,
+  MemorySecurityLevel,
+} from '../../../ag-002-memory-manager/index.js';
 import type { ContextItem, ContextSourceType } from '../types/index.js';
 
 /**
@@ -18,6 +23,32 @@ export interface ContextProvider {
 /** Future memory provider (AG-002). Interface only. */
 export interface MemoryContextProvider extends ContextProvider {
   readonly source: ContextSourceType.MEMORY;
+  load(input?: MemoryContextLoadInput): Promise<readonly ContextItem[]>;
+}
+
+/**
+ * Request-scoped input the AG-001 orchestrator passes into the AG-002-backed
+ * memory provider (prompt32 final wiring). Maps 1:1 to AG-002's authorisation
+ * and retrieval contracts.
+ */
+export interface MemoryContextLoadInput {
+  readonly requestId?: string;
+  readonly traceId?: string;
+  /** AG-002 actor group (access matrix, spec §7). */
+  readonly actorGroup: MemoryActorGroup;
+  readonly actorId?: string;
+  readonly actorRole?: string;
+  /** Actor's authorized namespace allow-list (fail-closed scope). */
+  readonly namespaces: readonly MemoryNamespace[];
+  readonly query?: string;
+  readonly maxResults?: number;
+  readonly contextBudgetTokens?: number;
+  readonly maxRecordsPerSection?: number;
+  readonly snippetLength?: number;
+  readonly organizationId?: string;
+  readonly workspaceId?: string;
+  readonly projectIds?: readonly string[];
+  readonly securityClearance?: MemorySecurityLevel;
 }
 
 /** Future knowledge provider (AG-003). Interface only. */

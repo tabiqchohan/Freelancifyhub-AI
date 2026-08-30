@@ -9,4 +9,3 @@ export * from './health.js';
 export * from './manager-interface.js';
 export * from './memory-manager.js';
 export * from './util.js';
-export * from './test-doubles.js';

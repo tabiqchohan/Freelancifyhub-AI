@@ -5,9 +5,11 @@ import {
   InMemoryOrchestrationMetrics,
   MemoryContextStatus,
   MemoryWriteBackPolicy,
+} from '../../../../src/agents/ag-002-memory-manager/orchestration/index.js';
+import {
   StubMemoryManagerContract,
   StubMetricSink,
-} from '../../../../src/agents/ag-002-memory-manager/orchestration/index.js';
+} from '../../../../src/agents/ag-002-memory-manager/orchestration/test-doubles.js';
 import {
   InMemoryMemoryEventEmitter,
   MemoryEventType,

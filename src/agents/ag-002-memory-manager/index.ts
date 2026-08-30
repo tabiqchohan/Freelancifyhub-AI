@@ -118,3 +118,6 @@ export {
   stableStringDigest,
   MemoryIdempotencyValidationError,
 } from './services/idempotency.js';
+
+export { RetrievalServiceImpl, createRetrievalService } from './services/retrieval.service.js';
+export type { RetrievalServiceOptions } from './retrieval/index.js';

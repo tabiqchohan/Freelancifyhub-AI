@@ -149,13 +149,9 @@ export const MemoryConfigSchema = z.object({
     .int()
     .positive()
     .default(DEFAULT_MEMORY_LIFECYCLE_EVALUATION_BATCH_LIMIT),
-  /** Feature flag: hybrid retrieval (spec §17). */
-  MEMORY_HYBRID_SEARCH_ENABLED: booleanFromString,
-  /** Feature flag: incremental summaries (spec §17). */
-  MEMORY_INCREMENTAL_SUMMARY_ENABLED: booleanFromString,
-  /** Feature flag: right-to-forget DSR erasure (spec §17). */
+  /** Feature flag: right-to-forget DSR erasure (spec §17). Live gate (Sprint 9). */
   MEMORY_RIGHT_TO_FORGET_ENABLED: booleanFromString,
-  /** Feature flag: event-log replay recovery (spec §17). */
+  /** Feature flag: event-log replay recovery (spec §17). Live gate (Sprint 9). */
   MEMORY_EVENT_LOG_REPLAY_ENABLED: booleanFromString,
   /** Feature flag: context integration (Sprint 5A, prompt §11). */
   MEMORY_CONTEXT_INTEGRATION_ENABLED: booleanFromString.default(
