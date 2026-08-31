@@ -1,0 +1,375 @@
+# FINAL CLEANUP — ZERO TYPECHECK / LINT / BUILD ERRORS
+
+We have completed AG-001 Sprints 1–9 and AG-002 Sprints 1–11.
+
+Current verified baseline:
+
+* Tests: 1172 passing
+* Typecheck: 18 pre-existing errors
+* Lint: 27 pre-existing errors
+* Build: 2 pre-existing errors
+
+These errors were previously classified as "pre-existing" because they existed before the latest sprint changes.
+
+NOW clean them properly.
+
+## PRIMARY OBJECTIVE
+
+Bring the repository to:
+
+* npm test → ALL PASS
+* npm run typecheck → 0 errors
+* npm run lint → 0 errors
+* npm run build → SUCCESS
+
+Do NOT implement new features.
+
+Do NOT start AG-003.
+
+Do NOT start AG-004.
+
+Do NOT add LLM integration.
+
+Do NOT add vector search.
+
+Do NOT add external database infrastructure.
+
+Do NOT add payment/API integrations.
+
+Do NOT redesign AG-001 or AG-002.
+
+This is a technical-debt cleanup only.
+
+==================================================
+PHASE 1 — BASELINE
+==================
+
+First run:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Capture the exact current errors.
+
+Group them into:
+
+1. TypeScript errors
+2. ESLint errors
+3. Build errors
+
+Do NOT assume the previous counts are still identical.
+
+==================================================
+PHASE 2 — FIX TYPESCRIPT ERRORS FIRST
+=====================================
+
+Fix all TypeScript errors at their root cause.
+
+Likely areas from the previous audit include retrieval/scorer.ts,
+retrieval/token-estimator.ts, retrieval/service.ts and related tests,
+but DO NOT assume these are the only files.
+
+Inspect every actual error.
+
+Rules:
+
+* No @ts-ignore
+* No @ts-expect-error unless genuinely required and documented
+* No any just to silence errors
+* No unsafe casts just to make typecheck pass
+* No deleting code merely because it causes a type error
+* No weakening interfaces
+* No changing public contracts unnecessarily
+* Preserve strict typing
+* Prefer proper imports/types/interfaces
+* Fix incorrect variable names/references
+* Fix missing declarations
+* Remove genuinely unused imports
+* Fix incorrect type/value imports
+* Fix nullable/undefined handling properly
+* Preserve runtime behavior
+
+After fixing TypeScript errors:
+
+npm run typecheck
+
+Must report:
+
+0 errors.
+
+Then run:
+
+npm test
+
+All tests must still pass.
+
+==================================================
+PHASE 3 — FIX BUILD ERRORS
+==========================
+
+After typecheck is clean, run:
+
+npm run build
+
+Fix any remaining build errors.
+
+Determine whether each build error is:
+
+* import/export problem
+* module resolution
+* configuration
+* Next/TypeScript compilation
+* environment/configuration issue
+* actual source error
+
+Fix the root cause.
+
+Do NOT bypass build checks.
+
+Do NOT disable TypeScript checking.
+
+Do NOT modify build configuration just to hide source errors.
+
+Goal:
+
+npm run build
+
+SUCCESS.
+
+Then:
+
+npm test
+
+ALL PASS.
+
+==================================================
+PHASE 4 — FIX ESLINT
+====================
+
+Run:
+
+npm run lint
+
+Fix all remaining lint errors.
+
+Rules:
+
+* Do not disable ESLint globally
+* Do not add broad eslint-disable comments
+* Do not disable a rule for an entire directory
+* Do not delete working functionality
+* Do not weaken lint configuration
+* Do not modify ESLint config merely to make errors disappear
+
+Fix the actual source issues.
+
+Typical fixes may include:
+
+* unused imports
+* incorrect type-only imports
+* unnecessary variables
+* unreachable code
+* incorrect async usage
+* explicit unsafe types
+* import ordering if configured
+* shadowed variables
+* unnecessary conditions
+
+Use the smallest safe fix.
+
+After lint cleanup:
+
+npm run lint
+
+Must report:
+
+0 errors.
+
+==================================================
+PHASE 5 — REGRESSION CHECK
+==========================
+
+Run the complete gate sequence:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Expected:
+
+Tests       1172+ passing
+Typecheck   0 errors
+Lint        0 errors
+Build       SUCCESS
+
+If test count increases because you add regression tests, that is fine.
+
+Do NOT delete existing tests.
+
+Do NOT weaken assertions.
+
+Do NOT skip tests.
+
+Do NOT change tests simply to accommodate an incorrect implementation.
+
+==================================================
+PHASE 6 — ARCHITECTURE SAFETY
+=============================
+
+During cleanup verify that no cleanup change accidentally breaks:
+
+AG-001:
+
+* orchestration
+* intent detection
+* context builder
+* routing
+* planning
+* execution
+* aggregation
+
+AG-002:
+
+* CRUD
+* lifecycle
+* authorization
+* retrieval
+* context integration
+* consolidation
+* storage
+* cache
+* event log
+* replay
+* DSR erasure
+* orchestration
+* AG-001 memory provider adapter
+
+Especially verify:
+
+* namespace isolation
+* authorization
+* security filtering
+* sanitization
+* timeout
+* cancellation
+* idempotency
+* cache invalidation
+* DSR erase behavior
+
+No security shortcut is acceptable for lint/type/build cleanup.
+
+==================================================
+PHASE 7 — CHECK FOR ACCIDENTAL CHANGES
+======================================
+
+Run:
+
+git status
+git diff --stat
+git diff
+
+Review every modified file.
+
+The cleanup should contain ONLY:
+
+* TypeScript fixes
+* lint fixes
+* build fixes
+* necessary regression tests/documentation if required
+
+Reject unrelated feature work.
+
+Do NOT modify:
+
+* AG-001 architecture unnecessarily
+* AG-002 architecture unnecessarily
+* prompts
+* unrelated application features
+
+==================================================
+PHASE 8 — FINAL ERROR SEARCH
+============================
+
+Run the actual commands again:
+
+npm run typecheck
+npm run lint
+npm run build
+npm test
+
+Do not rely on old output.
+
+The final report must contain the actual fresh numbers.
+
+==================================================
+IMPORTANT: NO FAKE CLEANUP
+==========================
+
+DO NOT make the repository "green" by:
+
+* disabling TypeScript
+* disabling ESLint rules
+* adding @ts-ignore everywhere
+* adding any everywhere
+* deleting failing tests
+* weakening tests
+* excluding source directories
+* excluding files from tsconfig
+* excluding files from ESLint
+* changing build scripts to skip checks
+* hiding errors
+* changing error thresholds
+* marking errors as warnings
+* removing functionality
+
+The objective is a genuinely clean codebase.
+
+==================================================
+FINAL REPORT
+============
+
+When finished, provide:
+
+FINAL CLEANUP REPORT
+
+1. Initial typecheck errors
+2. Initial lint errors
+3. Initial build errors
+4. TypeScript root causes
+5. TypeScript fixes
+6. Build root causes
+7. Build fixes
+8. Lint root causes
+9. Lint fixes
+10. Files modified
+11. Tests added/modified
+12. Final test count
+13. Final typecheck result
+14. Final lint result
+15. Final build result
+16. Regression verification
+17. Security/architecture verification
+18. Git status
+19. Remaining technical debt
+20. Final recommendation
+
+CRITICAL:
+
+If an error cannot safely be fixed without architectural changes, STOP and explain the exact blocker instead of hiding it.
+
+Do not invent a workaround merely to achieve zero errors.
+
+==================================================
+COMMIT RULE
+===========
+
+DO NOT COMMIT.
+
+DO NOT PUSH.
+
+Leave the cleanup changes in the working tree for review.
+
+Start now by running the four baseline commands and then fix the errors systematically.

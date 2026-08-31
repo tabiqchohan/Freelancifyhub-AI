@@ -1,11 +1,13 @@
 import type { MemoryConfig } from '../config/schema.js';
 import { memoryConfig } from '../config/index.js';
 import { MemoryLifecycleState } from '../enums/index.js';
-import { MemoryConfigurationError } from '../errors/index.js';
+import { MemoryAccessDeniedError, MemoryConfigurationError } from '../errors/index.js';
+import type { MemoryActor } from '../security/index.js';
 import { MemoryEventType, type StoredMemoryEvent } from '../events/index.js';
 import type { EventLogContract } from '../events/log.js';
 import { memoryLifecycle } from '../lifecycle/index.js';
 import {
+  validateMemoryActor,
   validateMemoryKey,
   validateMemoryNamespace,
   validateTraceId,
@@ -57,12 +59,21 @@ export interface MemoryReplayInput {
    */
   readonly from?: { readonly state: MemoryReplayStartState; readonly version?: number };
   readonly traceId?: string;
+  /**
+   * Optional actor (Sprint 12). When provided, the replay is authorization
+   * checked: the actor must be valid and have the requested namespace in scope
+   * (fail-closed). When omitted, replay behaves as before (no actor gate) so
+   * the underlying event-log primitive callers keep working unchanged.
+   */
+  readonly actor?: MemoryActor;
 }
 
 /** Input to replay every key historically present in a namespace. */
 export interface MemoryReplayNamespaceInput {
   readonly namespace: MemoryNamespace;
   readonly traceId?: string;
+  /** Optional actor (Sprint 12). See {@link MemoryReplayInput.actor}. */
+  readonly actor?: MemoryActor;
 }
 
 /** Options for constructing the replay service. */
@@ -101,6 +112,8 @@ export class MemoryReplayServiceImpl implements MemoryReplayService {
     const key = validateMemoryKey(input.key);
     const traceId = input.traceId === undefined ? createTraceId() : validateTraceId(input.traceId);
 
+    this.assertActorScope(input.actor, namespace);
+
     const events = await this.eventsFor(namespace, key);
     return replayMemoryStream(events, { namespace, key, from: input.from, traceId });
   }
@@ -109,6 +122,8 @@ export class MemoryReplayServiceImpl implements MemoryReplayService {
     this.assertEnabled();
     const namespace = validateMemoryNamespace(input.namespace);
     const traceId = input.traceId === undefined ? createTraceId() : validateTraceId(input.traceId);
+
+    this.assertActorScope(input.actor, namespace);
 
     const keys = await this.keysFor(namespace);
     const results: MemoryReplayResult[] = [];
@@ -122,6 +137,27 @@ export class MemoryReplayServiceImpl implements MemoryReplayService {
     if (!this.config.MEMORY_EVENT_LOG_REPLAY_ENABLED) {
       throw new MemoryConfigurationError('Event-log replay is disabled by configuration', {
         details: { key: 'MEMORY_EVENT_LOG_REPLAY_ENABLED' },
+      });
+    }
+  }
+
+  /**
+   * Sprint 12 — fail-closed actor gate for replay. When an actor is supplied,
+   * it must be a valid actor whose namespace allow-list includes the requested
+   * namespace; otherwise replay is denied (namespace isolation). When no actor
+   * is supplied, replay proceeds unchanged (backward-compatible with callers
+   * that treat the event log as an internal primitive).
+   */
+  private assertActorScope(actor: MemoryActor | undefined, namespace: MemoryNamespace): void {
+    if (actor === undefined) {
+      return;
+    }
+    validateMemoryActor(actor);
+    const scopes = actor.namespaces ?? [];
+    if (scopes.length === 0 || !scopes.includes(namespace)) {
+      throw new MemoryAccessDeniedError(`Actor scope does not include namespace ${namespace}`, {
+        code: 'SCOPE_VIOLATION',
+        details: { namespace, actorGroup: actor.group },
       });
     }
   }

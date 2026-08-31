@@ -1,0 +1,588 @@
+# SPRINT 12 — PRODUCTION SECURITY & RETRIEVAL CORRECTNESS
+
+## STATUS / CONTEXT
+
+AG-001 Sprints 1–9 are implemented.
+
+AG-002 Sprints 1–11 are implemented.
+
+Technical-debt cleanup is complete:
+
+* Tests: 1172 passing
+* Typecheck: 0 errors
+* Lint: 0 errors
+* Build: successful
+
+Final audit identified these production blockers:
+
+CRITICAL:
+
+* CRIT-1: Retrieval scope/security filters are computed but discarded.
+* No durable persistence yet.
+* No production composition root.
+* ExecutionEngine has no real production executors.
+* AG-001 ↔ AG-002 integration is not production-wired.
+* Event log has no runtime producer wiring.
+
+HIGH:
+
+* Read-path security clearance enforcement
+* Canonical sensitive-data redaction consistency
+* Event-log authorization/sanitization
+
+## SPRINT 12 OBJECTIVE
+
+Fix ONLY the security and retrieval-correctness issues identified by the final audit.
+
+This sprint must make AG-002 retrieval/security behavior genuinely safe before we introduce:
+
+* PostgreSQL
+* durable persistence
+* production composition root
+* real AgentExecutor
+* AG-003
+* AG-004
+* LLM integration
+* vector search
+* external integrations
+
+Do NOT implement those things in Sprint 12.
+
+==================================================
+PHASE 1 — BASELINE
+==================
+
+First inspect the repository.
+
+Run:
+
+git status
+git log -10 --oneline
+
+Then:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Record exact baseline numbers.
+
+DO NOT assume previous numbers are unchanged.
+
+==================================================
+PHASE 2 — CRITICAL RETRIEVAL BUG
+================================
+
+Audit:
+
+src/agents/ag-002-memory-manager/services/retrieval.service.ts
+
+The final audit reported:
+
+"Retrieval scope/security filters are computed but discarded."
+
+Specifically verify the entire pipeline.
+
+Expected:
+
+candidate retrieval
+→ lifecycle filtering
+→ authorization filtering
+→ namespace/scope filtering
+→ security clearance filtering
+→ scoring
+→ ranking
+→ deduplication
+→ result limit
+→ context budget
+→ sanitization
+→ response
+
+Find exactly where filtering results are calculated but the filtered collection is not propagated.
+
+Fix the ROOT CAUSE.
+
+Requirements:
+
+* Unauthorized memories MUST NOT appear in RetrievalResponse.
+* Namespace violations MUST NOT appear.
+* Ownership violations MUST NOT appear.
+* Security clearance violations MUST NOT appear.
+* Deleted memories MUST NOT appear.
+* Expired memories MUST NOT appear.
+* Authorization must fail closed.
+* Filtering must happen BEFORE scoring/ranking and response assembly.
+* Statistics must accurately represent filtered counts.
+* No filtered record may leak through snippets, metadata, statistics, or response objects.
+* Do not merely filter at the final formatter.
+* Preserve deterministic ordering.
+
+Add regression tests specifically reproducing the original bug.
+
+At minimum test:
+
+1. unauthorized namespace
+2. unauthorized owner
+3. insufficient security clearance
+4. authorized + unauthorized mixed candidates
+5. multiple namespaces
+6. deleted memory
+7. expired memory
+8. combined authorization + security filtering
+9. filtered record cannot appear in snippets
+10. filtered record cannot appear in metadata
+
+==================================================
+PHASE 3 — READ-PATH SECURITY CLEARANCE
+======================================
+
+Audit every READ path.
+
+Do not assume retrieval is the only path.
+
+Inspect:
+
+* MemoryManagerService
+* RetrievalService
+* ContextIntegrationService
+* MemoryContextProviderAdapter
+* consolidation candidate reads
+* orchestration memory reads
+* repository access where appropriate
+
+Verify that a caller with insufficient security clearance cannot obtain a memory through an alternate path.
+
+Security levels must be enforced consistently.
+
+Required behavior:
+
+LOW clearance cannot access higher-level memory.
+
+INTERNAL cannot access CONFIDENTIAL unless explicitly authorized by the existing policy.
+
+CONFIDENTIAL can access allowed lower levels according to the existing policy.
+
+Do NOT invent a new security model.
+
+Reuse the existing:
+
+* MemoryActor
+* securityClearance
+* AuthorizationService
+* SecurityLevelPolicy
+* existing permission matrix
+* namespace/ownership policies
+
+Fail closed on:
+
+* missing actor
+* invalid actor context
+* missing clearance
+* malformed security level
+* unknown security level
+
+Add regression tests for direct reads and retrieval/context paths.
+
+==================================================
+PHASE 4 — CANONICAL REDACTION
+=============================
+
+Audit ALL sensitive-data sanitization paths.
+
+Existing sanitizer requirements include:
+
+* apiKey
+* password
+* token
+* secret
+* credential
+* pwd
+* passphrase
+
+Must support:
+
+* case-insensitive keys
+* nested objects
+* deeply nested objects
+* arrays
+* mixed casing
+* compound key names
+* immutable input
+
+Example sensitive keys that must be detected:
+
+apiKey
+APIKEY
+api_key
+password
+Password
+userPassword
+accessToken
+refreshToken
+secret
+clientSecret
+credentials
+credential
+pwd
+passphrase
+
+Do not rely on one individual formatter to sanitize data.
+
+Identify the canonical trust boundary for each path.
+
+Verify sanitization for:
+
+1. Memory output
+2. Retrieval result
+3. Context integration
+4. Context snippets
+5. Aggregated/context response
+6. Events
+7. Event metadata
+8. Replay output
+9. Consolidation provenance/metadata where applicable
+10. Errors/log-safe structures
+11. Metrics
+
+IMPORTANT:
+
+Do not sanitize by mutating the original record.
+
+Sanitization must produce safe copies.
+
+Do not remove legitimate non-sensitive data unnecessarily.
+
+Add regression tests for:
+
+* nested secrets
+* depth ≥ 6
+* arrays
+* mixed case
+* compound names
+* metadata
+* snippets
+* events
+* replay
+* non-mutation
+
+==================================================
+PHASE 5 — EVENT LOG SECURITY
+============================
+
+Audit:
+
+src/agents/ag-002-memory-manager/events/
+
+and especially:
+
+* log.ts
+* sanitize.ts
+* validation.ts
+* query.ts
+* event producers
+
+Verify:
+
+* unauthorized callers cannot read restricted event information
+* namespace isolation applies
+* event queries are properly scoped
+* sensitive data is sanitized
+* tombstones remain content-free
+* event metadata cannot leak secrets
+* replay cannot bypass authorization
+* replay cannot resurrect erased content
+* malformed events fail closed
+
+Do NOT implement a new event architecture.
+
+Use the existing event-log design.
+
+Add tests for:
+
+1. unauthorized event query
+2. namespace isolation
+3. sensitive event metadata
+4. sanitized event payload
+5. erase tombstone
+6. replay after erase
+7. malformed event
+8. out-of-order event
+9. duplicate event
+10. authorization denial
+
+==================================================
+PHASE 6 — SECURITY BOUNDARY AUDIT
+=================================
+
+Trace sensitive memory through:
+
+create
+→ update
+→ read
+→ retrieve
+→ context integration
+→ consolidate
+→ archive
+→ restore
+→ expire
+→ erase
+→ event
+→ replay
+→ response
+
+For each path determine:
+
+* authorization checked?
+* namespace checked?
+* ownership checked?
+* security clearance checked?
+* lifecycle state checked?
+* sanitization applied?
+* fail-closed?
+
+Create a matrix:
+
+PATH | AUTH | SCOPE | OWNERSHIP | CLEARANCE | LIFECYCLE | SANITIZED | STATUS
+
+Do not change architecture simply to fill the matrix.
+
+==================================================
+PHASE 7 — SECURITY REGRESSION TESTS
+===================================
+
+Add tests only where coverage is missing.
+
+Do NOT delete or weaken existing tests.
+
+Tests should verify actual behavior rather than implementation details.
+
+Minimum security regression categories:
+
+A. Unauthorized read
+B. Unauthorized retrieval
+C. Unauthorized context integration
+D. Namespace violation
+E. Ownership violation
+F. Clearance violation
+G. Deleted memory
+H. Expired memory
+I. Secret leakage
+J. Event leakage
+K. Replay leakage
+L. Erased-memory resurrection
+M. Mixed authorized/unauthorized retrieval
+N. Fail-closed invalid actor
+O. Fail-closed invalid security level
+
+==================================================
+PHASE 8 — DETERMINISM
+=====================
+
+The final audit also identified previous deterministic-output concerns.
+
+Review Sprint 5A ContextIntegrationService for:
+
+* Math.random()
+* Date.now()
+* current timestamps
+* nondeterministic IDs
+* unordered object iteration where output ordering matters
+
+Do NOT redesign the service.
+
+If nondeterminism affects a deterministic output contract, fix only the minimum necessary root cause.
+
+Use injected clock or deterministic correlation/trace identifiers where the existing architecture already supports it.
+
+Add a regression test:
+
+# same input + same dependencies
+
+same logical output
+
+Do not compare inherently dynamic fields unless they are required to be deterministic.
+
+==================================================
+PHASE 9 — PERFORMANCE SAFETY
+============================
+
+Do not perform broad optimization.
+
+Only verify that the security filtering fix does not introduce obvious:
+
+* O(n²) behavior
+* unbounded recursion
+* unbounded result collection
+* repeated authorization calls where avoidable
+* repeated sanitization of the same huge structure
+
+If an issue is discovered but fixing it would require architectural redesign:
+
+REPORT it.
+
+Do not redesign in Sprint 12.
+
+==================================================
+PHASE 10 — NO SCOPE CREEP
+=========================
+
+STRICTLY DO NOT IMPLEMENT:
+
+* PostgreSQL
+* Neon integration
+* real durable backend
+* production database
+* Redis
+* production composition root
+* real AgentExecutor
+* OpenClaw runtime
+* AG-003
+* AG-004
+* LLM
+* vector database
+* embeddings
+* social media
+* payments
+* external APIs
+
+Those belong to later work.
+
+==================================================
+PHASE 11 — QUALITY GATES
+========================
+
+After implementation run:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Expected:
+
+Tests: ALL PASS
+Typecheck: 0 errors
+Lint: 0 errors
+Build: SUCCESS
+
+No existing test may be deleted.
+
+No assertion may be weakened.
+
+No security test may be skipped.
+
+==================================================
+PHASE 12 — DIFF REVIEW
+======================
+
+Run:
+
+git status
+git diff --stat
+git diff
+
+Verify that changes are limited to:
+
+* retrieval correctness
+* security enforcement
+* canonical redaction
+* event-log security
+* deterministic output if genuinely required
+* security regression tests
+* Sprint 12 documentation
+
+No unrelated changes.
+
+Verify:
+
+* AG-001 architecture unchanged except only if absolutely required for an existing security contract.
+* No AG-003/AG-004 changes.
+* No database integration.
+* No external integrations.
+
+==================================================
+PHASE 13 — DOCUMENTATION
+========================
+
+Create:
+
+docs/ag-002-memory-manager-sprint12-v1.md
+
+Include:
+
+1. Sprint objective
+2. Audit findings addressed
+3. Retrieval bug root cause
+4. Retrieval fix
+5. Read-path security
+6. Clearance enforcement
+7. Redaction audit
+8. Event security
+9. Determinism review
+10. Tests added
+11. Existing tests preserved
+12. Security matrix
+13. Quality gates
+14. Files changed
+15. Remaining limitations
+16. Deferred production infrastructure
+17. Architecture compliance
+18. Scope compliance
+19. Final verification
+20. Commit status
+
+==================================================
+FINAL REPORT
+============
+
+Return:
+
+SPRINT 12 FINAL REPORT
+
+1. Baseline test count
+2. Final test count
+3. Retrieval CRITICAL bug:
+
+   * root cause
+   * exact fix
+4. Authorization verification
+5. Namespace verification
+6. Ownership verification
+7. Security-clearance verification
+8. Lifecycle verification
+9. Redaction verification
+10. Event-log security verification
+11. Replay security verification
+12. Determinism verification
+13. New tests
+14. Typecheck
+15. Lint
+16. Build
+17. Files modified
+18. Security matrix
+19. Remaining known risks
+20. Deferred work
+21. AG-001 impact
+22. AG-003/AG-004 impact
+23. Git status
+
+CRITICAL SUCCESS CONDITION:
+
+The original retrieval vulnerability MUST have a regression test that would fail against the old implementation and pass against the new implementation.
+
+Do not claim CRIT-1 fixed without such a test.
+
+==================================================
+COMMIT RULE
+===========
+
+DO NOT COMMIT.
+
+DO NOT PUSH.
+
+Leave all Sprint 12 changes in the working tree.
+
+If a blocker cannot safely be fixed without architectural redesign, STOP that portion and report it instead of introducing a workaround.
+
+Start by running the baseline commands and inspecting the exact retrieval bug.

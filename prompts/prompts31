@@ -1,0 +1,520 @@
+# AG-002 SPRINT 10 — DURABLE PERSISTENCE, IDEMPOTENT CREATE & CACHING
+
+Implement AG-002 Memory Manager Sprint 10 strictly according to:
+
+* docs/ag-002-final-gap-audit-v1.md
+* docs/ag-002-memory-manager-sprint9-v1.md
+* all previous AG-002 Sprint 1–9 specifications
+* existing AG-002 source contracts and architecture
+
+## CURRENT VERIFIED BASELINE
+
+AG-002 Sprints 1–9 are complete.
+
+Latest verified baseline:
+
+* 1108 tests passing
+* Sprint 9 added 49 tests
+* Typecheck: 18 pre-existing errors only
+* Lint: 27 pre-existing errors only
+* Build: 2 pre-existing errors only
+* AG-001 source must remain untouched
+
+Sprint 10 objectives from the Final Gap Audit:
+
+1. Durable persistence
+2. Idempotent memory creation
+3. Retrieval/cache layer
+4. Canonical consolidation behavior
+
+## CRITICAL SCOPE RULE
+
+Implement ONLY Sprint 10.
+
+DO NOT implement Sprint 11:
+
+* AG-001 runtime wiring
+* dead-flag cleanup
+* public-barrel/test-double hygiene
+
+DO NOT implement:
+
+* AG-003
+* AG-004
+* LLM integration
+* vector database integration
+* social media integrations
+* payments
+* Stripe
+* external business APIs
+* production business agents
+
+Do not redesign AG-001 or AG-002.
+
+Reuse existing contracts wherever possible.
+
+Do not create fake/mock "durable persistence" and claim it is production durable.
+
+If a real external database provider is not already part of the project architecture, create a provider-neutral durable persistence contract and a clearly identified implementation boundary rather than inventing infrastructure.
+
+---
+
+## PHASE 0 — REPOSITORY INSPECTION
+
+Before coding, inspect:
+
+* docs/ag-002-final-gap-audit-v1.md
+* docs/ag-002-memory-manager-sprint6-v1.md
+* docs/ag-002-memory-manager-sprint7-v1.md
+* docs/ag-002-memory-manager-sprint8-v1.md
+* docs/ag-002-memory-manager-sprint9-v1.md
+* src/agents/ag-002-memory-manager/storage/
+* src/agents/ag-002-memory-manager/repositories/
+* src/agents/ag-002-memory-manager/services/
+* src/agents/ag-002-memory-manager/config/
+* existing tests and fixtures
+* serialization/versioning/error contracts
+
+Determine exactly what Sprint 6 already provides.
+
+Do not duplicate existing repository/storage abstractions.
+
+---
+
+## PHASE 1 — DURABLE PERSISTENCE CONTRACT
+
+Close the audit's "no durable persistence" gap.
+
+Design a provider-neutral durable storage abstraction compatible with the existing:
+
+* MemoryStorageAdapter
+* MemoryRepository
+* StorageCapability
+* health()
+* metrics()
+* transaction()
+* query()
+* getById()
+
+The abstraction must clearly distinguish:
+
+IN-MEMORY:
+
+* process-local
+* non-durable
+
+DURABLE:
+
+* survives process restart
+* supports persistence semantics defined by the contract
+
+Do not falsely claim the existing in-memory implementation is durable.
+
+Add explicit capabilities such as:
+
+* durable
+* transactional where actually supported
+* queryable
+* versioned
+* idempotent where applicable
+
+If the repository has no real database dependency yet:
+
+Create the durable provider interface and reference implementation boundary, but DO NOT invent a fake disk/database implementation merely to make a test pass.
+
+If a real persistence backend already exists in the repository, integrate it properly.
+
+Document the distinction clearly.
+
+---
+
+## PHASE 2 — PERSISTENCE CONFIGURATION
+
+Add/update configuration only where needed.
+
+Expected concepts may include:
+
+* MEMORY_STORAGE_BACKEND
+* durable backend selection
+* persistence timeout
+* retry policy
+* cache settings
+
+Do not create unnecessary flags.
+
+Every new configuration value must be:
+
+* schema validated
+* defaulted
+* actually consumed
+* documented
+* tested
+
+Do not leave dead feature flags.
+
+NOTE:
+Sprint 11 handles the already-known unrelated dead flags. Do not expand Sprint 10 into general configuration cleanup.
+
+---
+
+## PHASE 3 — IDEMPOTENT MEMORY CREATION
+
+Implement idempotent create semantics.
+
+Requirements:
+
+* A caller-provided idempotency key must prevent unintended duplicate creation.
+* Same idempotency key + same logical request should return the existing result safely.
+* Same idempotency key + conflicting request must fail with a typed conflict error.
+* Namespace/tenant isolation MUST apply to idempotency keys.
+* Idempotency keys from one namespace must not affect another namespace.
+* Behavior must remain safe across retries.
+* Versioning must remain correct.
+* No duplicate events on successful retry.
+* No duplicate records.
+* No duplicate consolidation side effects.
+
+Handle concurrent/repeated create attempts where existing storage architecture permits.
+
+Test:
+
+* first create
+* identical retry
+* conflicting retry
+* different namespace
+* missing key
+* malformed key
+* repeated key
+* concurrent attempts
+* failure followed by retry
+* event emission
+* version behavior
+
+Do not silently treat every request as idempotent.
+
+---
+
+## PHASE 4 — CACHE / RETRIEVAL ACCELERATION
+
+Implement a small, deterministic cache abstraction where justified by the architecture.
+
+Primary target:
+
+* getById
+* retrieval results where safe
+
+Requirements:
+
+* bounded size
+* TTL
+* deterministic invalidation
+* namespace-safe keys
+* authorization-safe behavior
+* no stale sensitive data after mutation/erase
+* cache invalidation after:
+
+  * update
+  * archive
+  * restore
+  * expire
+  * erase
+* no cross-tenant cache leakage
+* disabled-cache mode
+* metrics for hits/misses/evictions where appropriate
+
+IMPORTANT:
+
+Never cache an authorization decision globally in a way that can leak data between actors.
+
+Cache keys must include the relevant security/namespace context where required.
+
+Erasure MUST invalidate relevant cache entries.
+
+Restore MUST invalidate stale archived state.
+
+Update MUST invalidate stale versions.
+
+Test cache behavior thoroughly.
+
+---
+
+## PHASE 5 — CANONICAL CONSOLIDATION
+
+Review the existing Sprint 5B consolidation implementation against the Final Gap Audit.
+
+Ensure consolidation has one canonical path.
+
+Requirements:
+
+* deterministic grouping
+* deterministic source ordering
+* deterministic output key
+* deterministic provenance
+* namespace isolation
+* authorization checks
+* no duplicate consolidated records
+* idempotent repeated consolidation
+* source version awareness
+* stale-source detection
+* safe retry
+* no duplicate events
+* no secret leakage
+* correct lifecycle handling
+* correct cache invalidation
+
+If the existing implementation already satisfies a requirement, DO NOT rewrite it.
+
+Only fix actual gaps.
+
+Preserve non-destructive default behavior unless explicit archive semantics are already defined.
+
+---
+
+## PHASE 6 — DURABILITY + EVENTS
+
+Ensure persistence operations interact correctly with the event log.
+
+Requirements:
+
+* successful durable write → appropriate event
+* failed durable write → no false success event
+* retry does not duplicate events
+* idempotent create does not duplicate events
+* erase semantics from Sprint 9 remain intact
+* replay semantics remain intact
+* correlation IDs preserved
+* event payloads remain sanitized
+
+Do not turn the entire system into event sourcing.
+
+The existing event log remains an audit/event mechanism unless the architecture explicitly says otherwise.
+
+---
+
+## PHASE 7 — FAILURE & RECOVERY
+
+Test realistic persistence failure scenarios:
+
+* storage unavailable
+* write failure
+* read failure
+* conflict
+* timeout
+* retry
+* partial transaction where supported
+* restart/reload behavior for a genuinely durable provider
+* cache unavailable
+* cache stale data
+* cache invalidation failure
+
+Fail closed where security is involved.
+
+Do not report a write as successful when persistence failed.
+
+Do not invent ACID guarantees unless the selected backend actually provides them.
+
+---
+
+## PHASE 8 — SECURITY REGRESSION
+
+Verify:
+
+* namespace isolation
+* ownership isolation
+* authorization on reads
+* authorization on writes
+* idempotency-key isolation
+* cache isolation
+* no sensitive values in cache metrics/logs/events
+* erase invalidates cache
+* erased records cannot return through cache
+* restored records reflect current lifecycle state
+* version conflicts are safe
+
+Run existing Sprint 3 and Sprint 9 security tests.
+
+---
+
+PHASE 9 — TESTING
+
+Baseline:
+
+1108 tests.
+
+Add meaningful Sprint 10 tests.
+
+Target:
+
+* at least 40 new tests
+
+Cover:
+
+A. Durable storage contracts
+B. Backend capability detection
+C. Persistence configuration
+D. Idempotent create
+E. Conflict handling
+F. Concurrent create
+G. Cache hit/miss
+H. Cache TTL
+I. Cache invalidation
+J. Namespace isolation
+K. Erasure + cache
+L. Restore + cache
+M. Update + cache
+N. Consolidation idempotency
+O. Consolidation retries
+P. Event duplication prevention
+Q. Failure recovery
+R. Regression
+
+Do NOT delete or weaken existing tests.
+
+All previous 1108 tests must continue passing.
+
+---
+
+## PHASE 10 — QUALITY GATES
+
+Run:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Compare all errors with the Sprint 9 baseline.
+
+Sprint 10 MUST introduce ZERO new typecheck/lint/build errors.
+
+Report:
+
+* baseline errors
+* current errors
+* whether any are new
+
+If existing errors are touched by Sprint 10, fix them rather than calling them pre-existing.
+
+---
+
+## PHASE 11 — DOCUMENTATION
+
+Create:
+
+docs/ag-002-memory-manager-sprint10-v1.md
+
+Include at least:
+
+1. Executive Summary
+2. Scope
+3. Existing Storage Architecture
+4. Durable Persistence Contract
+5. Backend Capability Model
+6. Persistence Configuration
+7. Idempotent Create
+8. Idempotency Key Semantics
+9. Conflict Handling
+10. Cache Architecture
+11. Cache Security
+12. Cache Invalidation
+13. Consolidation Review
+14. Canonical Consolidation Path
+15. Event Interaction
+16. Failure Handling
+17. Recovery
+18. Security
+19. Testing
+20. Quality Gates
+21. Performance
+22. Known Limitations
+23. Sprint 11 Deferrals
+24. Architecture Compliance
+25. Final Verification
+
+Be completely truthful about what is and is not durable.
+
+---
+
+## PHASE 12 — FINAL ACCEPTANCE CHECKLIST
+
+Before declaring Sprint 10 complete:
+
+[ ] Durable persistence abstraction implemented
+[ ] Existing in-memory storage still explicitly non-durable
+[ ] Real durable backend integrated IF one already exists
+[ ] No fake durability claims
+[ ] Capability model distinguishes durable/non-durable
+[ ] Persistence configuration validated and consumed
+[ ] Idempotent create implemented
+[ ] Same-key identical retry is safe
+[ ] Same-key conflicting request fails
+[ ] Idempotency isolated by namespace
+[ ] No duplicate records
+[ ] No duplicate successful-create events
+[ ] Cache implemented where justified
+[ ] Cache TTL works
+[ ] Cache bounded
+[ ] Cache invalidation works
+[ ] Erasure invalidates cache
+[ ] Restore invalidates stale cache
+[ ] Update invalidates stale cache
+[ ] Cache cannot leak across namespaces/actors
+[ ] Consolidation canonical path verified
+[ ] Consolidation idempotent
+[ ] Consolidation deterministic
+[ ] Persistence failures handled safely
+[ ] Event consistency verified
+[ ] Security regression passes
+[ ] At least 40 meaningful new tests
+[ ] All previous 1108 tests pass
+[ ] No tests deleted/weakened
+[ ] No AG-001 source modified
+[ ] No AG-003/AG-004 work
+[ ] No Sprint 11 implementation
+[ ] No LLM/vector/external API integration
+[ ] Typecheck baseline preserved
+[ ] Lint baseline preserved
+[ ] Build passes
+[ ] Sprint 10 documentation written
+
+---
+
+## FINAL REPORT FORMAT
+
+End with:
+
+SPRINT 10 FINAL REPORT
+
+1. Implementation summary
+2. Durable persistence status
+3. Backend(s) actually implemented
+4. Idempotent create status
+5. Cache status
+6. Consolidation status
+7. Security status
+8. Failure/recovery status
+9. Files created
+10. Files modified
+11. Files deleted
+12. New tests
+13. Previous tests
+14. Final tests
+15. Typecheck
+16. Lint
+17. Build
+18. Known pre-existing issues
+19. Deferred Sprint 11 work
+20. AG-001 status
+21. Git status
+
+IMPORTANT:
+
+DO NOT COMMIT.
+DO NOT PUSH.
+
+Do not claim "production durable persistence" unless a real durable backend exists and has actually been implemented/tested.
+
+Do not stop for confirmation.
+Do not ask questions unless there is a genuine blocker.
+
+Start by inspecting the existing architecture and then implement Sprint 10 autonomously.

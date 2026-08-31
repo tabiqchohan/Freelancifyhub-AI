@@ -287,7 +287,6 @@ export class MemoryManagerService implements MemoryManager {
   private readonly clock: Clock;
 
   private readonly repository: MemoryRepository;
-  private readonly accessPolicy: MemoryAccessPolicy;
   private readonly lifecycle: MemoryLifecycleContract;
   private readonly retrievalEngine: MemoryRetrievalEngine;
   private readonly lifecycleService: MemoryLifecycleService;
@@ -305,7 +304,6 @@ export class MemoryManagerService implements MemoryManager {
     this.clock = options.clock ?? systemClock;
 
     this.repository = this.maybeCacheRepository(options.repository);
-    this.accessPolicy = options.accessPolicy;
     this.lifecycle = options.lifecycle;
     this.retrievalEngine = options.retrievalEngine;
     this.lifecycleService =
@@ -877,13 +875,20 @@ export class MemoryManagerService implements MemoryManager {
       input.actor.namespaces ?? [],
     );
 
-    const accessible = results.filter((result) =>
-      this.accessPolicy.can({
+    // Sprint 12: enforce the full authorization contract (matrix permission,
+    // namespace scope, ownership, SECURITY CLEARANCE and lifecycle) on every
+    // retrieved record. The previous path used `accessPolicy.can`, which only
+    // checked the matrix + namespace allow-list and therefore leaked CONFIDENTIAL
+    // records (and their full content) to INTERNAL-clearance callers.
+    validateMemoryActor(input.actor);
+    const accessible = results.filter((result) => {
+      const decision = this.authorizationService.authorize({
         actor: input.actor,
         permission: MemoryPermission.Read,
         target: this.targetOf(result.record),
-      }),
-    );
+      });
+      return decision.allowed;
+    });
 
     this.emit(
       MemoryEventType.Retrieved,

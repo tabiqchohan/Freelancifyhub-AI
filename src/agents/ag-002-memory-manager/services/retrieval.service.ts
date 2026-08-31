@@ -18,6 +18,7 @@ import { RepositoryCandidateRetriever } from '../retrieval/candidate-retriever.j
 import { DefaultScorer } from '../retrieval/scorer.js';
 import { SimpleTokenEstimator } from '../retrieval/token-estimator.js';
 import { createMemoryLogger } from '../utils/logger.js';
+import { redactSecrets } from '../utils/sanitize.js';
 
 /**
  * Retrieval Service (Sprint 4).
@@ -122,7 +123,11 @@ export class RetrievalServiceImpl implements RetrievalService {
       scopeWeight: 0.05,
     });
 
-    const scored = authorized.map((record) => ({
+    // CRIT-1 fix: score/rank the fully-authorized, scope-filtered AND
+    // security-filtered candidates. Previously `securityFiltered` (scope +
+    // clearance) was computed but discarded and scoring ran on `authorized`,
+    // leaking out-of-scope / insufficient-clearance records into the response.
+    const scored = securityFiltered.map((record) => ({
       record,
       score: scorer.score(record, normalizedQuery ?? '', this.clock.getNow()),
     }));
@@ -171,7 +176,7 @@ export class RetrievalServiceImpl implements RetrievalService {
         candidateCount: candidates.length,
         authorizedCount: authorized.length,
         selectedCount: results.length,
-        filteredCount: candidates.length - authorized.length,
+        filteredCount: candidates.length - securityFiltered.length,
         truncatedCount: budgeted.truncated ? 1 : 0,
       },
       metadata: {
@@ -319,21 +324,35 @@ export class RetrievalServiceImpl implements RetrievalService {
 
   private generateSnippet(record: MemoryRecord): string | undefined {
     let text: string;
-    if (typeof record.content === 'string') {
-      text = record.content;
-    } else if (typeof record.content === 'object' && record.content !== null) {
-      text = JSON.stringify(record.content);
+    if (typeof record.content === 'object' && record.content !== null) {
+      // Canonical structured redaction (Sprint 12): recursively scrubs nested
+      // objects/arrays, mixed casing and compound sensitive keys (apiKey,
+      // accessToken, refreshToken, clientSecret, userPassword, ...) and is
+      // non-mutating (returns a safe copy).
+      text = JSON.stringify(redactSecrets(record.content) ?? {});
+    } else if (typeof record.content === 'string') {
+      text = this.redactInlineSecrets(record.content);
     } else {
       return undefined;
     }
 
-    // Redact secrets
-    text = text
-      .replace(/apiKey\s*:\s*sk[-\w]{20,}/g, '[REDACTED]')
-      .replace(/password\s*:\s*\S+/gi, '[REDACTED]')
-      .replace(/\btoken\s*:\s*\S+/gi, '[REDACTED]');
+    return text.length > 200 ? `${text.substring(0, 197)}...` : text;
+  }
 
-    return text.length > 200 ? text.substring(0, 197) + '...' : text;
+  /** Redacts secret-looking `key:`/`key=` pairs embedded in raw string content. */
+  private redactInlineSecrets(text: string): string {
+    // Case-insensitive compound-sensitive key names (incl. token, accessToken,
+    // refreshToken, clientSecret, userPassword, credential, pwd, passphrase).
+    const keyPart =
+      'password|passwd|secret|token|api[_-]?key|apikey|authorization|private[_-]?key' +
+      '|credential|cookie|bearer|client[_-]?secret|pwd|passphrase|access[_-]?token' +
+      '|refresh[_-]?token|user[_-]?password|session[_-]?token';
+    // Whole `key: value` / `key=value` (with optional quotes) is replaced, so
+    // neither the key nor the value leaks into the snippet.
+    return text.replace(
+      new RegExp(`(${keyPart})\\s*[:=]\\s*["']?[^"',}\\s]{4,}`, 'gi'),
+      '[REDACTED]',
+    );
   }
 
   private normalizeQuery(query: string | undefined): string | undefined {

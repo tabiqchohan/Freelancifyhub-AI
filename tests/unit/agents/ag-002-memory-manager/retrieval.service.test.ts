@@ -323,9 +323,10 @@ describe('RetrievalService - full pipeline (Sprint 4, prompts §2-§3, §15, §1
       });
 
       const keys = results.results.map((r) => r.record.securityLevel);
-      // With INTERNAL clearance (0), CONFIDENTIAL (1) should be excluded since 0 < 1
-      // Only INTERNAL record should remain
-      expect(keys).toEqual(['CONFIDENTIAL', 'INTERNAL']);
+      // With INTERNAL clearance (0), CONFIDENTIAL (1) must be excluded since 0 < 1.
+      // Only the INTERNAL record may remain — the CONFIDENTIAL leak in the old
+      // implementation (which discarded the security filter) is now fixed.
+      expect(keys).toEqual(['INTERNAL']);
     });
   });
 

@@ -1,0 +1,621 @@
+# AG-002 SPRINT 11 — AG-001 RUNTIME WIRING + FINAL HYGIENE & INTEGRATION
+
+Implement the FINAL planned AG-002 sprint.
+
+Use as authoritative context:
+
+* docs/ag-002-final-gap-audit-v1.md
+* docs/ag-002-memory-manager-sprint10-v1.md
+* docs/ag-002-memory-manager-sprint9-v1.md
+* all AG-002 Sprint 1–10 implementation/docs/tests
+* existing AG-001 Master Orchestrator implementation (Sprints 1–9)
+
+## CURRENT VERIFIED BASELINE
+
+AG-002 Sprint 10 is complete.
+
+Baseline:
+
+* 1156 tests passing
+* Typecheck: 18 pre-existing errors
+* Lint: 27 pre-existing errors
+* Build: 2 pre-existing errors
+* AG-001 source has remained untouched by AG-002 Sprints
+* Sprint 10 changes are ready/expected to be committed before beginning Sprint 11
+
+Final Gap Audit identified these remaining planned gaps:
+
+1. AG-001 MemoryContextProvider is interface-only and not runtime-wired to AG-002.
+2. AG-002 orchestration/public API leaks a test-double contract.
+3. RetrievalServiceImpl is not properly reachable from the public API.
+4. interfaces/index.ts is dead/unreferenced.
+5. Four memory feature flags are defined but never consumed.
+6. Final integration verification is missing.
+
+This sprint closes ONLY those gaps.
+
+==================================================
+PHASE 0 — INSPECT BEFORE MODIFYING
+==================================
+
+Inspect:
+
+AG-001:
+
+* src/agents/ag-001-master-orchestrator/
+* orchestrator/
+* context/
+* routing/
+* planning/
+* execution/
+* aggregation/
+
+AG-002:
+
+* src/agents/ag-002-memory-manager/
+* services/
+* orchestration/
+* retrieval/
+* interfaces/
+* config/
+* storage/
+* cache/
+* events/
+
+Also inspect:
+
+* docs/ag-001-orchestrator-integration-v1.md
+* docs/ag-002-final-gap-audit-v1.md
+* all relevant AG-001/AG-002 tests
+
+First determine the exact existing contracts.
+
+DO NOT duplicate functionality that already exists.
+
+DO NOT redesign AG-001.
+
+==================================================
+PHASE 1 — AG-001 MEMORY CONTEXT RUNTIME WIRING
+==============================================
+
+Close the audit finding:
+
+"AG-001 MemoryContextProvider is interface-only, never runtime-wired to AG-002."
+
+Find the existing AG-001 MemoryContextProvider contract.
+
+Find the existing AG-002 retrieval/context integration services.
+
+Create the smallest adapter necessary to connect them.
+
+Architecture requirement:
+
+AG-001 should depend on the abstraction.
+
+AG-002 should provide the implementation.
+
+Do NOT make AG-001 directly depend on internal AG-002 implementation classes if the existing architecture allows an adapter/interface boundary.
+
+Preferred conceptual flow:
+
+AG-001 Master Orchestrator
+↓
+MemoryContextProvider contract
+↓
+AG-002 adapter
+↓
+RetrievalService
+↓
+ContextIntegrationService
+↓
+secure memory context
+
+The adapter must:
+
+* preserve request/correlation IDs where supported
+* respect MemoryActor/security context
+* preserve namespace isolation
+* respect authorization
+* respect lifecycle state
+* respect context token budgets
+* preserve priority
+* preserve sanitization
+* fail closed on authorization/security failures
+* avoid leaking secrets
+* avoid bypassing RetrievalService security
+
+Do NOT add LLM/vector search.
+
+Do NOT add external API calls.
+
+==================================================
+PHASE 2 — CONTEXT PROVIDER BEHAVIOR
+===================================
+
+Implement runtime behavior for the provider.
+
+At minimum verify:
+
+1. No-memory case
+2. Matching memory retrieval
+3. Multiple memories
+4. Priority preservation
+5. Context budget
+6. Namespace isolation
+7. Ownership/security filtering
+8. Deleted/expired filtering
+9. Secret sanitization
+10. Empty query/context
+11. Authorization denial
+12. Retrieval failure
+13. Integration failure
+14. Correlation/trace propagation if contract supports it
+
+The provider should return only safe context.
+
+Never bypass the AG-002 authorization boundary.
+
+==================================================
+PHASE 3 — PUBLIC API / BARREL HYGIENE
+=====================================
+
+Fix the audit finding:
+
+"orchestration/index.ts leaks test-double StubMemoryManagerContract into the public barrel."
+
+Inspect:
+
+src/agents/ag-002-memory-manager/orchestration/index.ts
+
+Remove any production public export that exposes:
+
+* StubMemoryManagerContract
+* test-only implementation
+* test fixture
+* test double
+
+Test doubles must remain accessible only to tests/internal test modules.
+
+Do not delete useful production contracts.
+
+Ensure production barrels expose only production APIs.
+
+==================================================
+PHASE 4 — RETRIEVAL SERVICE PUBLIC EXPORT
+=========================================
+
+Fix:
+
+"services/retrieval.service.ts (RetrievalServiceImpl) not exported from public API."
+
+Make the real RetrievalService implementation reachable through the intended public API.
+
+Check:
+
+* services/index.ts
+* root index.ts
+* retrieval/index.ts
+
+Do not create duplicate implementations.
+
+Do not expose internal-only test utilities.
+
+Maintain backward compatibility for existing imports.
+
+Add a test that imports the intended public API and verifies the production RetrievalService is available.
+
+==================================================
+PHASE 5 — DEAD INTERFACE BARREL
+===============================
+
+Audit:
+
+src/agents/ag-002-memory-manager/interfaces/index.ts
+
+The Final Gap Audit says this barrel is imported nowhere.
+
+Determine whether it is:
+
+A. genuinely required public API
+OR
+B. dead/unnecessary infrastructure.
+
+If genuinely useful:
+
+* wire it into the correct public barrel/API.
+
+If genuinely dead:
+
+* remove it only if doing so does not break legitimate imports.
+
+Search the entire repository before deleting anything.
+
+Do not delete types merely because they appear unused without confirming their intended contract role.
+
+==================================================
+PHASE 6 — FOUR DEAD MEMORY FEATURE FLAGS
+========================================
+
+The Final Gap Audit identified four feature flags in config/schema.ts that are defined but never read.
+
+Previously identified examples include:
+
+* MEMORY_HYBRID_SEARCH_ENABLED
+* other MEMORY_* search/summary-related flags identified by the audit
+
+FIRST inspect the actual current schema and audit report.
+
+For EACH dead flag choose exactly one:
+
+A. Wire it into real existing functionality.
+
+OR
+
+B. Remove it if it represents deferred functionality that is not part of the current architecture.
+
+Do NOT create fake implementations merely to make flags "used."
+
+Do NOT implement vector search, hybrid search, AI summarization, or external services just to consume a flag.
+
+If a flag belongs to future/deferred functionality, removal is preferable to dead configuration.
+
+After changes:
+
+* schema must contain only meaningful active configuration
+* no dead flag remains
+* documentation must reflect the decision
+
+==================================================
+PHASE 7 — AG-001 / AG-002 INTEGRATION
+=====================================
+
+Now verify the complete runtime flow:
+
+User Request
+↓
+AG-001 Master Orchestrator
+↓
+Intent Detection
+↓
+Context Builder
+↓
+MemoryContextProvider
+↓
+AG-002 Retrieval
+↓
+AG-002 Context Integration
+↓
+Routing
+↓
+Planning
+↓
+Execution
+↓
+Aggregation
+↓
+Response
+
+Do NOT implement LLM execution.
+
+Use deterministic test doubles only where an external model/executor is required.
+
+The AG-001 orchestration layer must be able to obtain memory context from real AG-002 services.
+
+Verify that existing Sprint 9 orchestration lifecycle still works:
+
+* validation
+* intent
+* context
+* routing
+* planning
+* execution
+* aggregation
+* response
+
+==================================================
+PHASE 8 — SECURITY INTEGRATION
+==============================
+
+Perform an explicit security regression.
+
+Verify:
+
+* unauthorized memory never reaches AG-001 context
+* wrong namespace never reaches AG-001
+* deleted memory never reaches AG-001
+* expired memory never reaches AG-001
+* confidential memory requires appropriate clearance
+* ownership restrictions remain enforced
+* secret fields remain redacted
+* idempotency/cache mechanisms are not bypassed
+* DSR-erased records cannot reappear through cache/retrieval
+* correlation metadata does not contain secrets
+
+Security must fail closed.
+
+==================================================
+PHASE 9 — TIMEOUT / CANCELLATION INTEGRATION
+============================================
+
+Verify that AG-001's existing:
+
+* timeout
+* cancellation
+* terminal-state
+* correlation
+
+behavior remains correct when AG-002 memory context is involved.
+
+A slow memory retrieval/context integration must not hang the orchestrator indefinitely.
+
+Use the existing timeout contracts.
+
+Do NOT introduce a second competing timeout system unless absolutely required by the existing architecture.
+
+==================================================
+PHASE 10 — TESTING
+==================
+
+Current baseline:
+
+1156 tests.
+
+Add meaningful Sprint 11 tests.
+
+Target:
+AT LEAST 30 new tests.
+
+Cover:
+
+A. MemoryContextProvider adapter
+B. Real AG-002 retrieval wiring
+C. Context integration wiring
+D. Namespace isolation
+E. Authorization
+F. Ownership
+G. Security clearance
+H. Lifecycle filtering
+I. Secret sanitization
+J. Context budget
+K. Empty context
+L. Retrieval failure
+M. Integration failure
+N. Correlation propagation
+O. Public RetrievalService export
+P. Production barrel hygiene
+Q. Test-double non-leak
+R. Dead-interface decision
+S. Feature-flag behavior/removal
+T. AG-001 end-to-end memory-context scenario
+U. Timeout
+V. Cancellation
+W. DSR/cache regression
+X. Backward compatibility
+
+Do NOT delete existing tests.
+
+Do NOT weaken existing assertions.
+
+Do NOT change tests simply to make failures disappear.
+
+==================================================
+PHASE 11 — ARCHITECTURE COMPLIANCE
+==================================
+
+The following must remain true:
+
+AG-001 owns orchestration.
+
+AG-002 owns memory.
+
+AG-001 depends on memory contracts/adapters.
+
+AG-002 does not control AG-001 routing/planning/execution.
+
+No circular dependency.
+
+No hidden global singleton.
+
+No direct database access from AG-001.
+
+No secret bypass.
+
+No authorization bypass.
+
+No test doubles in production public API.
+
+No LLM dependency.
+
+No vector DB dependency.
+
+No external integration.
+
+==================================================
+PHASE 12 — QUALITY GATES
+========================
+
+Run:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Compare with Sprint 10 baseline:
+
+Tests: 1156 passing
+Typecheck: 18 pre-existing
+Lint: 27 pre-existing
+Build: 2 pre-existing
+
+Sprint 11 must introduce ZERO new errors.
+
+If an existing error occurs in a file modified by Sprint 11:
+
+* investigate it
+* fix it if caused/touched by Sprint 11
+* do not incorrectly label it pre-existing
+
+==================================================
+PHASE 13 — FINAL FULL REPOSITORY SEARCH
+=======================================
+
+Before declaring completion, search for:
+
+* StubMemoryManagerContract
+* unused MEMORY_* flags
+* MemoryContextProvider implementations
+* RetrievalServiceImpl
+* dead barrels
+* test-only exports
+* AG-002 imports inside AG-001
+* circular dependency indicators
+
+Confirm that:
+
+* runtime provider exists
+* production RetrievalService is exported
+* test double is not public
+* dead flags are removed or genuinely consumed
+* dead barrel is resolved
+* no unintended circular dependency exists
+
+==================================================
+PHASE 14 — FINAL DOCUMENTATION
+==============================
+
+Create:
+
+docs/ag-002-memory-manager-sprint11-v1.md
+
+Include at least:
+
+1. Executive Summary
+2. Scope
+3. AG-001/AG-002 Integration Architecture
+4. MemoryContextProvider
+5. Runtime Adapter
+6. Retrieval Integration
+7. Context Integration
+8. Security Boundary
+9. Namespace Isolation
+10. Lifecycle Filtering
+11. Sanitization
+12. Timeout
+13. Cancellation
+14. Public API Hygiene
+15. Test-Double Isolation
+16. RetrievalService Export
+17. Interface Barrel Decision
+18. Feature Flag Decisions
+19. Circular Dependency Analysis
+20. Integration Tests
+21. Security Tests
+22. Regression Tests
+23. Quality Gates
+24. Known Limitations
+25. Deferred Work
+26. Final Architecture Status
+
+Clearly state what remains outside this sprint.
+
+==================================================
+FINAL ACCEPTANCE CHECKLIST
+==========================
+
+[ ] AG-001 MemoryContextProvider has real runtime implementation
+[ ] Provider uses real AG-002 retrieval/context services
+[ ] Authorization is preserved
+[ ] Namespace isolation preserved
+[ ] Lifecycle filtering preserved
+[ ] Security clearance preserved
+[ ] Secret sanitization preserved
+[ ] Context budgeting preserved
+[ ] Timeout behavior preserved
+[ ] Cancellation behavior preserved
+[ ] RetrievalServiceImpl publicly reachable
+[ ] StubMemoryManagerContract not publicly exported
+[ ] Test doubles isolated from production API
+[ ] interfaces/index.ts resolved
+[ ] Four dead memory feature flags resolved
+[ ] No fake vector/hybrid/LLM implementation
+[ ] No circular dependency
+[ ] No AG-003
+[ ] No AG-004
+[ ] No external integrations
+[ ] At least 30 meaningful new tests
+[ ] All previous 1156 tests pass
+[ ] No tests deleted
+[ ] No tests weakened
+[ ] Typecheck baseline preserved
+[ ] Lint baseline preserved
+[ ] Build baseline preserved
+[ ] Sprint 11 documentation written
+
+==================================================
+IMPORTANT — FINAL SCOPE
+=======================
+
+This is the FINAL PLANNED AG-002 SPRINT.
+
+Do NOT invent Sprint 12 work.
+
+Do NOT start AG-003.
+
+Do NOT start AG-004.
+
+Do NOT implement LLM integration.
+
+Do NOT implement vector search.
+
+Do NOT implement external database infrastructure.
+
+Do NOT implement production transport/API.
+
+Do NOT redesign the architecture.
+
+Fix only the remaining audited gaps and verify the complete AG-001 ↔ AG-002 runtime path.
+
+==================================================
+FINAL REPORT
+============
+
+End with exactly:
+
+SPRINT 11 FINAL REPORT
+
+1. Implementation summary
+2. AG-001 ↔ AG-002 runtime wiring
+3. MemoryContextProvider implementation
+4. Retrieval integration
+5. Context integration
+6. Security verification
+7. Timeout/cancellation verification
+8. Public API hygiene
+9. Test-double isolation
+10. Feature-flag decisions
+11. Interface-barrel decision
+12. Circular dependency result
+13. Files created
+14. Files modified
+15. Files deleted
+16. New tests
+17. Previous tests
+18. Final tests
+19. Typecheck
+20. Lint
+21. Build
+22. Known pre-existing issues
+23. Deferred/future work
+24. AG-001 status
+25. AG-002 final status
+26. Git status
+
+IMPORTANT:
+
+DO NOT COMMIT.
+DO NOT PUSH.
+
+Do not stop for confirmation.
+
+Start by inspecting the existing implementation and audit findings, then implement Sprint 11 autonomously.

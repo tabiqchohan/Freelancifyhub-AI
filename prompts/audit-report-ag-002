@@ -1,0 +1,298 @@
+# AG-002 FINAL GAP AUDIT — PRE-SPRINT ROADMAP
+
+You are now performing a FINAL GAP AUDIT of AG-002 Memory Manager.
+
+IMPORTANT:
+
+* This is an AUDIT / ROADMAP task only.
+* DO NOT implement code.
+* DO NOT modify source files.
+* DO NOT create Sprint 9 implementation files.
+* DO NOT commit or push.
+* You may create ONLY the final audit/roadmap document if required.
+* Do not weaken/delete existing tests.
+* Do not redesign completed architecture.
+
+## CURRENT VERIFIED STATE
+
+AG-002 completed:
+
+* Sprint 1 — Foundation ✅
+* Sprint 2 — Lifecycle & Retention ✅
+* Sprint 3 — Access Control & Security ✅
+* Sprint 4 — Retrieval & Context Assembly ✅
+* Sprint 5A — Context Integration Engine ✅
+* Sprint 5B — Memory Consolidation Engine ✅
+* Sprint 6 — Persistence / Storage Abstraction / Durable Repository Readiness ✅
+* Sprint 7 — Event Log / Audit Trail / Event-Driven Lifecycle ✅
+* Sprint 8 — Master Orchestrator Integration & Production Hardening ✅
+
+Latest verified baseline:
+
+* 1059 tests passing
+* Sprint 8 added 11 tests
+* Typecheck: only previously-existing errors
+* Lint: only previously-existing errors
+* Build: clean
+* AG-001 was intentionally untouched by Sprint 8
+* Sprint 8 remains uncommitted unless already committed separately
+
+## YOUR TASK
+
+Perform a comprehensive gap analysis of AG-002 against the ACTUAL project specifications and implementation.
+
+You MUST inspect the repository and existing documentation before making conclusions.
+
+### STEP 1 — Find the authoritative requirements
+
+Locate and inspect, where available:
+
+* Blueprint
+* PRD
+* AG-002 Agent Catalog entry
+* Shared Memory Architecture v1
+* AG-002 Sprint 1–8 documents
+* Architecture Review
+* ADK
+* prompts/README
+* docs/index
+* any AG-002 roadmap/specification documents
+* relevant AG-001 orchestration contracts
+* AG-003 and AG-004 contracts only where they define AG-002 dependencies
+
+Do NOT assume the previous sprint count.
+
+Determine which documents are authoritative when conflicts exist.
+
+### STEP 2 — Build REQUIREMENT MATRIX
+
+Create a matrix containing every meaningful AG-002 requirement.
+
+For each requirement classify it as:
+
+* COMPLETE
+* PARTIAL
+* DEFERRED
+* MISSING
+* NOT APPLICABLE
+
+For every PARTIAL / DEFERRED / MISSING item explain:
+
+1. What is missing
+2. Why it is missing
+3. Which specification requires it
+4. Whether it belongs in AG-002 or another agent/component
+5. Dependency on AG-001 / AG-003 / AG-004 / infrastructure
+6. Whether it is required before production
+
+Do not count documentation-only items as implementation-complete unless the actual implementation exists.
+
+### STEP 3 — VERIFY THE ACTUAL CODE
+
+Inspect the real source tree.
+
+Verify whether the following are genuinely implemented rather than merely represented by interfaces:
+
+* memory creation/read/update/delete
+* lifecycle and retention
+* authorization
+* security-level enforcement
+* retrieval
+* context assembly
+* context integration
+* consolidation
+* persistence abstraction
+* repository querying/pagination
+* storage capabilities
+* health/metrics
+* event log
+* audit events
+* serialization/security protections
+* orchestrator integration
+* timeout
+* cancellation
+* correlation IDs
+* error handling
+* idempotency
+* concurrency where specified
+* configuration/feature flags
+
+Also identify:
+
+* interfaces with no real implementation
+* dead configuration
+* dead types
+* test doubles being mistaken for production implementation
+* documented features that are not wired
+* code paths that exist but are unreachable
+
+### STEP 4 — SECURITY AUDIT
+
+Specifically verify:
+
+* fail-closed authorization
+* ownership isolation
+* namespace isolation
+* workspace/project/org isolation
+* security clearance enforcement
+* sensitive-field sanitization
+* nested secret sanitization
+* event-log sanitization
+* log sanitization
+* prototype-pollution protection
+* right-to-forget/deletion behavior
+* archived/expired/deleted memory access
+* cross-tenant leakage risks
+
+Classify any remaining issue as CRITICAL / HIGH / MEDIUM / LOW.
+
+### STEP 5 — INTEGRATION AUDIT
+
+Determine exactly what AG-002 still needs from:
+
+* AG-001 Master Orchestrator
+* AG-003 Knowledge Manager
+* AG-004 Tool Manager
+* ADK
+* persistence/database infrastructure
+* vector/search infrastructure
+* LLM infrastructure
+
+IMPORTANT:
+Do NOT mark AG-003 or AG-004 integration as an AG-002 bug if the architecture intentionally defines those as separate components.
+
+Separate:
+
+A. AG-002-owned work
+B. Cross-agent integration work
+C. Infrastructure work
+D. Future/product-level work
+
+### STEP 6 — PRODUCTION READINESS
+
+Give AG-002 scores:
+
+* Functional completeness /100
+* Security /100
+* Reliability /100
+* Persistence /100
+* Observability /100
+* Integration readiness /100
+* Test coverage /100
+* Overall production readiness /100
+
+Explain every score briefly.
+
+### STEP 7 — DETERMINE REMAINING SPRINT COUNT
+
+This is the MOST IMPORTANT part.
+
+Based ONLY on actual missing/partial AG-002 requirements, determine:
+
+* Is AG-002 actually complete?
+* If not, what is the minimum remaining work?
+* How many additional sprints are genuinely required?
+
+Do NOT artificially create sprints just to increase the count.
+
+Possible result:
+
+* AG-002 complete → 0 remaining sprints
+  OR
+* Sprint 9 only
+  OR
+* Sprint 9–10
+  OR
+* Sprint 9–N
+
+For every proposed remaining sprint provide:
+
+* Sprint number
+* Name
+* Objective
+* Exact deliverables
+* Files/modules expected
+* Tests required
+* Dependencies
+* Acceptance criteria
+* Whether it is mandatory for production
+
+### STEP 8 — DISTINGUISH "DONE" FROM "FUTURE"
+
+Create three separate lists:
+
+1. MUST FIX BEFORE AG-002 IS DECLARED COMPLETE
+2. OPTIONAL HARDENING / FUTURE
+3. BELONGS TO AG-003 / AG-004 / AG-001 / INFRASTRUCTURE
+
+Do not move unrelated work into AG-002 just because it is useful.
+
+### STEP 9 — CHECK FOR DUPLICATION
+
+Make sure proposed remaining work does NOT duplicate anything already completed in Sprints 1–8.
+
+Explicitly reference the sprint that already satisfies each completed requirement.
+
+### STEP 10 — FINAL VERDICT
+
+End the report with exactly this structure:
+
+AG-002 FINAL VERDICT
+
+* Requirements assessed: X
+* Complete: X
+* Partial: X
+* Deferred: X
+* Missing: X
+* Critical blockers: X
+* High blockers: X
+* Recommended remaining sprints: X
+* Production readiness: X/100
+* AG-002 status: COMPLETE / HARDENING REQUIRED / INCOMPLETE
+
+Then provide the recommended next action.
+
+## OUTPUT
+
+Create:
+
+docs/ag-002-final-gap-audit-v1.md
+
+The document must contain:
+
+1. Executive Summary
+2. Sources / Authority Hierarchy
+3. Requirement Matrix
+4. Sprint 1–8 Coverage Matrix
+5. Code Reality Check
+6. Security Audit
+7. Integration Audit
+8. Persistence Audit
+9. Reliability & Failure Handling Audit
+10. Observability Audit
+11. Configuration / Feature Flag Audit
+12. Test & Quality Audit
+13. Deferred Items
+14. Missing Items
+15. Ownership Classification
+16. Production Readiness Scores
+17. Remaining Sprint Plan
+18. Dependency Map
+19. Risk Register
+20. Final Verdict
+21. Recommended Next Action
+
+Use evidence from actual repository files.
+
+Do NOT invent requirements, files, features, or sprint counts.
+
+Before finalizing:
+
+* Re-check the requirement matrix against the actual source tree.
+* Re-check Sprints 1–8 docs.
+* Confirm no AG-001 source is modified.
+* Confirm no implementation changes were made during this audit.
+
+Do not commit or push.
+
+Start the audit now and continue autonomously until the final report is complete.

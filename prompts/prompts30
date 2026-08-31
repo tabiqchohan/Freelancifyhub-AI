@@ -1,0 +1,415 @@
+# AG-002 SPRINT 9 — RESTORE, EVENT REPLAY & DATA-SUBJECT ERASURE
+
+Implement AG-002 Memory Manager Sprint 9 based strictly on the FINAL GAP AUDIT:
+
+docs/ag-002-final-gap-audit-v1.md
+
+CURRENT STATUS:
+
+* AG-002 Sprints 1–8 complete
+* 1059 tests passing baseline
+* Production readiness: 68/100
+* 40 requirements assessed
+* 30 complete
+* 5 partial
+* 3 deferred
+* 2 missing
+* 0 critical blockers
+* 2 high blockers:
+
+  1. No durable persistence
+  2. No DSR right-to-forget / GDPR erasure
+
+SPRINT 9 SCOPE ONLY:
+
+1. Memory RESTORE
+2. Event-log replay
+3. Data Subject Request (DSR) right-to-forget / erasure
+
+DO NOT implement Sprint 10 or Sprint 11 work.
+
+Do NOT implement durable database persistence.
+Do NOT implement caching.
+Do NOT implement AG-001 runtime wiring.
+Do NOT implement AG-003.
+Do NOT implement AG-004.
+Do NOT add LLM/vector/external API integrations.
+
+---
+
+## PHASE 0 — READ BEFORE CODING
+
+First inspect:
+
+* docs/ag-002-final-gap-audit-v1.md
+* all AG-002 Sprint 1–8 docs
+* src/agents/ag-002-memory-manager/
+* AG-001 interfaces relevant to memory
+* events/log.ts
+* services/memory.service.ts
+* repository/storage contracts
+* lifecycle implementation
+* authorization/security implementation
+* serialization/sanitization utilities
+* existing tests and fixtures
+
+Do not duplicate functionality already implemented.
+
+Before modifying anything, identify the exact existing contracts that Sprint 9 must extend.
+
+---
+
+## PHASE 1 — RESTORE
+
+Implement the deferred restoreMemory capability.
+
+Requirements:
+
+* Restore an ARCHIVED memory back to ACTIVE where policy allows.
+* Restore must NOT allow restoration of permanently erased data.
+* Respect AuthorizationService.
+* Require appropriate Restore permission.
+* Respect ownership / namespace / organization / workspace / security constraints.
+* Fail closed on invalid actor context.
+* Validate lifecycle state transitions.
+* Preserve versioning semantics.
+* Emit an appropriate lifecycle/security event.
+* Preserve correlation information where available.
+* Never expose or restore sanitized secrets.
+* Operation must be deterministic.
+* Repeated restore calls must be safely handled/idempotent according to existing lifecycle conventions.
+
+Define typed errors where necessary.
+
+Update public interfaces/barrels correctly.
+
+Add comprehensive tests for:
+
+* successful restore
+* unauthorized restore
+* invalid actor
+* wrong namespace
+* wrong ownership
+* security clearance failure
+* already-active memory
+* deleted/erased memory
+* archived memory
+* version conflict
+* event emission
+* idempotent repeated restore
+* sanitization/security regression
+
+Do NOT silently bypass existing lifecycle or authorization rules.
+
+---
+
+## PHASE 2 — EVENT LOG REPLAY
+
+Implement deterministic event-log replay capability.
+
+Purpose:
+
+Given an event stream for a memory or namespace, reconstruct the applicable memory state/history using the existing event model.
+
+Requirements:
+
+* Replay must be deterministic.
+* Replay must preserve event ordering.
+* Validate event sequence/order.
+* Detect malformed or impossible event transitions.
+* Fail closed on corrupted event streams.
+* Respect existing event sanitization rules.
+* Never replay secrets into exposed outputs.
+* Support replay from a supplied starting state/snapshot if existing contracts allow it.
+* Do not claim full distributed event sourcing unless the architecture actually supports it.
+* Keep replay additive and compatible with the current in-memory implementation.
+
+Define clear replay result types.
+
+Replay should be able to distinguish:
+
+* active
+* archived
+* expired
+* deleted/erased
+* invalid/corrupt history
+
+Important:
+
+PERMANENTLY ERASED MEMORY MUST NOT BE RECONSTRUCTABLE FROM THE NORMAL PUBLIC MEMORY API.
+
+If the event log contains data that would violate erasure guarantees, the replay layer must respect the erasure/tombstone semantics rather than recreating the erased memory.
+
+Add tests covering:
+
+* empty history
+* single create
+* create → update
+* create → archive → restore
+* lifecycle transitions
+* multiple updates
+* ordered events
+* duplicate events
+* out-of-order events
+* malformed events
+* corrupted sequence
+* erased/tombstoned memory
+* deterministic replay
+* sanitized replay output
+* namespace isolation
+
+---
+
+## PHASE 3 — DSR RIGHT-TO-FORGET / ERASURE
+
+Implement a proper AG-002 data-subject erasure capability.
+
+This is NOT merely soft-delete.
+
+Requirements:
+
+* Introduce an explicit erasure operation.
+* Require appropriate authorization.
+* Fail closed.
+* Validate actor context.
+* Support namespace/tenant ownership boundaries.
+* Permanently remove or cryptographically/semantically make inaccessible the memory according to the existing storage abstraction.
+* Ensure normal get/query/retrieval/context/replay APIs cannot return erased memories.
+* Ensure erased IDs/keys cannot be restored.
+* Ensure event replay cannot reconstruct erased data.
+* Emit a safe audit/erasure event that does NOT contain the erased sensitive payload.
+* Preserve auditability without preserving the erased personal data itself.
+* Make the operation idempotent.
+* Handle partial failures safely.
+* Do not claim legal/GDPR compliance beyond the technical right-to-forget mechanism actually implemented.
+
+Use terminology such as:
+
+* erase
+* erasure
+* tombstone
+* redaction
+
+only where technically accurate.
+
+Do NOT implement legal policy workflows or external compliance systems.
+
+---
+
+## PHASE 4 — STORAGE/REPOSITORY INTEGRATION
+
+Extend existing repository/storage contracts only as required.
+
+Potential operations may include:
+
+* eraseById
+* eraseByNamespace
+* markErased
+* tombstone
+* replay-related lookup
+
+Choose the smallest architecture-compatible change.
+
+Do not implement durable DB persistence in this sprint.
+
+The existing in-memory adapter must support the new behavior.
+
+Ensure indexes/counters remain consistent after erasure.
+
+Verify:
+
+* getById
+* query
+* retrieval
+* context integration
+* consolidation
+* event replay
+
+cannot accidentally return erased records.
+
+---
+
+## PHASE 5 — SECURITY
+
+Perform a dedicated security regression pass.
+
+Verify:
+
+* erased memory cannot be read
+* erased memory cannot be queried
+* erased memory cannot be restored
+* erased memory cannot be retrieved through RetrievalService
+* erased memory cannot appear in ContextIntegrationService
+* erased memory cannot appear in consolidation
+* erased payload is not emitted in audit events
+* secrets are not present in replay output
+* cross-tenant erasure is impossible
+* unauthorized erasure is denied
+* invalid actor context is denied
+
+Use fail-closed behavior everywhere.
+
+---
+
+## PHASE 6 — IDEMPOTENCY & FAILURE SAFETY
+
+Restore and erase operations must be safe under repeated invocation.
+
+Test:
+
+* repeated restore
+* repeated erase
+* erase after restore
+* restore after erase
+* concurrent/repeated erase where existing architecture permits
+* repository failure
+* event-log failure
+* partial-operation failure
+
+Do not introduce inconsistent terminal states.
+
+---
+
+## PHASE 7 — TESTING
+
+Add substantial tests.
+
+Minimum target:
+
+* at least 35 new Sprint 9 tests
+* unit tests for restore
+* unit tests for replay
+* unit tests for erasure
+* authorization/security tests
+* repository/storage tests
+* integration tests
+* regression tests
+
+Do NOT delete, weaken, skip, or rewrite existing tests merely to make them pass.
+
+Required invariant:
+
+ALL previous 1059 tests must continue passing.
+
+Expected final test count:
+
+1059 + new Sprint 9 tests
+
+Report the exact number.
+
+---
+
+## PHASE 8 — QUALITY GATES
+
+Run:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Compare errors against the known baseline from the Final Gap Audit.
+
+SPRINT 9 MUST NOT introduce new typecheck/lint/build errors.
+
+If pre-existing errors remain, identify them explicitly.
+
+---
+
+## PHASE 9 — DOCUMENTATION
+
+Create:
+
+docs/ag-002-memory-manager-sprint9-v1.md
+
+Include:
+
+1. Executive Summary
+2. Scope
+3. Existing Architecture Reused
+4. Restore Design
+5. Restore State Machine
+6. Authorization Rules
+7. Event Replay Design
+8. Replay Ordering
+9. Replay Corruption Handling
+10. Erasure Design
+11. Tombstone/Redaction Semantics
+12. Security Guarantees
+13. Repository Changes
+14. Storage Changes
+15. Event Changes
+16. Idempotency
+17. Failure Handling
+18. Test Coverage
+19. Quality Gates
+20. Known Limitations
+21. Deferred Sprint 10 Work
+22. Deferred Sprint 11 Work
+23. Architecture Compliance
+24. Final Verification
+
+Clearly state what Sprint 9 does NOT implement.
+
+---
+
+## PHASE 10 — FINAL VERIFICATION
+
+Before declaring completion verify:
+
+[ ] restoreMemory implemented
+[ ] Restore authorization enforced
+[ ] Restore lifecycle validation enforced
+[ ] Event replay implemented
+[ ] Replay deterministic
+[ ] Replay corruption detected
+[ ] Erasure implemented
+[ ] Erasure is stronger than soft-delete
+[ ] Erased memory inaccessible through get/query/retrieval/context
+[ ] Erased memory cannot be restored
+[ ] Replay cannot reconstruct erased memory
+[ ] Audit event contains no erased payload
+[ ] Namespace/ownership isolation enforced
+[ ] Idempotency verified
+[ ] Existing 1059 tests still pass
+[ ] New Sprint 9 tests pass
+[ ] No tests deleted/weakened
+[ ] No AG-001 source modified
+[ ] No Sprint 10 implementation
+[ ] No Sprint 11 implementation
+[ ] Typecheck baseline preserved
+[ ] Lint baseline preserved
+[ ] Build passes
+[ ] Documentation written
+
+IMPORTANT:
+
+Do NOT commit.
+Do NOT push.
+
+At the end provide:
+
+SPRINT 9 FINAL REPORT
+
+* Files created
+* Files modified
+* Files deleted
+* Restore implementation summary
+* Replay implementation summary
+* Erasure implementation summary
+* Security guarantees
+* New tests count
+* Previous test count
+* Final test count
+* Typecheck result
+* Lint result
+* Build result
+* Known pre-existing issues
+* Remaining Sprint 10 work
+* Remaining Sprint 11 work
+* AG-001 status
+* Git status
+
+Do not claim Sprint 9 complete until every applicable acceptance criterion has been verified.
+
+Start implementation now and continue autonomously.

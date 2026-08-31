@@ -40,7 +40,7 @@ export function sanitizeMemoryRecordForLogs(record: MemoryRecord): SafeMemoryLog
  * secrets, but tests use this to prove redaction of content/metadata.
  */
 export function isLikelySecret(value: string): boolean {
-  return /(password|passwd|secret|token|api[_-]?key|authorization|private[_-]?key|credential|cookie|bearer|client[_-]?secret)/i.test(
+  return /(password|passwd|secret|token|api[_-]?key|apikey|authorization|private[_-]?key|credential|cookie|bearer|client[_-]?secret|pwd|passphrase|access[_-]?token|refresh[_-]?token|user[_-]?password|session[_-]?token)/i.test(
     value,
   );
 }
@@ -51,7 +51,7 @@ export function isLikelySecret(value: string): boolean {
  * "API_KEY", "Api-Key").
  */
 const SECRET_KEY_PATTERN =
-  /(password|passwd|secret|token|api[_-]?key|authorization|private[_-]?key|credential|cookie|bearer|client[_-]?secret|pwd|passphrase)/i;
+  /password|passwd|secret|token|api[_-]?key|apikey|authorization|private[_-]?key|credential|cookie|bearer|client[_-]?secret|pwd|passphrase|access[_-]?token|refresh[_-]?token|user[_-]?password|session[_-]?token/i;
 
 /** Returns true when a metadata/audit key should be treated as a secret. */
 export function isSecretKeyName(key: string): boolean {

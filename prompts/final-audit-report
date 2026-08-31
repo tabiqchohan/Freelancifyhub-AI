@@ -1,0 +1,770 @@
+# FINAL AUDIT — AG-001 + AG-002 COMPLETE SYSTEM
+
+You are performing the FINAL production-readiness audit of the completed agent orchestration and shared-memory system.
+
+IMPORTANT:
+This is an AUDIT ONLY.
+
+DO NOT modify source code.
+DO NOT fix anything.
+DO NOT refactor anything.
+DO NOT add features.
+DO NOT delete anything.
+DO NOT modify tests.
+DO NOT modify configuration.
+DO NOT commit.
+DO NOT push.
+
+If you discover a problem, REPORT it only.
+
+==================================================
+SYSTEM SCOPE
+============
+
+Audit the complete implementation of:
+
+AG-001 Master Orchestrator
+
+* Sprint 1 Foundation
+* Sprint 2 Intent Detection
+* Sprint 3 Context Builder
+* Sprint 4 Routing
+* Sprint 5 Execution Planner
+* Sprint 6 Execution Engine
+* Sprint 7 Aggregation
+* Sprint 8 Hardening
+* Sprint 9 Orchestrator Integration
+
+AG-002 Memory Manager
+
+* Sprint 1 Foundation
+* Sprint 2 Lifecycle
+* Sprint 3 Access Control & Security
+* Sprint 4 Retrieval & Context Assembly
+* Sprint 5A Context Integration
+* Sprint 5B Consolidation
+* Sprint 6 Persistence/Storage Abstraction
+* Sprint 7 Event Log/Audit Trail
+* Sprint 8 Master Orchestrator Integration
+* Sprint 9 Restore/Event Replay/DSR
+* Sprint 10 Durability Contract/Idempotency/Cache
+* Sprint 11 AG-001 Runtime Wiring & Hygiene
+
+Technical debt cleanup:
+
+* Typecheck = 0 errors
+* Lint = 0 errors
+* Build = 0 errors
+* Tests = all passing
+
+==================================================
+AUDIT OBJECTIVE
+===============
+
+Determine whether AG-001 + AG-002 are genuinely complete and ready to become the stable foundation for the next agents.
+
+Do NOT judge based only on documentation.
+
+Verify claims against actual source code.
+
+For every major requirement:
+
+PASS = implemented and verified in source/tests
+
+PARTIAL = some implementation exists but meaningful limitation remains
+
+MISSING = required implementation absent
+
+DEFERRED = explicitly postponed and should not be falsely considered complete
+
+DEAD = configuration/API/code exists but is not actually wired
+
+RISK = implementation exists but has correctness/security/performance concerns
+
+==================================================
+PHASE 1 — REPOSITORY BASELINE
+=============================
+
+Run/read:
+
+git status
+git log -10 --oneline
+
+Verify the recent technical cleanup commit is actually present.
+
+Run:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Record the exact fresh results.
+
+Do not modify anything.
+
+==================================================
+PHASE 2 — AG-001 AUDIT
+======================
+
+Audit each component:
+
+1. Foundation
+2. Intent Detection
+3. Context Builder
+4. Routing
+5. Execution Planning
+6. Execution Engine
+7. Aggregation
+8. Hardening
+9. MasterOrchestratorService
+
+Verify the actual runtime flow:
+
+INPUT
+↓
+VALIDATION
+↓
+INTENT
+↓
+CONTEXT
+↓
+ROUTING
+↓
+PLANNING
+↓
+EXECUTION
+↓
+AGGREGATION
+↓
+RESPONSE
+
+Verify:
+
+* Dependency injection
+* Error propagation
+* Typed errors
+* Retry
+* Timeout
+* Cancellation
+* Conditional execution
+* Parallel execution
+* Sequential execution
+* Hybrid execution
+* Fallback routing
+* Routing constraints
+* Agent availability
+* Draft/retired filtering
+* Permission enforcement
+* Cost enforcement
+* Confidence enforcement
+* Execution concurrency limits
+* Deterministic behavior
+* Event correlation
+* Security/sanitization
+
+Check for dead paths or interfaces that are not actually used.
+
+==================================================
+PHASE 3 — AG-002 AUDIT
+======================
+
+Audit:
+
+### Memory CRUD
+
+Verify:
+
+* create
+* read
+* update
+* delete
+* versioning
+* optimistic/version-safe updates
+* namespace isolation
+* ownership
+
+### Lifecycle
+
+Verify:
+
+* Active
+* Archived
+* Expired
+* Deleted
+* Restore
+* TTL
+* lifecycle evaluation
+* lifecycle events
+
+### Security
+
+Verify:
+
+* authorization
+* ownership
+* namespace scope
+* security clearance
+* role restrictions
+* permission matrix
+* fail-closed behavior
+* deleted/expired handling
+* audit events
+* sensitive-data sanitization
+
+Attempt to identify paths where unauthorized memory could be:
+
+* read
+* written
+* updated
+* deleted
+* restored
+* archived
+* consolidated
+* exposed through retrieval
+* exposed through context
+* exposed through events/logs
+* exposed through metrics
+
+### Retrieval
+
+Verify the real runtime implementation:
+
+candidate retrieval
+→ lifecycle filtering
+→ authorization
+→ scope filtering
+→ security filtering
+→ scoring
+→ ranking
+→ deduplication
+→ result limits
+→ token budgeting
+→ context assembly
+→ sanitization
+
+Do not accept interface-only implementations as complete.
+
+### Context Integration
+
+Verify:
+
+* authorization
+* lifecycle filtering
+* deterministic ordering
+* deduplication
+* section limits
+* token budget
+* secret sanitization
+* immutable output
+* deterministic output
+
+### Consolidation
+
+Verify:
+
+* candidate selection
+* namespace isolation
+* authorization
+* provenance
+* deterministic key
+* duplicate/idempotency handling
+* archive-source behavior
+* stale-source detection
+* security
+
+### Persistence
+
+IMPORTANT:
+
+Determine what "durable persistence" REALLY means.
+
+Verify whether a real durable backend exists.
+
+Do NOT count an interface/contract as a real database.
+
+Clearly report:
+
+REAL DURABLE BACKEND:
+YES / NO
+
+If NO:
+Explain exactly what remains.
+
+### Storage
+
+Verify:
+
+* adapter abstraction
+* capabilities
+* health
+* metrics
+* transaction semantics
+* rollback
+* pagination
+* cursors
+* limits
+* fail-closed unknown backend
+
+Do not claim ACID unless actual ACID persistence exists.
+
+### Cache
+
+Verify:
+
+* TTL
+* LRU/bounds
+* namespace-safe keys
+* clone-in/out
+* invalidation
+* update invalidation
+* archive invalidation
+* expire invalidation
+* erase invalidation
+* restore invalidation
+* disabled mode
+* metrics
+* stale-data risk
+
+### Event Log
+
+Verify:
+
+* append
+* appendBatch
+* sequence correctness
+* ordering
+* querying
+* namespace filtering
+* key filtering
+* sanitization
+* audit events
+* replay
+* impossible transition detection
+* duplicate event detection
+* erase tombstones
+
+### DSR / Right to Forget
+
+Verify:
+
+* erase by ID
+* erase by namespace
+* authorization
+* ownership
+* namespace scope
+* security clearance
+* physical removal
+* storage removal
+* cache invalidation
+* tombstone
+* replay behavior
+* no sensitive content in tombstones
+
+### Orchestration Integration
+
+Verify:
+
+AG-001
+↓
+AG-002 MemoryContextProviderAdapter
+↓
+AG-002 retrieval/context services
+
+Verify actual runtime wiring, not interface-only claims.
+
+==================================================
+PHASE 4 — CROSS-SYSTEM SECURITY AUDIT
+=====================================
+
+Trace sensitive data through:
+
+Input
+→ AG-001
+→ Context
+→ AG-002
+→ Retrieval
+→ Consolidation
+→ Events
+→ Logs
+→ Metrics
+→ Response
+
+Look specifically for:
+
+* apiKey
+* token
+* password
+* secret
+* credential
+* pwd
+* passphrase
+* authorization headers
+* environment secrets
+
+Verify redaction is:
+
+* case-insensitive
+* nested
+* recursive
+* applied at trust boundaries
+* non-mutating
+
+Also verify no secrets are accidentally included in:
+
+* errors
+* logs
+* events
+* metrics
+* response metadata
+* snippets
+* test fixtures that could leak into production output
+
+==================================================
+PHASE 5 — FAILURE / EDGE CASE AUDIT
+===================================
+
+Inspect behavior for:
+
+* empty input
+* unknown intent
+* low confidence
+* unavailable agent
+* draft agent
+* retired agent
+* permission denial
+* namespace mismatch
+* ownership mismatch
+* security clearance mismatch
+* timeout
+* cancellation
+* retry
+* concurrent execution
+* duplicate create
+* conflicting create
+* duplicate retrieval results
+* expired memory
+* deleted memory
+* archived memory
+* restore
+* erase
+* event replay
+* malformed cursor
+* invalid configuration
+* unknown storage backend
+* cache expiration
+* cache invalidation
+* consolidation race
+* large result sets
+* deep nested metadata
+
+Check whether behavior is:
+
+SAFE
+DETERMINISTIC
+FAIL-CLOSED
+RECOVERABLE
+
+==================================================
+PHASE 6 — PERFORMANCE / SCALABILITY AUDIT
+=========================================
+
+Identify obvious scalability risks.
+
+Check:
+
+* O(n²) operations
+* unbounded memory growth
+* unbounded event log
+* unbounded cache
+* repeated full scans
+* excessive cloning
+* excessive serialization
+* large metadata
+* deep recursion
+* concurrent executions
+* retrieval candidate limits
+* context limits
+* event query limits
+
+Do not optimize anything.
+
+Only report risks.
+
+==================================================
+PHASE 7 — API / ARCHITECTURE AUDIT
+==================================
+
+Inspect public barrels and exports.
+
+Find:
+
+* dead exports
+* leaked test doubles
+* unreachable production services
+* circular dependencies
+* duplicated contracts
+* inconsistent interfaces
+* unused config
+* dead feature flags
+* fake implementations
+* test-only implementations accidentally exposed publicly
+
+Verify dependency direction:
+
+AG-001 → AG-002
+
+and NOT:
+
+AG-002 → AG-001 runtime circular dependency
+
+Also verify AG-003/AG-004 have NOT been accidentally introduced.
+
+==================================================
+PHASE 8 — CONFIGURATION AUDIT
+=============================
+
+Inspect every AG-001 and AG-002 config flag.
+
+For each flag:
+
+* defined?
+* default?
+* validated?
+* actually read?
+* actually affects behavior?
+* dead?
+
+Produce a table:
+
+FLAG | DEFINED | READ | EFFECTIVE | STATUS
+
+==================================================
+PHASE 9 — TEST QUALITY AUDIT
+============================
+
+Do not only count tests.
+
+Inspect whether tests meaningfully verify:
+
+* authorization
+* security
+* namespace isolation
+* sanitization
+* timeout races
+* cancellation
+* concurrency
+* idempotency
+* replay
+* DSR
+* cache invalidation
+* consolidation
+* AG-001 ↔ AG-002 integration
+
+Look for:
+
+* weak assertions
+* tests that don't exercise intended branches
+* random/non-deterministic tests
+* tests relying on implementation details
+* skipped tests
+* TODO tests
+* false-positive tests
+* duplicate tests
+* missing negative/security tests
+
+Do not modify tests.
+
+==================================================
+PHASE 10 — PRODUCTION READINESS
+===============================
+
+Score independently:
+
+AG-001:
+
+Architecture / 100
+Correctness / 100
+Security / 100
+Testing / 100
+Performance / 100
+Production readiness / 100
+
+AG-002:
+
+Architecture / 100
+Correctness / 100
+Security / 100
+Testing / 100
+Performance / 100
+Production readiness / 100
+
+Combined:
+
+Overall / 100
+
+IMPORTANT:
+
+Do not inflate the score simply because tests pass.
+
+A missing durable database must materially affect production readiness.
+
+==================================================
+PHASE 11 — BLOCKER CLASSIFICATION
+=================================
+
+Classify every remaining issue:
+
+CRITICAL
+HIGH
+MEDIUM
+LOW
+INFO
+
+For each:
+
+ID
+Severity
+Component
+Finding
+Evidence (file/path + relevant code)
+Impact
+Recommended action
+
+Do not fix it.
+
+==================================================
+PHASE 12 — FINAL GAP MATRIX
+===========================
+
+Create:
+
+Requirement | Status | Evidence | Remaining Work
+
+Include all major requirements from AG-001 and AG-002.
+
+==================================================
+PHASE 13 — WHAT IS ACTUALLY READY?
+==================================
+
+Clearly separate:
+
+### READY NOW
+
+Things that are genuinely production-quality.
+
+### READY WITH INFRASTRUCTURE
+
+Things whose code is ready but need external infrastructure.
+
+### NOT READY
+
+Things still missing.
+
+### DEFERRED
+
+Things intentionally postponed.
+
+==================================================
+PHASE 14 — NEXT STEPS
+=====================
+
+Provide the smallest possible remaining roadmap.
+
+Do NOT automatically recommend more sprints.
+
+If AG-001 + AG-002 are sufficiently complete, say so.
+
+If only infrastructure is missing, say exactly that.
+
+If bugs remain, list only necessary fixes.
+
+Then answer:
+
+1. Can we start AG-003 safely?
+2. Can AG-001 use AG-002 in real runtime?
+3. Can we deploy the current system?
+4. What infrastructure is still required?
+5. What MUST be fixed before production?
+6. What can safely wait until later?
+
+==================================================
+FINAL REPORT
+============
+
+Create:
+
+docs/final-ag001-ag002-production-audit-v1.md
+
+The document must include at least:
+
+1. Executive Summary
+2. Audit Scope
+3. Repository Baseline
+4. AG-001 Findings
+5. AG-002 Findings
+6. Security Audit
+7. Integration Audit
+8. Persistence Audit
+9. Event/Replay Audit
+10. DSR Audit
+11. Cache Audit
+12. Performance Audit
+13. Configuration Audit
+14. API/Architecture Audit
+15. Test Quality Audit
+16. Critical Findings
+17. High Findings
+18. Medium Findings
+19. Low Findings
+20. Deferred Items
+21. Final Gap Matrix
+22. Production Readiness Scores
+23. Deployment Readiness
+24. AG-003 Readiness
+25. Final Recommendation
+
+IMPORTANT:
+
+The audit document itself is allowed to be created.
+
+Source code is NOT allowed to be changed.
+
+Tests are NOT allowed to be changed.
+
+Configuration is NOT allowed to be changed.
+
+==================================================
+FINAL OUTPUT FORMAT
+===================
+
+Return a concise executive summary containing:
+
+* Tests
+* Typecheck
+* Lint
+* Build
+* AG-001 score
+* AG-002 score
+* Combined score
+* Critical blockers
+* High blockers
+* Medium blockers
+* Real durable backend: YES/NO
+* AG-001 ↔ AG-002 runtime integration: YES/NO
+* DSR: YES/NO
+* Event replay: YES/NO
+* Cache: YES/NO
+* Biggest remaining risk
+* Can we start AG-003? YES/NO
+* Must-fix-before-production list
+* Safe-to-defer list
+
+Then provide the path:
+
+docs/final-ag001-ag002-production-audit-v1.md
+
+DO NOT COMMIT.
+DO NOT PUSH.
+DO NOT MODIFY SOURCE.
+ONLY AUDIT AND REPORT.
