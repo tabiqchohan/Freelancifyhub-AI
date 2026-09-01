@@ -192,7 +192,29 @@ describe('Sprint 10 - durable storage contract', () => {
   });
 
   it('fails closed for an unregistered durable backend', () => {
-    expect(() => createDurableStorageAdapter('postgres')).toThrow(MemoryConfigurationError);
+    // 'nope-404' is not a registered backend — resolution fails closed with a
+    // typed configuration error (it must never fall back to non-durable storage).
+    expect(() => createDurableStorageAdapter('nope-404')).toThrow(MemoryConfigurationError);
+  });
+
+  it('registers the real postgres backend and succeeds when the URL is available', () => {
+    // postgres is wired as a real backend and the URL is present in .env,
+    // so creating the adapter succeeds without throwing.
+    expect(listDurableBackends()).toContain('postgres');
+    const adapter = createDurableStorageAdapter('postgres');
+    expect(adapter.durable).toBe(true);
+  });
+
+  it('fails closed for postgres when the URL is removed', () => {
+    const saved = process.env.MEMORY_DATABASE_URL;
+    try {
+      delete process.env.MEMORY_DATABASE_URL;
+      expect(() => createDurableStorageAdapter('postgres')).toThrow(MemoryConfigurationError);
+    } finally {
+      if (saved !== undefined) {
+        process.env.MEMORY_DATABASE_URL = saved;
+      }
+    }
   });
 
   it('isDurableCapability identifies the durable capability', () => {
@@ -225,13 +247,30 @@ describe('Sprint 10 - backend capability detection', () => {
     expect(adapter.capabilities().supports?.('durable')).toBe(false);
   });
 
-  it('createStorageAdapter rejects a durable backend with no registered provider', () => {
-    expect(() =>
-      createStorageAdapter({
-        MEMORY_STORAGE_BACKEND: 'durable',
-        MEMORY_STORAGE_DURABLE_BACKEND: 'postgres',
-      }),
-    ).toThrow(MemoryConfigurationError);
+  it('createStorageAdapter resolves the durable postgres backend from the factory default', () => {
+    // durable defaults to the real postgres backend (MEMORY_DATABASE_URL present
+    // in .env), producing a genuinely durable adapter.
+    const adapter = createStorageAdapter({
+      MEMORY_STORAGE_BACKEND: 'durable',
+    });
+    expect(adapter.capabilities().supports?.('durable')).toBe(true);
+  });
+
+  it('createStorageAdapter fails closed for postgres when the URL is removed', () => {
+    const saved = process.env.MEMORY_DATABASE_URL;
+    try {
+      delete process.env.MEMORY_DATABASE_URL;
+      expect(() =>
+        createStorageAdapter({
+          MEMORY_STORAGE_BACKEND: 'durable',
+          MEMORY_STORAGE_DURABLE_BACKEND: 'postgres',
+        }),
+      ).toThrow(MemoryConfigurationError);
+    } finally {
+      if (saved !== undefined) {
+        process.env.MEMORY_DATABASE_URL = saved;
+      }
+    }
   });
 
   it('createStorageAdapter resolves a registered durable backend', () => {

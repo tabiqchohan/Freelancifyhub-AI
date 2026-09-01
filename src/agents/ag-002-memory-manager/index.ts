@@ -24,6 +24,23 @@ export { InMemoryStorageAdapter } from './storage/in-memory.js';
 export { InMemoryMemoryRepository } from './repositories/in-memory.js';
 export { InMemoryMemoryRetrievalEngine } from './retrieval/in-memory.js';
 
+export { PostgresStorageAdapter, createPostgresPool } from './storage/postgres.js';
+export {
+  createPostgresAdapter,
+  registerPostgresBackend,
+  buildPostgresBackend,
+  resolvePostgresConnectionString,
+  MEMORY_DATABASE_URL_ENV,
+} from './storage/postgres-backend.js';
+export { PostgresMemoryRepository } from './repositories/postgres.js';
+export {
+  migrateSchema,
+  SCHEMA_VERSION,
+  pendingMigrations,
+  SCHEMA_MIGRATIONS,
+} from './storage/schema.js';
+export { PostgresEventSink } from './events/postgres.js';
+
 export { MemoryConfigSchema } from './config/schema.js';
 export type { MemoryConfig } from './config/schema.js';
 export { parseMemoryConfig, memoryConfig } from './config/index.js';

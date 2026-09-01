@@ -1,0 +1,1053 @@
+# SPRINT 13 — REAL DURABLE POSTGRESQL PERSISTENCE
+
+## OBJECTIVE
+
+Implement a REAL durable PostgreSQL storage backend for AG-002 Memory Manager.
+
+This sprint closes the biggest remaining production blocker identified by the final audit:
+
+> "No real durable backend."
+
+The existing storage abstraction, repository contracts, pagination, capabilities, idempotency, lifecycle, event log, cache, authorization, and security systems must be reused.
+
+Do NOT redesign AG-002.
+
+Do NOT rewrite existing memory services.
+
+Do NOT introduce AG-003/AG-004.
+
+Do NOT implement LLM/vector search.
+
+Do NOT implement the production composition root yet.
+
+This sprint is ONLY about real durable PostgreSQL persistence and the minimum repository/storage integration required to make it truthful.
+
+==================================================
+IMPORTANT ARCHITECTURAL RULE
+============================
+
+PostgreSQL must be a REAL backend.
+
+Do NOT create:
+
+* fake durable adapter
+* in-memory fallback when durable is selected
+* fake transaction implementation
+* "durable" wrapper around InMemoryMemoryRepository
+* mock persistence presented as production persistence
+
+When:
+
+MEMORY_STORAGE_BACKEND=durable
+
+the system MUST actually use PostgreSQL.
+
+If PostgreSQL configuration is missing or invalid:
+
+FAIL CLOSED.
+
+Do NOT silently fall back to memory.
+
+The existing in-memory backend must remain available for tests/development.
+
+==================================================
+PHASE 1 — BASELINE
+==================
+
+Before changing anything run:
+
+git status
+git log -10 --oneline
+
+Then:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Record exact baseline numbers.
+
+Current expected baseline after Sprint 12:
+
+Tests: 1228 passing
+Typecheck: 0
+Lint: 0
+Build: SUCCESS
+
+Do not assume. Verify.
+
+==================================================
+PHASE 2 — ARCHITECTURE EXPLORATION
+==================================
+
+Read and understand:
+
+src/agents/ag-002-memory-manager/storage/
+src/agents/ag-002-memory-manager/repositories/
+src/agents/ag-002-memory-manager/services/memory.service.ts
+src/agents/ag-002-memory-manager/services/idempotency.ts
+src/agents/ag-002-memory-manager/cache/
+src/agents/ag-002-memory-manager/events/
+src/agents/ag-002-memory-manager/config/schema.ts
+src/agents/ag-002-memory-manager/types/
+src/agents/ag-002-memory-manager/errors/
+src/agents/ag-002-memory-manager/validators/
+
+Also inspect package.json.
+
+Determine whether the project already has a PostgreSQL driver/ORM.
+
+Possible existing technology may include:
+
+* pg
+* postgres
+* Prisma
+* Drizzle
+* another PostgreSQL-compatible library
+
+If a suitable PostgreSQL dependency already exists, reuse it.
+
+If no PostgreSQL driver exists, add the smallest appropriate production dependency.
+
+Do NOT introduce an ORM solely for convenience if the existing architecture does not need one.
+
+Prefer a small provider-neutral PostgreSQL adapter.
+
+==================================================
+PHASE 3 — DATABASE CONFIGURATION
+================================
+
+Add validated configuration for the PostgreSQL backend.
+
+Use environment configuration.
+
+Preferred configuration:
+
+MEMORY_STORAGE_BACKEND=in-memory|durable
+
+and a PostgreSQL connection configuration such as:
+
+MEMORY_DATABASE_URL
+
+or the project's existing DATABASE_URL if already established and appropriate.
+
+Do NOT expose credentials through logs/errors/events.
+
+Requirements:
+
+* missing connection string → fail closed when durable backend selected
+* invalid connection string → fail closed
+* unsupported backend → fail closed
+* no password in error messages
+* no password in health output
+* no connection string in metrics
+* no connection string in events
+
+Document required environment variables.
+
+Do NOT commit actual credentials.
+
+==================================================
+PHASE 4 — DATABASE SCHEMA
+=========================
+
+Design the minimum PostgreSQL schema needed for AG-002.
+
+At minimum persist:
+
+MemoryRecord data required by the current domain model.
+
+The schema must support:
+
+* id
+* namespace
+* key
+* memory type
+* content/data
+* metadata
+* priority
+* security level
+* lifecycle state
+* owner
+* organization/workspace/project scope where applicable
+* createdAt
+* updatedAt
+* expiresAt / TTL information
+* version
+* provenance/source information where applicable
+
+Do not flatten important structured information in a way that destroys the existing domain contract.
+
+Use PostgreSQL JSONB for structured fields where appropriate.
+
+Preserve exact domain semantics.
+
+==================================================
+PHASE 5 — IDENTIFIERS & CONSTRAINTS
+===================================
+
+Database constraints must enforce important invariants.
+
+At minimum consider:
+
+* primary key on id
+* namespace + key uniqueness where required by the domain
+* version correctness
+* valid lifecycle state representation
+* required fields
+* timestamp validity
+
+IMPORTANT:
+
+Namespace isolation must be enforced by application logic AND supported by correct database query predicates.
+
+Do not rely only on application-level assumptions.
+
+Do not introduce PostgreSQL Row Level Security unless the existing architecture explicitly requires it.
+
+Keep the implementation understandable.
+
+==================================================
+PHASE 6 — DURABLE STORAGE ADAPTER
+=================================
+
+Implement the real PostgreSQL storage adapter behind the existing:
+
+MemoryStorageAdapter
+
+contract.
+
+It must support the existing required operations, including as applicable:
+
+* create
+* getById
+* get
+* update
+* remove/delete
+* removeByNamespace
+* query
+* capabilities
+* health
+* metrics
+* transaction
+
+Reuse existing interfaces.
+
+Do not create duplicate parallel contracts unless unavoidable.
+
+The durable adapter must never call:
+
+InMemoryMemoryRepository
+InMemoryMemoryStorageAdapter
+
+for production persistence.
+
+==================================================
+PHASE 7 — REPOSITORY INTEGRATION
+================================
+
+Integrate PostgreSQL with the existing MemoryRepository abstraction.
+
+The repository must preserve:
+
+* namespace isolation
+* ownership
+* authorization boundaries
+* version-safe updates
+* optimistic concurrency behavior
+* pagination
+* deterministic sorting
+* cursor semantics
+* lifecycle semantics
+* idempotent creation
+* conflict behavior
+
+Do not move authorization into the database layer.
+
+Authorization remains in the service/security layer.
+
+==================================================
+PHASE 8 — PAGINATION
+====================
+
+Sprint 6 introduced deterministic cursor-based pagination.
+
+The PostgreSQL implementation MUST preserve it.
+
+Verify:
+
+* createdAt sorting
+* updatedAt sorting
+* priority sorting
+* key sorting
+* version sorting
+* namespace → key stable tie-break
+* cursor encoding/decoding
+* invalid cursor → typed failure
+* max page size
+* deterministic next cursor
+
+Do NOT implement offset pagination as a replacement.
+
+==================================================
+PHASE 9 — TRANSACTIONS
+======================
+
+Implement REAL PostgreSQL transactions.
+
+Do NOT claim ACID behavior for the in-memory backend.
+
+For PostgreSQL:
+
+transaction(callback)
+
+must execute within a real database transaction.
+
+Required behavior:
+
+BEGIN
+→ operations
+→ COMMIT
+
+On error:
+
+BEGIN
+→ operations
+→ ROLLBACK
+
+Test:
+
+* successful transaction
+* rollback on exception
+* multiple operations
+* visibility after commit
+* absence after rollback
+
+Do not expose raw database connections through public AG-002 APIs.
+
+==================================================
+PHASE 10 — CONCURRENCY & VERSION SAFETY
+=======================================
+
+Verify concurrent updates.
+
+For versioned records:
+
+Expected behavior:
+
+read version N
+
+update where:
+
+id = X
+AND version = N
+
+then increment version.
+
+If another writer already updated the record:
+
+return the existing typed conflict error.
+
+Do not silently overwrite.
+
+Add tests for concurrent update races.
+
+==================================================
+PHASE 11 — IDEMPOTENT CREATE
+============================
+
+Sprint 10 implemented idempotent creation.
+
+Ensure the PostgreSQL backend preserves:
+
+same namespace + same key + identical logical input
+→ safe retry / same logical record
+
+Conflicting input:
+
+same namespace + same key + different logical input
+→ typed conflict
+
+Different namespace:
+
+same key
+→ independent records
+
+Concurrent identical creates:
+
+→ exactly one logical record
+
+No duplicate creation events.
+
+Add PostgreSQL-specific concurrency tests.
+
+==================================================
+PHASE 12 — LIFECYCLE / TTL PERSISTENCE
+======================================
+
+Verify persistence of:
+
+* Active
+* Archived
+* Expired
+* Deleted
+* Restored
+
+Verify:
+
+expiresAt survives restart.
+
+Lifecycle evaluation must work after a process restart.
+
+Do not rely on in-memory timers.
+
+A record created with TTL must remain correctly represented in PostgreSQL.
+
+After restart:
+
+lifecycle evaluation must still identify expired records.
+
+==================================================
+PHASE 13 — EVENT LOG DURABILITY
+===============================
+
+The Sprint 7 event log currently has its own in-memory implementation.
+
+Determine the minimum safe integration required for durable persistence.
+
+Events relevant to durable memory operations must survive process restart.
+
+Persist event information required for:
+
+* audit
+* replay
+* restore
+* erase tombstones
+* lifecycle transitions
+* consolidation events
+
+Preserve:
+
+* sequence ordering
+* event id
+* occurredAt
+* event type
+* namespace
+* memory id/key where applicable
+* safe metadata
+* correlation id
+
+IMPORTANT:
+
+Do NOT persist secrets.
+
+Apply canonical event sanitization before persistence.
+
+If full event-log persistence requires a separate abstraction that already exists, implement the smallest adapter required.
+
+Do not redesign the event system.
+
+==================================================
+PHASE 14 — CACHE INTERACTION
+============================
+
+The cache remains in-memory.
+
+That is acceptable.
+
+When durable PostgreSQL is selected:
+
+* cache reads may use memory cache
+* database remains source of truth
+* update invalidates cache
+* archive invalidates cache
+* restore invalidates cache
+* expire invalidates cache
+* erase invalidates cache
+
+After process restart:
+
+cache is empty
+database remains authoritative
+
+Do NOT attempt to make the cache durable in Sprint 13.
+
+==================================================
+PHASE 15 — DSR / ERASURE
+========================
+
+Verify Sprint 9 right-to-forget behavior against PostgreSQL.
+
+eraseMemoryById:
+
+must physically remove the record from PostgreSQL.
+
+eraseMemoryByNamespace:
+
+must remove all relevant records from PostgreSQL.
+
+Verify:
+
+* authorization
+* namespace scope
+* ownership
+* clearance
+* cache invalidation
+* event tombstone
+* replay semantics
+
+After restart, erased memory MUST NOT reappear.
+
+This is a critical persistence test.
+
+==================================================
+PHASE 16 — SECURITY
+===================
+
+Verify PostgreSQL queries preserve all existing security boundaries.
+
+Every service-level access path must continue using:
+
+AuthorizationService
+
+Do NOT bypass authorization because PostgreSQL can filter records.
+
+Verify:
+
+* namespace isolation
+* ownership
+* security clearance
+* lifecycle filtering
+* DSR
+* retrieval
+* context integration
+
+Sensitive values must not appear in:
+
+* SQL errors
+* logs
+* metrics
+* health output
+* event metadata
+
+Use parameterized queries.
+
+NEVER concatenate user-controlled values into SQL.
+
+==================================================
+PHASE 17 — HEALTH & CAPABILITIES
+================================
+
+The durable storage adapter must report truthful health.
+
+Example states:
+
+HEALTHY
+UNAVAILABLE
+DEGRADED
+
+Health checks may perform a lightweight database connectivity check.
+
+Do not expose:
+
+* database URL
+* username/password
+* secrets
+* raw connection strings
+
+Capabilities must truthfully state:
+
+durable: true
+
+only when backed by PostgreSQL.
+
+The in-memory backend must continue reporting:
+
+durable: false
+
+==================================================
+PHASE 18 — FAILURE / RECOVERY
+=============================
+
+Test:
+
+* PostgreSQL unavailable
+* connection failure
+* query failure
+* transaction failure
+* constraint violation
+* malformed database row
+* serialization failure
+* timeout if supported by existing abstraction
+
+Required behavior:
+
+* fail closed
+* typed errors
+* no false-success events
+* no partial logical success
+* safe retry where appropriate
+* no secret leakage
+
+Do not silently switch to in-memory storage.
+
+==================================================
+PHASE 19 — RESTART DURABILITY TEST
+==================================
+
+This is a mandatory acceptance test.
+
+Perform:
+
+1. Start PostgreSQL.
+2. Create memory.
+3. Update memory.
+4. Verify persisted version.
+5. Stop/recreate storage adapter/process.
+6. Create a NEW adapter instance.
+7. Read the memory.
+8. Verify it still exists with the same logical state.
+9. Restart again.
+10. Verify event information remains available.
+11. Verify erased memory remains erased.
+
+This test MUST prove that persistence is real.
+
+A test that only reuses the same in-memory process is NOT sufficient.
+
+==================================================
+PHASE 20 — MIGRATIONS
+=====================
+
+Provide a reproducible schema initialization/migration mechanism.
+
+Requirements:
+
+* clean database → schema can be created
+* existing database → migration can be applied
+* migration is deterministic
+* no destructive migration without explicit intent
+* schema version is trackable
+
+Use the project's existing migration technology if one exists.
+
+If none exists, implement the smallest maintainable migration mechanism.
+
+Document:
+
+* how to initialize
+* how to migrate
+* required environment variables
+* rollback limitations if applicable
+
+==================================================
+PHASE 21 — TEST STRATEGY
+========================
+
+Do NOT replace existing in-memory tests.
+
+Add PostgreSQL integration tests.
+
+Tests should cover at minimum:
+
+A. connection
+B. schema
+C. create
+D. read
+E. update
+F. delete
+G. namespace isolation
+H. pagination
+I. cursor
+J. transaction commit
+K. transaction rollback
+L. concurrent update
+M. idempotent create
+N. conflicting create
+O. TTL persistence
+P. lifecycle after restart
+Q. event persistence
+R. replay after restart
+S. DSR by ID
+T. DSR by namespace
+U. cache invalidation
+V. security
+W. malformed configuration
+X. unavailable database
+Y. no fallback to memory
+Z. secret-safe errors
+
+Tests that require PostgreSQL should be clearly marked as integration tests.
+
+If the environment does not provide PostgreSQL:
+
+Do NOT fake the tests.
+
+Report exactly what could not be executed.
+
+==================================================
+PHASE 22 — BACKWARD COMPATIBILITY
+=================================
+
+Existing in-memory behavior must remain functional.
+
+Verify:
+
+MEMORY_STORAGE_BACKEND=in-memory
+
+still passes all existing tests.
+
+Default behavior should remain safe for local tests/development unless the existing configuration explicitly requires otherwise.
+
+Durable mode must be opt-in until production composition is implemented.
+
+==================================================
+PHASE 23 — DOCUMENTATION
+========================
+
+Create:
+
+docs/ag-002-memory-manager-sprint13-v1.md
+
+Include:
+
+1. Objective
+2. Existing storage architecture
+3. PostgreSQL architecture
+4. Database schema
+5. Configuration
+6. Migration mechanism
+7. Storage adapter
+8. Repository integration
+9. Transactions
+10. Concurrency
+11. Idempotency
+12. Pagination
+13. Lifecycle persistence
+14. Event persistence
+15. Cache interaction
+16. DSR behavior
+17. Security
+18. Health/capabilities
+19. Failure/recovery
+20. Restart durability
+21. Integration tests
+22. Test results
+23. Known limitations
+24. Deferred work
+25. Scope compliance
+
+==================================================
+PHASE 24 — SCOPE RESTRICTIONS
+=============================
+
+STRICTLY DO NOT IMPLEMENT:
+
+* AG-003
+* AG-004
+* LLM
+* vector search
+* embeddings
+* OpenClaw integration
+* production composition root
+* real AgentExecutor
+* social media
+* payments
+* external APIs
+* Redis
+* distributed cache
+* Kubernetes
+* unrelated refactoring
+
+Do NOT modify AG-001 unless absolutely required by an existing storage contract.
+
+Prefer AG-002-only changes.
+
+==================================================
+PHASE 25 — QUALITY GATES
+========================
+
+Run:
+
+npm test
+npm run typecheck
+npm run lint
+npm run build
+
+Then run PostgreSQL integration tests separately.
+
+Record:
+
+* total tests
+* unit tests
+* integration tests
+* passed
+* failed
+* skipped
+
+Expected:
+
+No regressions.
+
+Typecheck: 0 errors
+Lint: 0 errors
+Build: SUCCESS
+
+==================================================
+PHASE 26 — DIFF / SECURITY REVIEW
+=================================
+
+Run:
+
+git status
+git diff --stat
+git diff
+
+Verify:
+
+* no credentials
+* no .env files
+* no database passwords
+* no secrets
+* no unrelated changes
+* no deleted/weakened tests
+* no AG-003/AG-004 changes
+* no AG-001 redesign
+* no fake durability
+
+Search for:
+
+"password"
+"secret"
+"apiKey"
+"token"
+"DATABASE_URL"
+
+Ensure secrets are never hardcoded or logged.
+
+==================================================
+PHASE 27 — DURABILITY ACCEPTANCE CRITERIA
+=========================================
+
+Sprint 13 is ONLY COMPLETE if ALL applicable conditions are true:
+
+1. Real PostgreSQL adapter exists.
+2. Durable backend is actually registered.
+3. MEMORY_STORAGE_BACKEND=durable selects PostgreSQL.
+4. Missing DB configuration fails closed.
+5. Durable mode never silently falls back to memory.
+6. CRUD persists across adapter/process restart.
+7. Transactions are real PostgreSQL transactions.
+8. Optimistic concurrency works.
+9. Idempotent create works under concurrency.
+10. Pagination/cursors remain deterministic.
+11. Lifecycle survives restart.
+12. DSR survives restart.
+13. Event persistence survives restart, if event persistence is in scope.
+14. Cache remains non-authoritative.
+15. Security boundaries remain enforced.
+16. SQL is parameterized.
+17. No sensitive data leaks.
+18. Existing in-memory tests still pass.
+19. PostgreSQL integration tests pass when PostgreSQL is available.
+20. Documentation is complete.
+21. No unrelated scope was implemented.
+
+If any of these cannot be satisfied:
+
+DO NOT claim Sprint 13 complete.
+
+Clearly mark the item PARTIAL or DEFERRED.
+
+==================================================
+FINAL REPORT
+============
+
+Return:
+
+# SPRINT 13 FINAL REPORT
+
+## 1. Baseline
+
+Tests:
+Typecheck:
+Lint:
+Build:
+
+## 2. PostgreSQL Implementation
+
+Adapter:
+Driver:
+Schema:
+Migration:
+
+## 3. Durable Backend
+
+Backend:
+Registration:
+Configuration:
+Fail-closed behavior:
+Fallback behavior:
+
+## 4. Persistence
+
+Create:
+Read:
+Update:
+Delete:
+Restart durability:
+
+## 5. Transactions
+
+Commit:
+Rollback:
+Concurrency:
+
+## 6. Idempotency
+
+Identical retry:
+Conflict:
+Namespace isolation:
+Concurrent create:
+
+## 7. Pagination
+
+Cursor:
+Sorting:
+Limits:
+Determinism:
+
+## 8. Lifecycle
+
+TTL:
+Expire:
+Archive:
+Restore:
+Restart:
+
+## 9. Event Log
+
+Persistence:
+Ordering:
+Replay:
+Erase tombstones:
+
+## 10. Cache
+
+TTL:
+LRU:
+Invalidation:
+Restart behavior:
+
+## 11. DSR
+
+Erase by ID:
+Erase namespace:
+Cache invalidation:
+Restart verification:
+
+## 12. Security
+
+Authorization:
+Namespace:
+Ownership:
+Clearance:
+SQL injection:
+Secret leakage:
+
+## 13. Health
+
+Healthy:
+Unavailable:
+Capabilities:
+Sensitive information exposure:
+
+## 14. Tests
+
+Previous:
+New:
+Final:
+Integration:
+Passed:
+Failed:
+Skipped:
+
+## 15. Quality Gates
+
+Typecheck:
+Lint:
+Build:
+
+## 16. Files Changed
+
+List exact files.
+
+## 17. Remaining Limitations
+
+Be honest.
+
+Do not call infrastructure "implemented" if only a contract exists.
+
+## 18. Deferred Work
+
+Explicitly list:
+
+* composition root
+* real AgentExecutor
+* AG-003
+* AG-004
+* LLM/vector
+* external integrations
+
+unless accidentally implemented (which should be reported as scope violation).
+
+## 19. Production Impact
+
+Answer:
+
+* Does AG-002 now have real durable persistence? YES/NO
+* Does data survive process restart? YES/NO
+* Is PostgreSQL actually selectable through storage factory? YES/NO
+* Does durable mode fail closed? YES/NO
+* Does it silently fall back to memory? YES/NO
+* Are transactions real? YES/NO
+* Does DSR survive restart? YES/NO
+* Does lifecycle survive restart? YES/NO
+* Does event history survive restart? YES/NO
+* Is AG-001 production runtime wiring complete? YES/NO
+* Is a production composition root complete? YES/NO
+
+## 20. Sprint Status
+
+Choose exactly one:
+
+COMPLETE
+PARTIAL
+BLOCKED
+
+Explain why.
+
+==================================================
+COMMIT RULE
+===========
+
+DO NOT COMMIT.
+
+DO NOT PUSH.
+
+Leave Sprint 13 changes uncommitted.
+
+We will review the final report before committing.
+
+==================================================
+MOST IMPORTANT RULE
+===================
+
+DO NOT FAKE POSTGRESQL.
+
+If PostgreSQL is unavailable in the current environment, implement the correct adapter/schema/contracts only if they can be verified safely, but clearly report which integration tests could not run.
+
+Never replace unavailable PostgreSQL with an in-memory mock and call the sprint complete.
+
+Start with baseline verification and repository exploration.

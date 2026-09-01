@@ -207,6 +207,11 @@ export const MemoryConfigSchema = z.object({
     .default(DEFAULT_MEMORY_STORAGE_MAX_PAGE_SIZE),
   /** Durable backend identifier consumed when MEMORY_STORAGE_BACKEND=durable (Sprint 10). */
   MEMORY_STORAGE_DURABLE_BACKEND: z.string().default(DEFAULT_MEMORY_STORAGE_DURABLE_BACKEND),
+  /** Sprint 13 — PostgreSQL connection string for the durable backend. Optional by
+   *  default (in-memory still the default); mandatory (fail-closed) only when the
+   *  durable backend is selected. Credentials are consumed from the environment
+   *  and never logged or surfaced in errors/health/metrics/events. */
+  MEMORY_DATABASE_URL: z.string().optional(),
   /** Feature flag: read/retrieval cache (Sprint 10, prompt §4). */
   MEMORY_CACHE_ENABLED: booleanFromString.default(DEFAULT_MEMORY_CACHE_ENABLED),
   /** Maximum cache entries before LRU eviction (Sprint 10, bounded). */
