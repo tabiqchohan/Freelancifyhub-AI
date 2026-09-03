@@ -10,6 +10,12 @@ import type {
 } from '../agents/ag-001-master-orchestrator/orchestrator/types/index.js';
 import type { MemoryActorGroup } from '../agents/ag-002-memory-manager/index.js';
 import { MemoryActorGroup as MemoryActorGroupValue } from '../agents/ag-002-memory-manager/index.js';
+import {
+  KnowledgeActorGroup,
+  KnowledgeContentType,
+  KnowledgeSecurityLevel,
+  KnowledgeSourceType,
+} from '../agents/ag-003-knowledge-manager/index.js';
 
 import type { ProductionComposition } from './composition-root.js';
 import type { RequestActorBinding } from './request-actors.js';
@@ -27,17 +33,21 @@ export interface HealthPayload {
   readonly status: 'ok' | 'degraded';
   readonly uptime: number;
   readonly storage: { healthy: boolean };
+  readonly knowledge: { healthy: boolean };
 }
 
 /** Default health payload; never surfaces secrets or connection strings. */
 export async function defaultHealth(
   checkStorage: ProductionComposition['health']['probeStorage'],
+  checkKnowledge?: ProductionComposition['health']['probeKnowledgeStorage'],
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
+  const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
   return {
-    status: storageHealth.healthy ? 'ok' : 'degraded',
+    status: storageHealth.healthy && knowledgeHealth.healthy ? 'ok' : 'degraded',
     uptime: process.uptime(),
     storage: { healthy: storageHealth.healthy },
+    knowledge: { healthy: knowledgeHealth.healthy },
   };
 }
 
@@ -63,6 +73,20 @@ export interface RuntimeRequestInput {
 /** Raw parsed JSON body of an incoming request. */
 export type RuntimeRequestBody = RuntimeRequestInput;
 
+/** Body shape accepted when creating knowledge at `POST /api/knowledge`. */
+export interface KnowledgeCreateBody {
+  readonly title: string;
+  readonly content: string;
+  readonly contentType?: 'plain_text' | 'markdown' | 'json' | 'html';
+  readonly namespace?: string;
+  readonly securityLevel?: 'INTERNAL' | 'CONFIDENTIAL';
+  readonly sourceType?: string;
+  readonly reference?: string;
+  readonly metadata?: Record<string, unknown>;
+  readonly actorGroup?: string;
+  readonly actorId?: string;
+}
+
 /**
  * Phase 7 — Production runtime HTTP entry point.
  *
@@ -83,7 +107,12 @@ export class ProductionRuntime {
     this.composition = options.composition;
     this.logger = options.logger;
     this.healthCheck =
-      options.healthCheck ?? (() => defaultHealth(options.composition.health.probeStorage));
+      options.healthCheck ??
+      (() =>
+        defaultHealth(
+          options.composition.health.probeStorage,
+          options.composition.health.probeKnowledgeStorage,
+        ));
   }
 
   /** Starts the server on the configured host/port. Returns the bound server. */
@@ -130,6 +159,10 @@ export class ProductionRuntime {
 
     if (req.method === 'POST' && url.pathname === '/runtime/request') {
       return this.handleRequest(req, res);
+    }
+
+    if (url.pathname.startsWith('/api/knowledge')) {
+      return this.handleKnowledge(req, res, url);
     }
 
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
@@ -183,6 +216,117 @@ export class ProductionRuntime {
     } finally {
       this.composition.services.requestActors.unregister(requestId);
     }
+  }
+
+  /**
+   * AG-003 knowledge API (Phase 9). Typed JSON endpoints:
+   *   POST /api/knowledge            -> create a knowledge document
+   *   GET  /api/knowledge?query=&ns= -> search authorizable documents
+   *   GET  /api/knowledge/:id        -> fetch a document by id
+   */
+  private async handleKnowledge(
+    req: IncomingMessage,
+    res: ServerResponse,
+    url: URL,
+  ): Promise<void> {
+    const km = this.composition.services.knowledgeManager;
+    const pathParts = url.pathname.split('/').filter(Boolean); // ['api','knowledge',...]
+    const id = pathParts.length > 2 ? pathParts[2] : undefined;
+
+    try {
+      if (req.method === 'POST' && id === undefined) {
+        return await this.handleKnowledgeCreate(req, res, km);
+      }
+      if (req.method === 'GET' && id === undefined) {
+        const queryParam = url.searchParams.get('query') ?? '';
+        const namespace = url.searchParams.get('ns') ?? 'default';
+        const maxResults = Number(url.searchParams.get('max') ?? '10') || 10;
+        const actorGroup =
+          toKnowledgeActorGroup(url.searchParams.get('group') ?? undefined) ??
+          KnowledgeActorGroup.KnowledgeManager;
+        const actorId = url.searchParams.get('actorId') ?? 'runtime';
+        const result = await km.search({
+          query: queryParam,
+          namespace,
+          actorGroup,
+          actorId,
+          namespaces: [namespace],
+          maxResults,
+        });
+        return this.sendJson(res, 200, {
+          total: result.total,
+          documents: result.documents,
+        });
+      }
+      if (req.method === 'GET' && id !== undefined) {
+        const actorGroup =
+          toKnowledgeActorGroup(url.searchParams.get('group') ?? undefined) ??
+          KnowledgeActorGroup.KnowledgeManager;
+        const actorId = url.searchParams.get('actorId') ?? 'runtime';
+        const doc = await km.getDocument(id, actorGroup, actorId);
+        if (doc === undefined) {
+          return this.sendJson(res, 404, { status: 'not_found', id });
+        }
+        return this.sendJson(res, 200, doc);
+      }
+      return this.sendJson(res, 405, { status: 'method_not_allowed' });
+    } catch (error) {
+      this.logger.error({ error, path: url.pathname }, 'knowledge request failed');
+      return this.sendJson(res, 400, { status: 'error', error: 'knowledge_request_failed' });
+    }
+  }
+
+  private async handleKnowledgeCreate(
+    req: IncomingMessage,
+    res: ServerResponse,
+    km: ProductionComposition['services']['knowledgeManager'],
+  ): Promise<void> {
+    const body = await this.readJson<KnowledgeCreateBody>(req);
+    if (body === undefined) {
+      return this.sendJson(res, 400, { status: 'error', error: 'invalid_json' });
+    }
+    if (typeof body.title !== 'string' || typeof body.content !== 'string') {
+      return this.sendJson(res, 400, { status: 'error', error: 'title_and_content_required' });
+    }
+    const contentType: KnowledgeContentType =
+      body.contentType === KnowledgeContentType.Markdown
+        ? KnowledgeContentType.Markdown
+        : body.contentType === KnowledgeContentType.Json
+          ? KnowledgeContentType.Json
+          : body.contentType === KnowledgeContentType.Html
+            ? KnowledgeContentType.Html
+            : KnowledgeContentType.PlainText;
+    const securityLevel: KnowledgeSecurityLevel =
+      body.securityLevel === KnowledgeSecurityLevel.Confidential
+        ? KnowledgeSecurityLevel.Confidential
+        : KnowledgeSecurityLevel.Internal;
+    const sourceType: KnowledgeSourceType =
+      body.sourceType === KnowledgeSourceType.Markdown
+        ? KnowledgeSourceType.Markdown
+        : body.sourceType === KnowledgeSourceType.Document
+          ? KnowledgeSourceType.Document
+          : body.sourceType === KnowledgeSourceType.System
+            ? KnowledgeSourceType.System
+            : KnowledgeSourceType.ManualText;
+
+    const doc = await km.createDocument({
+      title: body.title,
+      content: body.content,
+      contentType,
+      namespace: body.namespace ?? 'default',
+      securityLevel,
+      source: {
+        sourceType,
+        reference: body.reference,
+      },
+      metadata:
+        body.metadata !== undefined
+          ? (body.metadata as Record<string, string | number | boolean | null>)
+          : {},
+      actorGroup: toKnowledgeActorGroup(body.actorGroup) ?? KnowledgeActorGroup.KnowledgeManager,
+      actorId: body.actorId ?? 'runtime',
+    });
+    return this.sendJson(res, 201, doc);
   }
 
   private async readJson<T>(req: IncomingMessage): Promise<T | undefined> {
@@ -242,6 +386,17 @@ function toUserRole(value: UserRole | undefined): UserRole | undefined {
   }
   if (Object.values(UserRoleValue).includes(value as UserRoleValue)) {
     return value;
+  }
+  return undefined;
+}
+
+/** Maps a raw string to a {@link KnowledgeActorGroup}, or undefined when unknown. */
+function toKnowledgeActorGroup(value: string | undefined): KnowledgeActorGroup | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (Object.values(KnowledgeActorGroup).includes(value as KnowledgeActorGroup)) {
+    return value as KnowledgeActorGroup;
   }
   return undefined;
 }

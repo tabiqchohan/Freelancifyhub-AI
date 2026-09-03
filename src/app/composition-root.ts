@@ -32,6 +32,7 @@ import {
   PostgresMemoryRepository,
   PostgresEventSink,
   createEventLog,
+  createPostgresPool,
 } from '../agents/ag-002-memory-manager/index.js';
 import type {
   MemoryConfig,
@@ -40,6 +41,15 @@ import type {
 } from '../agents/ag-002-memory-manager/index.js';
 import type { MemoryManagerContract } from '../agents/ag-002-memory-manager/orchestration/manager-interface.js';
 import type { Pool } from 'pg';
+
+import {
+  InMemoryKnowledgeRepository,
+  KnowledgeManagerService,
+  PostgresKnowledgeRepository,
+  createKnowledgeEventLog,
+  type KnowledgeEventLog,
+  type KnowledgeRepository,
+} from '../agents/ag-003-knowledge-manager/index.js';
 
 import type { Environment } from './env.js';
 import { parseCompiledEnv } from './env.js';
@@ -75,6 +85,7 @@ export interface ProductionComposition {
   readonly logger: Logger;
   readonly services: {
     readonly memoryManager: MemoryManagerContract;
+    readonly knowledgeManager: KnowledgeManagerService;
     readonly agentRegistry: AgentRegistry;
     readonly executor: ProductionAgentExecutor;
     readonly executionEngine: ExecutionEngine;
@@ -83,6 +94,7 @@ export interface ProductionComposition {
     readonly memoryEvents: InMemoryMemoryEventEmitter;
     readonly eventBridge: RuntimeEventBridge;
     readonly eventLog: InMemoryEventLog;
+    readonly knowledgeEventLog: KnowledgeEventLog;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -93,6 +105,7 @@ export interface ProductionComposition {
   /** Health-check handles (Phase 8). Not part of the public contract. */
   readonly health: {
     readonly probeStorage: () => Promise<{ healthy: boolean }>;
+    readonly probeKnowledgeStorage: () => Promise<{ healthy: boolean }>;
   };
 }
 
@@ -242,6 +255,52 @@ export async function createProductionComposition(
     logger,
   });
 
+  // ---- AG-003 knowledge stack -------------------------------------------------
+  const knowledgeConfig = env.knowledge;
+  const knowledgeEventLog = createKnowledgeEventLog();
+
+  // The knowledge backend is driven by the resolved runtime environment
+  // (`env.knowledge`). Fail-closed: an unknown backend or a durable backend
+  // without a connection string aborts construction rather than degrading.
+  const knowledgeBackend = knowledgeConfig.KNOWLEDGE_STORAGE_BACKEND;
+  let knowledgeRepository: KnowledgeRepository;
+  let knowledgeStorageClose: () => Promise<void> = async () => undefined;
+  let knowledgeDurable = false;
+
+  if (knowledgeBackend === 'durable') {
+    const connection = env.knowledge.KNOWLEDGE_DATABASE_URL;
+    if (typeof connection !== 'string' || connection.trim().length === 0) {
+      throw new DiagnosticError('Missing required configuration: KNOWLEDGE_DATABASE_URL', {
+        code: 'MISSING_REQUIRED_CONFIG',
+        details: { key: 'KNOWLEDGE_DATABASE_URL' },
+      });
+    }
+    const knowledgePool = createPostgresPool(connection);
+    const postgresRepo = new PostgresKnowledgeRepository({ pool: knowledgePool });
+    await postgresRepo.migrate();
+    knowledgeRepository = postgresRepo;
+    knowledgeStorageClose = () => knowledgePool.end();
+    knowledgeDurable = true;
+  } else {
+    knowledgeRepository = new InMemoryKnowledgeRepository();
+  }
+
+  const knowledgeManager = new KnowledgeManagerService({
+    repository: knowledgeRepository,
+    config: knowledgeConfig,
+    eventLog: knowledgeEventLog,
+    logger,
+  });
+
+  const probeKnowledgeStorage: () => Promise<{ healthy: boolean }> = async () => {
+    try {
+      const health = await knowledgeManager.healthAsync();
+      return { healthy: health.healthy };
+    } catch {
+      return { healthy: false };
+    }
+  };
+
   const executor = new ProductionAgentExecutor({
     registry,
     memoryProvider,
@@ -299,6 +358,7 @@ export async function createProductionComposition(
     logger,
     services: {
       memoryManager: contract,
+      knowledgeManager,
       agentRegistry: registry,
       executor,
       executionEngine,
@@ -307,14 +367,19 @@ export async function createProductionComposition(
       memoryEvents: memoryEmitter,
       eventBridge,
       eventLog,
+      knowledgeEventLog,
       requestActors,
     },
     storage: {
-      close: storageClose,
-      durable,
+      close: async () => {
+        await storageClose();
+        await knowledgeStorageClose();
+      },
+      durable: durable || knowledgeDurable,
     },
     health: {
       probeStorage,
+      probeKnowledgeStorage,
     },
   };
 }

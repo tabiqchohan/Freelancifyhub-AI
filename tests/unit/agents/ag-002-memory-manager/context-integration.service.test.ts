@@ -300,7 +300,11 @@ describe('ContextIntegrationService (Sprint 5A)', () => {
       const r1 = await service.integrate({ actor, results });
       const r2 = await service.integrate({ actor, results });
       expect(r1.sections).toEqual(r2.sections);
-      expect(r1.statistics).toEqual(r2.statistics);
+      // All statistics fields are deterministic except the wall-clock
+      // processingDurationMs counter, which varies between runs.
+      const s1 = { ...r1.statistics, processingDurationMs: 0 };
+      const s2 = { ...r2.statistics, processingDurationMs: 0 };
+      expect(s1).toEqual(s2);
     });
 
     it('does not depend on input insertion order', async () => {

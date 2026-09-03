@@ -24,6 +24,15 @@ export {
 } from './memory/memory-context-provider.js';
 export type { MemoryContextProviderAdapterOptions } from './memory/memory-context-provider.js';
 
+export {
+  KnowledgeContextProviderAdapter,
+  createKnowledgeContextProvider,
+} from './knowledge/knowledge-context-provider.js';
+export type {
+  KnowledgeContextProviderAdapterOptions,
+  KnowledgeContextLoadInput,
+} from './knowledge/knowledge-context-provider.js';
+
 export { BudgetManager } from './budget/index.js';
 export type { BudgetResult, BudgetedSection } from './budget/index.js';
 

@@ -26,11 +26,11 @@ cn('Sprint 14 E2E - durable production runtime (Phase 9, Postgres-gated)', () =>
     const server = await runtime.start(0, '127.0.0.1');
     const { port } = server.address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${port}`;
-  });
+  }, 60_000);
 
   afterAll(async () => {
     await runtime.shutdown();
-  });
+  }, 30_000);
 
   it('boots a durable composition and serves a create-project request', async () => {
     expect(composition.storage.durable).toBe(true);
