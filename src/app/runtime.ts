@@ -16,6 +16,13 @@ import {
   KnowledgeSecurityLevel,
   KnowledgeSourceType,
 } from '../agents/ag-003-knowledge-manager/index.js';
+import {
+  ToolActorGroup as ToolActorGroupValue,
+  ToolResultStatus,
+  ToolSecurityLevel,
+  type ToolActor,
+  type ToolActorGroup,
+} from '../agents/ag-004-tool-manager/index.js';
 
 import type { ProductionComposition } from './composition-root.js';
 import type { RequestActorBinding } from './request-actors.js';
@@ -34,20 +41,25 @@ export interface HealthPayload {
   readonly uptime: number;
   readonly storage: { healthy: boolean };
   readonly knowledge: { healthy: boolean };
+  readonly tools: { healthy: boolean };
 }
 
 /** Default health payload; never surfaces secrets or connection strings. */
 export async function defaultHealth(
   checkStorage: ProductionComposition['health']['probeStorage'],
   checkKnowledge?: ProductionComposition['health']['probeKnowledgeStorage'],
+  checkTools?: ProductionComposition['health']['probeToolStorage'],
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
   const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
+  const toolsHealth = checkTools !== undefined ? await checkTools() : { healthy: true };
   return {
-    status: storageHealth.healthy && knowledgeHealth.healthy ? 'ok' : 'degraded',
+    status:
+      storageHealth.healthy && knowledgeHealth.healthy && toolsHealth.healthy ? 'ok' : 'degraded',
     uptime: process.uptime(),
     storage: { healthy: storageHealth.healthy },
     knowledge: { healthy: knowledgeHealth.healthy },
+    tools: { healthy: toolsHealth.healthy },
   };
 }
 
@@ -87,6 +99,17 @@ export interface KnowledgeCreateBody {
   readonly actorId?: string;
 }
 
+/** Body shape accepted when executing a tool at `POST /api/tools/:id/execute`. */
+export interface ToolExecuteBody {
+  readonly input?: unknown;
+  readonly namespace?: string;
+  readonly actorGroup?: string;
+  readonly actorId?: string;
+  readonly requestId?: string;
+  readonly traceId?: string;
+  readonly timeoutMs?: number;
+}
+
 /**
  * Phase 7 — Production runtime HTTP entry point.
  *
@@ -112,6 +135,7 @@ export class ProductionRuntime {
         defaultHealth(
           options.composition.health.probeStorage,
           options.composition.health.probeKnowledgeStorage,
+          options.composition.health.probeToolStorage,
         ));
   }
 
@@ -163,6 +187,10 @@ export class ProductionRuntime {
 
     if (url.pathname.startsWith('/api/knowledge')) {
       return this.handleKnowledge(req, res, url);
+    }
+
+    if (url.pathname.startsWith('/api/tools')) {
+      return this.handleTools(req, res, url);
     }
 
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
@@ -329,6 +357,137 @@ export class ProductionRuntime {
     return this.sendJson(res, 201, doc);
   }
 
+  /**
+   * AG-004 tools API. Production-safe typed JSON endpoints:
+   *   GET  /api/tools                 -> list tools (authorized, safe metadata)
+   *   GET  /api/tools/:name           -> fetch a tool definition by name
+   *   POST /api/tools/:name/execute   -> execute a registered tool
+   *   POST /api/tools/:name/enable    -> enable (management, ToolManager/Admin)
+   *   POST /api/tools/:name/disable   -> disable (management, ToolManager/Admin)
+   *
+   * Execution never leaks internal details or stack traces.
+   */
+  private async handleTools(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+    const tm = this.composition.services.toolManager;
+    if (!tm.enabled) {
+      return this.sendJson(res, 403, { status: 'error', error: 'tools_disabled' });
+    }
+
+    const pathParts = url.pathname.split('/').filter(Boolean); // ['api','tools',name?,action?]
+    const name = pathParts.length > 2 ? pathParts[2] : undefined;
+    const action = pathParts.length > 3 ? pathParts[3] : undefined;
+
+    const namespace = url.searchParams.get('ns') ?? 'default';
+    const actorGroup = toToolActorGroup(url.searchParams.get('group') ?? undefined);
+    const actorId = url.searchParams.get('actorId') ?? 'runtime';
+
+    if (actorGroup === undefined) {
+      return this.sendJson(res, 400, { status: 'error', error: 'invalid_actor_group' });
+    }
+
+    const actor: ToolActor = {
+      group: actorGroup,
+      id: actorId,
+      namespaces: [namespace],
+      securityClearance: ToolSecurityLevel.Internal,
+    };
+
+    try {
+      if (req.method === 'GET' && name === undefined && action === undefined) {
+        const definitions = tm.list(actor, namespace);
+        return this.sendJson(res, 200, {
+          total: definitions.length,
+          tools: definitions.map((d) => ({
+            id: d.id,
+            name: d.name,
+            description: d.description,
+            version: d.version,
+            category: d.category,
+            enabled: d.enabled,
+            securityLevel: d.securityLevel,
+            executionPolicy: {
+              timeoutMs: d.executionPolicy.timeoutMs,
+              maxInputBytes: d.executionPolicy.maxInputBytes,
+              maxOutputBytes: d.executionPolicy.maxOutputBytes,
+            },
+          })),
+        });
+      }
+      if (req.method === 'GET' && name !== undefined && action === undefined) {
+        const definition = tm.get(name, actor, namespace);
+        if (definition === undefined) {
+          return this.sendJson(res, 404, { status: 'not_found', name });
+        }
+        return this.sendJson(res, 200, definition);
+      }
+      if (req.method === 'POST' && name !== undefined && action === 'execute') {
+        return await this.handleToolExecute(req, res, tm, name, actor, namespace);
+      }
+      if (
+        req.method === 'POST' &&
+        name !== undefined &&
+        (action === 'enable' || action === 'disable')
+      ) {
+        const managed =
+          action === 'enable'
+            ? await tm.enable(name, actor, namespace)
+            : await tm.disable(name, actor, namespace);
+        return this.sendJson(res, 200, { name: managed.name, enabled: managed.enabled });
+      }
+      return this.sendJson(res, 405, { status: 'method_not_allowed' });
+    } catch (error) {
+      this.logger.error({ error, path: url.pathname }, 'tool request failed');
+      return this.sendJson(res, 400, { status: 'error', error: 'tool_request_failed' });
+    }
+  }
+
+  private async handleToolExecute(
+    req: IncomingMessage,
+    res: ServerResponse,
+    tm: ProductionComposition['services']['toolManager'],
+    name: string,
+    actor: ToolActor,
+    namespace: string,
+  ): Promise<void> {
+    const body = await this.readJson<ToolExecuteBody>(req);
+    if (body === undefined) {
+      return this.sendJson(res, 400, { status: 'error', error: 'invalid_json' });
+    }
+
+    const result = await tm.execute(name, body.input ?? {}, {
+      actor,
+      namespace: body.namespace ?? namespace,
+      requestId: body.requestId,
+      traceId: body.traceId,
+      correlationId: body.traceId,
+      timeoutMs: body.timeoutMs,
+    });
+
+    const status =
+      result.status === ToolResultStatus.Success
+        ? 200
+        : result.status === ToolResultStatus.NotFound
+          ? 404
+          : result.status === ToolResultStatus.AuthorizationFailed
+            ? 403
+            : result.status === ToolResultStatus.ValidationFailed
+              ? 400
+              : 422;
+
+    return this.sendJson(res, status, {
+      toolId: result.toolId,
+      toolName: result.toolName,
+      toolVersion: result.toolVersion,
+      executionId: result.executionId,
+      status: result.status,
+      errorCode: result.errorCode,
+      errorMessage: result.errorMessage,
+      output: result.output,
+      durationMs: result.durationMs,
+      attempts: result.attempts,
+    });
+  }
+
   private async readJson<T>(req: IncomingMessage): Promise<T | undefined> {
     return new Promise<T | undefined>((resolve) => {
       const chunks: Buffer[] = [];
@@ -397,6 +556,17 @@ function toKnowledgeActorGroup(value: string | undefined): KnowledgeActorGroup |
   }
   if (Object.values(KnowledgeActorGroup).includes(value as KnowledgeActorGroup)) {
     return value as KnowledgeActorGroup;
+  }
+  return undefined;
+}
+
+/** Maps a raw string to a {@link ToolActorGroup}, or undefined when unknown. */
+function toToolActorGroup(value: string | undefined): ToolActorGroup | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (Object.values(ToolActorGroupValue).includes(value as ToolActorGroupValue)) {
+    return value as ToolActorGroupValue;
   }
   return undefined;
 }

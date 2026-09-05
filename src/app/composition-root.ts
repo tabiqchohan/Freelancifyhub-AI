@@ -51,6 +51,17 @@ import {
   type KnowledgeRepository,
 } from '../agents/ag-003-knowledge-manager/index.js';
 
+import {
+  InMemoryToolRepository,
+  ToolManagerService,
+  PostgresToolRepository,
+  ToolEventLog,
+  createCalculatorSpecification,
+  ToolActorGroup,
+  type ToolRepository,
+  type ToolActor,
+} from '../agents/ag-004-tool-manager/index.js';
+
 import type { Environment } from './env.js';
 import { parseCompiledEnv } from './env.js';
 import { AgentRegistry } from '../agents/runtime/registry.js';
@@ -86,6 +97,7 @@ export interface ProductionComposition {
   readonly services: {
     readonly memoryManager: MemoryManagerContract;
     readonly knowledgeManager: KnowledgeManagerService;
+    readonly toolManager: ToolManagerService;
     readonly agentRegistry: AgentRegistry;
     readonly executor: ProductionAgentExecutor;
     readonly executionEngine: ExecutionEngine;
@@ -95,6 +107,7 @@ export interface ProductionComposition {
     readonly eventBridge: RuntimeEventBridge;
     readonly eventLog: InMemoryEventLog;
     readonly knowledgeEventLog: KnowledgeEventLog;
+    readonly toolEventLog: ToolEventLog;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -106,6 +119,7 @@ export interface ProductionComposition {
   readonly health: {
     readonly probeStorage: () => Promise<{ healthy: boolean }>;
     readonly probeKnowledgeStorage: () => Promise<{ healthy: boolean }>;
+    readonly probeToolStorage: () => Promise<{ healthy: boolean }>;
   };
 }
 
@@ -301,6 +315,65 @@ export async function createProductionComposition(
     }
   };
 
+  // ---- AG-004 tool stack ---------------------------------------------------
+  const toolConfig = env.tools;
+  const toolEventLog = new ToolEventLog();
+
+  // The tool backend is driven by the resolved runtime environment
+  // (`env.tools`). Fail-closed: an unknown backend or a durable backend without
+  // a connection string aborts construction rather than degrading. The database
+  // URL is reused from the shared memory config when present (never duplicated).
+  const toolBackend = toolConfig.TOOLS_STORAGE_BACKEND;
+  const toolsEnabled = toolConfig.TOOLS_ENABLED;
+  let toolRepository: ToolRepository = new InMemoryToolRepository();
+  let toolStorageClose: () => Promise<void> = async () => undefined;
+  let toolDurable = false;
+
+  if (toolsEnabled && toolBackend === 'durable') {
+    const connection =
+      env.memory.MEMORY_DATABASE_URL !== '' && env.memory.MEMORY_DATABASE_URL !== undefined
+        ? env.memory.MEMORY_DATABASE_URL
+        : toolConfig.TOOLS_DATABASE_URL;
+    if (typeof connection !== 'string' || connection.trim().length === 0) {
+      throw new DiagnosticError('Missing required configuration: tools database URL', {
+        code: 'MISSING_REQUIRED_CONFIG',
+        details: { key: 'TOOLS_DATABASE_URL' },
+      });
+    }
+    const toolPool = createPostgresPool(connection);
+    const postgresToolRepo = new PostgresToolRepository({ pool: toolPool });
+    await postgresToolRepo.migrate();
+    toolRepository = postgresToolRepo;
+    toolStorageClose = () => toolPool.end();
+    toolDurable = true;
+  }
+
+  const toolManager = new ToolManagerService({
+    repository: toolRepository,
+    config: toolConfig,
+    eventLog: toolEventLog,
+    logger,
+  });
+
+  // Register the built-in calculator tool (genuinely executable, safe).
+  if (toolsEnabled && !toolManager.exists('calculator')) {
+    const bootstrapActor: ToolActor = {
+      group: ToolActorGroup.ToolManager,
+      id: 'composition-root',
+      namespaces: ['default'],
+    };
+    await toolManager.register(createCalculatorSpecification(), bootstrapActor, 'default');
+  }
+
+  const probeToolStorage: () => Promise<{ healthy: boolean }> = async () => {
+    try {
+      const health = await toolManager.healthAsync();
+      return { healthy: health.healthy };
+    } catch {
+      return { healthy: false };
+    }
+  };
+
   const executor = new ProductionAgentExecutor({
     registry,
     memoryProvider,
@@ -359,6 +432,7 @@ export async function createProductionComposition(
     services: {
       memoryManager: contract,
       knowledgeManager,
+      toolManager,
       agentRegistry: registry,
       executor,
       executionEngine,
@@ -368,18 +442,21 @@ export async function createProductionComposition(
       eventBridge,
       eventLog,
       knowledgeEventLog,
+      toolEventLog,
       requestActors,
     },
     storage: {
       close: async () => {
         await storageClose();
         await knowledgeStorageClose();
+        await toolStorageClose();
       },
-      durable: durable || knowledgeDurable,
+      durable: durable || knowledgeDurable || toolDurable,
     },
     health: {
       probeStorage,
       probeKnowledgeStorage,
+      probeToolStorage,
     },
   };
 }
