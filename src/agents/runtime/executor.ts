@@ -25,6 +25,10 @@ import type {
 } from './types.js';
 import { RuntimeAgentEventType as RuntimeAgentEventTypeValue } from './types.js';
 import type { AgentRegistry } from './registry.js';
+import { LLM_REASONING_CAPABILITY } from '../../llm/constants.js';
+import { classifyLLMError } from '../../llm/errors/index.js';
+import type { AIReasoningServiceContract } from '../../llm/types/index.js';
+import type { LLMUsage } from '../../llm/types/index.js';
 
 /** Builds the AG-002 memory load input for a given execution request. */
 export type MemoryContextInputBuilder = (
@@ -39,6 +43,29 @@ export interface ProductionAgentExecutorOptions {
   readonly defaultTimeoutMs?: number;
   readonly logger?: Logger;
   readonly onEvent?: (event: RuntimeAgentEvent) => void;
+  /** AI reasoning capability; required by agents declaring `agent.reasoning`. */
+  readonly reasoningService?: AIReasoningServiceContract;
+}
+
+/**
+ * Outcome of an optional reasoning prelude. When `failed` the request must be
+ * answered with a fail-closed {@link ExecutionError}, never with degraded
+ * output.
+ */
+interface ReasoningOutcome {
+  readonly failed: boolean;
+  readonly errorCode?: string;
+  readonly errorMessage?: string;
+  readonly retryable?: boolean;
+  readonly reasoning?: {
+    readonly enabled: true;
+    readonly output: string;
+    readonly provider: string;
+    readonly model: string;
+    readonly usage?: LLMUsage;
+    readonly latencyMs: number;
+    readonly correlationId?: string;
+  };
 }
 
 /** Internal guard outcome shared by the executor's signal/timeout race. */
@@ -64,6 +91,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
   private readonly defaultTimeoutMs: number;
   private readonly logger: Logger;
   private readonly onEvent: ((event: RuntimeAgentEvent) => void) | undefined;
+  private readonly reasoningService: AIReasoningServiceContract | undefined;
   private readonly attemptCounters = new Map<string, number>();
   private readonly signals = new Map<string, CancellationSignalImpl>();
 
@@ -74,6 +102,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? 30000;
     this.logger = options.logger ?? createOrchestratorLogger('production-executor');
     this.onEvent = options.onEvent;
+    this.reasoningService = options.reasoningService;
   }
 
   canExecute(agentId: AgentId): boolean {
@@ -154,6 +183,39 @@ export class ProductionAgentExecutor implements AgentExecutor {
 
     const timeoutMs = this.timeoutFor(request);
 
+    const reasoning = await this.resolveReasoning(request, agent, {
+      executionId: request.executionId,
+      stepId: request.stepId,
+      agentId,
+      traceId,
+      requestId,
+      memory,
+      signal,
+    });
+
+    if (reasoning.failed) {
+      this.emitEvent(RuntimeAgentEventTypeValue.ExecutionFailed, {
+        executionId: request.executionId,
+        stepId: request.stepId,
+        agentId,
+        traceId,
+        requestId,
+        occurredAt: new Date().toISOString(),
+        errorCode: reasoning.errorCode,
+        metadata: { attempt, success: false, stage: 'reasoning' },
+      });
+      this.releaseSignal(request.executionId);
+      return this.failure(
+        {
+          code: reasoning.errorCode ?? 'REASONING_UNAVAILABLE',
+          message: reasoning.errorMessage ?? 'AI reasoning unavailable',
+          retryable: reasoning.retryable ?? false,
+        },
+        startedAt,
+        { executionId: request.executionId, traceId, requestId },
+      );
+    }
+
     const context = {
       agentId,
       executionId: request.executionId,
@@ -165,6 +227,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
       timeoutMs,
       inputs: request.inputs,
       memory,
+      reasoning: reasoning.reasoning,
       signal,
     };
 
@@ -222,6 +285,85 @@ export class ProductionAgentExecutor implements AgentExecutor {
 
     this.releaseSignal(request.executionId);
     return result;
+  }
+
+  private async resolveReasoning(
+    request: AgentExecutionRequest,
+    agent: NonNullable<Awaited<ReturnType<AgentRegistry['get']>>>,
+    info: {
+      executionId: string;
+      stepId: string;
+      agentId: AgentId;
+      traceId: string;
+      requestId: string;
+      memory: readonly RuntimeMemoryItem[];
+      signal: CancellationSignal;
+    },
+  ): Promise<ReasoningOutcome> {
+    const requiresReasoning = agent.configuration.capabilities.some(
+      (capability) => capability.id === LLM_REASONING_CAPABILITY,
+    );
+    if (!requiresReasoning) {
+      return { failed: false };
+    }
+
+    if (this.reasoningService === undefined || !this.reasoningService.isEnabled()) {
+      return {
+        failed: true,
+        errorCode: 'REASONING_UNAVAILABLE',
+        errorMessage: `Agent ${info.agentId} requires AI reasoning, but it is not enabled in this deployment`,
+        retryable: false,
+      };
+    }
+
+    try {
+      const result = await this.reasoningService.reason(
+        {
+          userInput: extractUserInput(request),
+          context: {
+            executionId: info.executionId,
+            stepId: info.stepId,
+            agentId: info.agentId,
+          },
+          memoryContext: info.memory.map(toReasoningContextItem),
+          correlationId: info.requestId,
+        },
+        { signal: toAbortSignal(info.signal), requestId: info.requestId },
+      );
+      return {
+        failed: false,
+        reasoning: {
+          enabled: true,
+          output: result.output,
+          provider: result.provider,
+          model: result.model,
+          usage: result.usage,
+          latencyMs: result.latencyMs,
+          correlationId: result.correlationId ?? info.requestId,
+        },
+      };
+    } catch (error) {
+      const classification = classifyLLMError(error);
+      this.logger.error(
+        {
+          agentId: info.agentId,
+          executionId: info.executionId,
+          errorClass: classification.errorClass,
+        },
+        'reasoning failed for reasoning-capable agent',
+      );
+      return {
+        failed: true,
+        errorCode:
+          classification.errorClass === 'configuration'
+            ? 'REASONING_UNAVAILABLE'
+            : classification.errorClass === 'cancelled'
+              ? 'REASONING_CANCELLED'
+              : 'REASONING_FAILED',
+        errorMessage: 'AI reasoning could not be completed for this request',
+        retryable: classification.retryable,
+      };
+    }
   }
 
   private async provisionMemory(
@@ -505,4 +647,39 @@ function toRuntimeMemoryItem(item: ContextItem): RuntimeMemoryItem {
 function parseRequestId(executionId: string): string {
   const match = /^exec_(.+)$/.exec(executionId);
   return match !== null ? match[1]! : executionId;
+}
+
+/** Extracts the primary user text from execution inputs (empty when absent). */
+function extractUserInput(request: AgentExecutionRequest): string {
+  const raw =
+    request.inputs['request.input'] ?? request.inputs['input'] ?? request.inputs['text'] ?? '';
+  return typeof raw === 'string' ? raw : '';
+}
+
+/** Maps a runtime memory item into a reasoning-ready context item (no metadata). */
+function toReasoningContextItem(item: RuntimeMemoryItem): {
+  readonly id: string;
+  readonly source: string;
+  readonly content: string;
+  readonly securityLevel?: string;
+  readonly namespace?: string;
+} {
+  return {
+    id: item.id,
+    source: item.source,
+    content: item.content,
+    securityLevel: item.securityLevel,
+    namespace: item.namespace,
+  };
+}
+
+/** Bridges the runtime cooperative {CancellationSignal} into an {AbortSignal}. */
+function toAbortSignal(signal: CancellationSignal): AbortSignal {
+  const controller = new AbortController();
+  if (signal.requested) {
+    controller.abort();
+    return controller.signal;
+  }
+  void signal.waitForCancellation().then(() => controller.abort());
+  return controller.signal;
 }

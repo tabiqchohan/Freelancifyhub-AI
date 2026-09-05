@@ -62,6 +62,8 @@ import {
   type ToolActor,
 } from '../agents/ag-004-tool-manager/index.js';
 
+import { AIReasoningService, LLMEventLog, LLMMetrics, createLLMProvider } from '../llm/index.js';
+
 import type { Environment } from './env.js';
 import { parseCompiledEnv } from './env.js';
 import { AgentRegistry } from '../agents/runtime/registry.js';
@@ -108,6 +110,12 @@ export interface ProductionComposition {
     readonly eventLog: InMemoryEventLog;
     readonly knowledgeEventLog: KnowledgeEventLog;
     readonly toolEventLog: ToolEventLog;
+    /** AI reasoning capability (Sprint 17, fail-closed via config). */
+    readonly aiReasoning: AIReasoningService;
+    /** LLM event trail (Sprint 17). */
+    readonly llmEventLog: LLMEventLog;
+    /** LLM metrics (Sprint 17). */
+    readonly llmMetrics: LLMMetrics;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -374,10 +382,25 @@ export async function createProductionComposition(
     }
   };
 
+  // ---- LLM + AI reasoning stack (Sprint 17) --------------------------------
+  // Fail-closed by configuration: when `LLM_ENABLED` is false the executor
+  // rejects reasoning-capable agents with REASONING_UNAVAILABLE; the provider
+  // is never constructed with live credentials unless explicitly enabled.
+  const llmEventLog = new LLMEventLog();
+  const llmMetrics = new LLMMetrics();
+  const llmProvider = createLLMProvider(env.llm);
+  const aiReasoning = new AIReasoningService({
+    provider: llmProvider,
+    config: env.llm,
+    eventLog: llmEventLog,
+    metrics: llmMetrics,
+  });
+
   const executor = new ProductionAgentExecutor({
     registry,
     memoryProvider,
     memoryInputBuilder: (req) => memoryInputBuilder.build(req),
+    reasoningService: aiReasoning,
     logger,
     onEvent: (event) => eventBridge.accept(event),
   });
@@ -443,6 +466,9 @@ export async function createProductionComposition(
       eventLog,
       knowledgeEventLog,
       toolEventLog,
+      aiReasoning,
+      llmEventLog,
+      llmMetrics,
       requestActors,
     },
     storage: {

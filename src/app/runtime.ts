@@ -42,6 +42,8 @@ export interface HealthPayload {
   readonly storage: { healthy: boolean };
   readonly knowledge: { healthy: boolean };
   readonly tools: { healthy: boolean };
+  /** LLM config status (Sprint 17). Never performs a live connectivity probe. */
+  readonly llm: { enabled: boolean; configured: boolean; provider: string; model: string };
 }
 
 /** Default health payload; never surfaces secrets or connection strings. */
@@ -49,6 +51,7 @@ export async function defaultHealth(
   checkStorage: ProductionComposition['health']['probeStorage'],
   checkKnowledge?: ProductionComposition['health']['probeKnowledgeStorage'],
   checkTools?: ProductionComposition['health']['probeToolStorage'],
+  llmInfo?: () => { enabled: boolean; configured: boolean; provider: string; model: string },
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
   const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
@@ -60,6 +63,7 @@ export async function defaultHealth(
     storage: { healthy: storageHealth.healthy },
     knowledge: { healthy: knowledgeHealth.healthy },
     tools: { healthy: toolsHealth.healthy },
+    llm: llmInfo?.() ?? { enabled: false, configured: false, provider: 'disabled', model: '' },
   };
 }
 
@@ -136,6 +140,7 @@ export class ProductionRuntime {
           options.composition.health.probeStorage,
           options.composition.health.probeKnowledgeStorage,
           options.composition.health.probeToolStorage,
+          () => options.composition.services.aiReasoning.providerInfo(),
         ));
   }
 
@@ -193,7 +198,33 @@ export class ProductionRuntime {
       return this.handleTools(req, res, url);
     }
 
+    if (url.pathname === '/api/llm/status') {
+      return this.handleLlmStatus(res);
+    }
+
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
+  }
+
+  /**
+   * LLM status endpoint (Sprint 17). Exposes configuration status, event-log
+   * counts, and metric totals. Never exposes prompts, responses, or secrets.
+   */
+  private async handleLlmStatus(res: ServerResponse): Promise<void> {
+    const reasoning = this.composition.services.aiReasoning;
+    const eventLog = this.composition.services.llmEventLog;
+    const executorStatus = this.composition.services.executor.status();
+
+    return this.sendJson(res, 200, {
+      enabled: reasoning.isEnabled(),
+      provider: reasoning.providerInfo().provider,
+      model: reasoning.providerInfo().model,
+      executor: executorStatus,
+      events: {
+        total: eventLog.count(),
+        latest: eventLog.latest(10),
+      },
+      metrics: this.composition.services.llmMetrics.snapshot(),
+    });
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {

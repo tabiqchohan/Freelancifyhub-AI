@@ -6,6 +6,7 @@ import type {
 } from '../ag-001-master-orchestrator/interfaces/index.js';
 import type { AgentId, IsoTimestamp, TraceId } from '../ag-001-master-orchestrator/types/index.js';
 import type { MemoryNamespace, MemorySecurityLevel } from '../ag-002-memory-manager/index.js';
+import type { LLMUsage } from '../../llm/types/index.js';
 
 export type {
   AgentCapability,
@@ -49,7 +50,20 @@ export interface RuntimeAgentExecutionContext {
   readonly timeoutMs: number;
   readonly inputs: Readonly<Record<string, unknown>>;
   readonly memory: readonly RuntimeMemoryItem[];
+  /** Reasoned output, present only when the agent declared `agent.reasoning`. */
+  readonly reasoning?: RuntimeReasoningContext;
   readonly signal: CancellationSignal;
+}
+
+/** Reasoned output delivered to reasoning-capable agents. */
+export interface RuntimeReasoningContext {
+  readonly enabled: true;
+  readonly output: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly usage?: LLMUsage;
+  readonly latencyMs: number;
+  readonly correlationId?: string;
 }
 
 /** Result produced by a {@link RuntimeAgent}. */

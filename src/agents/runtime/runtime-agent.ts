@@ -15,9 +15,13 @@ import type {
   RuntimeAgentExecutionContext,
   RuntimeAgentExecutionResult,
 } from './types.js';
+import { LLM_REASONING_CAPABILITY } from '../../llm/constants.js';
 
 /** Error code returned when a runtime agent is asked to fail (test knob). */
 export const RUNTIME_AGENT_FAILURE_CODE = 'RUNTIME_AGENT_FAILURE';
+
+/** Error code returned when a reasoning agent lacks reasoned context. */
+export const REASONING_REQUIRED_CODE = 'REASONING_REQUIRED';
 
 /** Default identity of the first production runtime agent (AG-101 slot). */
 export const DEFAULT_RUNTIME_AGENT_ID = 'AG-101';
@@ -37,6 +41,8 @@ export interface RuntimeAgentOptions {
   readonly name?: string;
   readonly version?: string;
   readonly capabilityIds?: readonly string[];
+  /** Declares the `agent.reasoning` capability and requires reasoned context. */
+  readonly requiresReasoning?: boolean;
   readonly logger?: Logger;
 }
 
@@ -63,7 +69,11 @@ export function createRuntimeAgent(options: RuntimeAgentOptions = {}): RuntimeAg
   const agentId = options.agentId ?? DEFAULT_RUNTIME_AGENT_ID;
   const name = options.name ?? DEFAULT_RUNTIME_AGENT_NAME;
   const version = options.version ?? DEFAULT_RUNTIME_AGENT_VERSION;
-  const capabilityIds = options.capabilityIds ?? DEFAULT_RUNTIME_CAPABILITIES;
+  const baseCapabilities = options.capabilityIds ?? DEFAULT_RUNTIME_CAPABILITIES;
+  const requiresReasoning = options.requiresReasoning ?? false;
+  const capabilityIds = requiresReasoning
+    ? [...baseCapabilities, LLM_REASONING_CAPABILITY]
+    : baseCapabilities;
   const logger = options.logger ?? createOrchestratorLogger('runtime-agent');
 
   const capabilities: readonly AgentCapability[] = capabilityIds.map((id) => ({
@@ -121,6 +131,17 @@ export function createRuntimeAgent(options: RuntimeAgentOptions = {}): RuntimeAg
       };
     }
 
+    if (requiresReasoning && context.reasoning === undefined) {
+      return {
+        success: false,
+        error: {
+          code: REASONING_REQUIRED_CODE,
+          message: `Agent ${agentId} requires AI reasoning but received none`,
+          retryable: false,
+        },
+      };
+    }
+
     const summary = summarizeInput(String(raw));
     const namespaces = [...new Set(context.memory.map((item) => item.namespace))];
 
@@ -132,6 +153,17 @@ export function createRuntimeAgent(options: RuntimeAgentOptions = {}): RuntimeAg
           kind: 'description',
           summary,
         },
+        ...(context.reasoning !== undefined
+          ? {
+              reasoning: {
+                enabled: true,
+                provider: context.reasoning.provider,
+                model: context.reasoning.model,
+                outputPreview: summarizeInput(context.reasoning.output),
+                latencyMs: context.reasoning.latencyMs,
+              },
+            }
+          : {}),
         agent: {
           agentId,
           provider: 'runtime',
