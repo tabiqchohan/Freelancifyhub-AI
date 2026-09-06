@@ -25,10 +25,14 @@ import type {
 } from './types.js';
 import { RuntimeAgentEventType as RuntimeAgentEventTypeValue } from './types.js';
 import type { AgentRegistry } from './registry.js';
-import { LLM_REASONING_CAPABILITY } from '../../llm/constants.js';
+import { LLM_AGENTIC_CAPABILITY, LLM_REASONING_CAPABILITY } from '../../llm/constants.js';
 import { classifyLLMError } from '../../llm/errors/index.js';
 import type { AIReasoningServiceContract } from '../../llm/types/index.js';
 import type { LLMUsage } from '../../llm/types/index.js';
+import { AgenticLoopStatus } from './agentic/contracts.js';
+import type { AgenticLoopService } from './agentic/loop.js';
+import type { ToolActor } from '../ag-004-tool-manager/index.js';
+import { ToolActorGroup } from '../ag-004-tool-manager/index.js';
 
 /** Builds the AG-002 memory load input for a given execution request. */
 export type MemoryContextInputBuilder = (
@@ -45,6 +49,15 @@ export interface ProductionAgentExecutorOptions {
   readonly onEvent?: (event: RuntimeAgentEvent) => void;
   /** AI reasoning capability; required by agents declaring `agent.reasoning`. */
   readonly reasoningService?: AIReasoningServiceContract;
+  /** Agentic tool-calling loop; required by agents declaring `agent.agentic`. */
+  readonly agenticLoop?: AgenticLoopService;
+  /** Builds the AG-004 actor for a request's agentic execution. */
+  readonly agenticToolActor?: AgenticToolActorBuilder;
+}
+
+/** A safe actor used to execute agentic tool calls through AG-004. */
+export interface AgenticToolActorBuilder {
+  (request: AgentExecutionRequest): ToolActor | undefined;
 }
 
 /**
@@ -65,6 +78,15 @@ interface ReasoningOutcome {
     readonly usage?: LLMUsage;
     readonly latencyMs: number;
     readonly correlationId?: string;
+    /** Present when the agent ran in agentic tool-calling mode. */
+    readonly agentic?: {
+      readonly status: AgenticLoopStatus;
+      readonly turns: number;
+      readonly reasoningCalls: number;
+      readonly toolCalls: number;
+      readonly rejections: number;
+      readonly clarification?: string;
+    };
   };
 }
 
@@ -92,6 +114,8 @@ export class ProductionAgentExecutor implements AgentExecutor {
   private readonly logger: Logger;
   private readonly onEvent: ((event: RuntimeAgentEvent) => void) | undefined;
   private readonly reasoningService: AIReasoningServiceContract | undefined;
+  private readonly agenticLoop: AgenticLoopService | undefined;
+  private readonly agenticToolActor: AgenticToolActorBuilder | undefined;
   private readonly attemptCounters = new Map<string, number>();
   private readonly signals = new Map<string, CancellationSignalImpl>();
 
@@ -103,6 +127,8 @@ export class ProductionAgentExecutor implements AgentExecutor {
     this.logger = options.logger ?? createOrchestratorLogger('production-executor');
     this.onEvent = options.onEvent;
     this.reasoningService = options.reasoningService;
+    this.agenticLoop = options.agenticLoop;
+    this.agenticToolActor = options.agenticToolActor;
   }
 
   canExecute(agentId: AgentId): boolean {
@@ -303,6 +329,14 @@ export class ProductionAgentExecutor implements AgentExecutor {
     const requiresReasoning = agent.configuration.capabilities.some(
       (capability) => capability.id === LLM_REASONING_CAPABILITY,
     );
+    const requiresAgentic = agent.configuration.capabilities.some(
+      (capability) => capability.id === LLM_AGENTIC_CAPABILITY,
+    );
+
+    if (requiresAgentic) {
+      return this.resolveAgenticReasoning(request, info);
+    }
+
     if (!requiresReasoning) {
       return { failed: false };
     }
@@ -364,6 +398,174 @@ export class ProductionAgentExecutor implements AgentExecutor {
         retryable: classification.retryable,
       };
     }
+  }
+
+  private async resolveAgenticReasoning(
+    request: AgentExecutionRequest,
+    info: {
+      executionId: string;
+      stepId: string;
+      agentId: AgentId;
+      traceId: string;
+      requestId: string;
+      memory: readonly RuntimeMemoryItem[];
+      signal: CancellationSignal;
+    },
+  ): Promise<ReasoningOutcome> {
+    if (this.agenticLoop === undefined || !this.agenticLoop.isEnabled()) {
+      return {
+        failed: true,
+        errorCode: 'REASONING_UNAVAILABLE',
+        errorMessage: `Agent ${info.agentId} requires agentic tool-calling, but it is not enabled in this deployment`,
+        retryable: false,
+      };
+    }
+
+    const actor = this.agenticToolActor?.(request) ?? this.defaultAgenticToolActor(info.agentId);
+
+    const result = await this.agenticLoop.run({
+      userInput: extractUserInput(request),
+      context: {
+        executionId: info.executionId,
+        stepId: info.stepId,
+        agentId: info.agentId,
+      },
+      memoryContext: info.memory.map(toReasoningContextItem),
+      actor,
+      namespace: actor.namespaces?.[0] ?? 'default',
+      agentId: info.agentId,
+      executionId: info.executionId,
+      requestId: info.requestId,
+      traceId: info.traceId,
+      signal: toAbortSignal(info.signal),
+      timeoutMs: this.timeoutFor(request),
+    });
+
+    const agentic = {
+      status: result.status,
+      turns: result.turns,
+      reasoningCalls: result.reasoningCalls,
+      toolCalls: result.toolCalls.length,
+      rejections: result.rejections.length,
+      ...(result.clarification !== undefined ? { clarification: result.clarification } : {}),
+    };
+
+    if (result.status === AgenticLoopStatus.Completed) {
+      if (result.finalResponse === undefined) {
+        return {
+          failed: true,
+          errorCode: 'AGENTIC_LOOP_FAILED',
+          errorMessage: 'Agentic loop completed without a final response',
+          retryable: false,
+        };
+      }
+      return {
+        failed: false,
+        reasoning: {
+          enabled: true,
+          output: result.finalResponse,
+          provider: result.provider ?? 'unknown',
+          model: result.model ?? 'unknown',
+          usage: {
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            totalTokens: result.usage.totalTokens,
+          },
+          latencyMs: result.durationMs,
+          correlationId: result.correlationId ?? info.requestId,
+          agentic,
+        },
+      };
+    }
+
+    if (result.status === AgenticLoopStatus.Clarification) {
+      return {
+        failed: false,
+        reasoning: {
+          enabled: true,
+          output: result.clarification ?? '',
+          provider: result.provider ?? 'unknown',
+          model: result.model ?? 'unknown',
+          usage: {
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            totalTokens: result.usage.totalTokens,
+          },
+          latencyMs: result.durationMs,
+          correlationId: result.correlationId ?? info.requestId,
+          agentic,
+        },
+      };
+    }
+
+    if (result.status === AgenticLoopStatus.Aborted) {
+      return {
+        failed: false,
+        reasoning: {
+          enabled: true,
+          output: result.finalResponse ?? '',
+          provider: result.provider ?? 'unknown',
+          model: result.model ?? 'unknown',
+          usage: {
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+            totalTokens: result.usage.totalTokens,
+          },
+          latencyMs: result.durationMs,
+          correlationId: result.correlationId ?? info.requestId,
+          agentic,
+        },
+      };
+    }
+
+    const terminalError = this.agenticTerminalError(result.status);
+    return {
+      failed: true,
+      errorCode: terminalError.errorCode,
+      errorMessage: terminalError.errorMessage,
+      retryable: result.retryable ?? false,
+    };
+  }
+
+  private agenticTerminalError(status: AgenticLoopStatus): {
+    errorCode: string;
+    errorMessage: string;
+  } {
+    switch (status) {
+      case AgenticLoopStatus.Cancelled:
+        return {
+          errorCode: 'AGENTIC_LOOP_CANCELLED',
+          errorMessage: 'Agentic tool-calling was cancelled',
+        };
+      case AgenticLoopStatus.TimedOut:
+        return {
+          errorCode: 'AGENTIC_LOOP_TIMEOUT',
+          errorMessage: 'Agentic tool-calling exceeded its deadline',
+        };
+      case AgenticLoopStatus.LimitReached:
+        return {
+          errorCode: 'AGENTIC_LOOP_LIMIT_REACHED',
+          errorMessage: 'Agentic tool-calling exceeded its limits',
+        };
+      case AgenticLoopStatus.Failed:
+      default:
+        return {
+          errorCode: 'AGENTIC_LOOP_FAILED',
+          errorMessage: 'Agentic tool-calling failed for this request',
+        };
+    }
+  }
+
+  private get defaultAgenticNamespace(): string {
+    return 'default';
+  }
+
+  private defaultAgenticToolActor(agentId: string): ToolActor {
+    return {
+      group: ToolActorGroup.Orchestrator,
+      id: `${agentId}-agentic`,
+      namespaces: [this.defaultAgenticNamespace],
+    };
   }
 
   private async provisionMemory(

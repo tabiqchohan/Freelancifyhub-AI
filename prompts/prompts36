@@ -1,0 +1,953 @@
+## 🚀 AG-003 Knowledge Manager — Sprint 15 Master Prompt
+
+You are working inside the existing `freelancify-ai` TypeScript/Node.js repository.
+
+### CURRENT BASELINE
+
+Sprint 14 is COMPLETE and committed/pushed.
+
+Current verified baseline:
+
+* AG-001 Master Orchestrator: complete
+* AG-002 Memory Manager: complete
+* AG-002 durable Neon PostgreSQL persistence: complete
+* AG-001 ↔ AG-002 runtime integration: complete
+* Production composition root: complete
+* Real AgentRegistry: complete
+* ProductionAgentExecutor: complete
+* AG-101 first real runtime agent: complete
+* Runtime API: complete
+* Runtime event bridge: complete
+* Health/readiness endpoints: complete
+* Runtime E2E tests: complete
+* 105 test files
+* 1307 tests passing
+* TypeScript clean
+* ESLint clean
+* Production build successful
+* Runtime smoke test successful
+* Sprint 14 committed and pushed
+
+DO NOT break any existing AG-001/AG-002 functionality.
+
+---
+
+# PRIMARY OBJECTIVE
+
+Implement **AG-003 Knowledge Manager** as the next production-grade subsystem.
+
+The goal is to create a real Knowledge Management architecture that can:
+
+1. ingest knowledge sources
+2. represent knowledge documents
+3. normalize and validate content
+4. split content into deterministic chunks
+5. attach rich metadata
+6. version knowledge
+7. apply lifecycle states
+8. enforce authorization/security
+9. persist knowledge durably in Neon PostgreSQL
+10. retrieve relevant knowledge deterministically
+11. rank retrieved knowledge
+12. deduplicate results
+13. enforce retrieval limits/budgets
+14. emit auditable events
+15. integrate with AG-001
+16. integrate with the existing runtime architecture
+17. expose production-safe application services
+18. provide comprehensive tests
+19. preserve existing architecture and security guarantees
+
+Do NOT implement an LLM/vector database/external embedding provider unless the existing architecture already requires a minimal abstraction for future integration.
+
+Sprint 15 should establish the **knowledge-management foundation**, not prematurely implement every future AI feature.
+
+---
+
+# NON-NEGOTIABLE RULES
+
+## Rule 1 — Inspect Before Coding
+
+Before modifying files:
+
+* inspect repository structure
+* inspect AG-001 architecture
+* inspect AG-002 architecture
+* inspect AG-002 storage abstractions
+* inspect AG-002 PostgreSQL implementation
+* inspect AG-002 lifecycle model
+* inspect AG-002 authorization/security model
+* inspect AG-002 event system
+* inspect Sprint 14 composition root
+* inspect runtime AgentRegistry
+* inspect runtime AgentExecutor
+* inspect existing tests
+* inspect package.json
+* inspect tsconfig
+* inspect eslint configuration
+* inspect database migration system
+
+Do not create duplicate abstractions if an existing abstraction can be reused.
+
+---
+
+# ARCHITECTURAL PRINCIPLE
+
+AG-003 must follow the same production standards established by AG-002.
+
+Prefer:
+
+* typed interfaces
+* dependency injection
+* immutable domain objects
+* deterministic behavior
+* explicit configuration
+* fail-closed security
+* lifecycle-aware operations
+* version-aware operations
+* auditability
+* repository/storage separation
+* service-layer orchestration
+* unit/integration/E2E testing
+* PostgreSQL parameterized queries
+* migration-based schema changes
+
+Avoid:
+
+* `any`
+* unsafe casts
+* hidden global state
+* singleton hacks
+* test doubles in production
+* duplicated database logic
+* plaintext secrets
+* silent fallbacks
+* swallowing errors
+* fake implementations pretending to be production implementations
+
+---
+
+# PHASE 0 — RECONNAISSANCE
+
+First inspect the repository and identify:
+
+* existing AG-003 files
+* existing knowledge interfaces
+* shared types
+* AG-002 reusable abstractions
+* PostgreSQL adapter
+* migration mechanism
+* event infrastructure
+* authorization infrastructure
+* runtime composition root
+* existing API conventions
+
+Create an internal implementation plan based on the actual repository.
+
+Do NOT assume filenames if the repository differs from expectations.
+
+Reuse existing architecture wherever appropriate.
+
+---
+
+# PHASE 1 — AG-003 DOMAIN MODEL
+
+Create the production domain model for Knowledge Manager.
+
+At minimum support:
+
+## KnowledgeDocument
+
+Fields should include appropriate strongly typed concepts such as:
+
+* id
+* namespace/scope
+* title
+* source
+* content
+* contentType
+* metadata
+* status/lifecycle
+* security classification
+* version
+* timestamps
+* checksum/content hash
+* createdBy
+* updatedBy
+
+Use the repository's established ID and timestamp conventions.
+
+Do not blindly copy this field list if existing architecture has better conventions.
+
+---
+
+# KNOWLEDGE SOURCE MODEL
+
+Support conceptual source types such as:
+
+* manual text
+* markdown
+* document
+* URL/reference
+* application-generated knowledge
+* system knowledge
+
+Create extensible typed source metadata.
+
+Do not build external web crawling yet.
+
+---
+
+# PHASE 2 — NORMALIZATION
+
+Implement deterministic knowledge normalization.
+
+Responsibilities may include:
+
+* whitespace normalization
+* newline normalization
+* encoding-safe handling
+* empty-content validation
+* metadata normalization
+* title normalization
+* source normalization
+* content checksum generation
+
+The same input must produce the same normalized representation.
+
+Test edge cases:
+
+* empty content
+* whitespace-only content
+* very large content
+* Unicode
+* duplicate whitespace
+* newline variants
+* malformed metadata
+* missing title
+* duplicate content
+
+---
+
+# PHASE 3 — CHUNKING ENGINE
+
+Implement a deterministic chunking engine.
+
+Requirements:
+
+* configurable maximum chunk size
+* configurable overlap
+* deterministic chunk IDs
+* stable ordering
+* source-document reference
+* chunk index
+* chunk text
+* metadata inheritance
+* content checksum
+* version reference
+
+Chunking must preserve the relationship:
+
+Document → Version → Chunk
+
+Handle:
+
+* small documents
+* exact boundary sizes
+* large documents
+* empty documents
+* Unicode text
+* overlap
+* last partial chunk
+
+Do not implement a fake semantic chunker.
+
+Create a clean abstraction so semantic chunking can be added later.
+
+---
+
+# PHASE 4 — VERSIONING
+
+Implement document version management.
+
+Requirements:
+
+* immutable historical versions
+* active/current version
+* deterministic version numbers
+* no accidental overwrite of historical versions
+* version-aware retrieval
+* version metadata
+* content checksum
+* author/actor information
+
+Support:
+
+* create document
+* create new version
+* retrieve current version
+* retrieve explicit version
+* list versions
+* prevent invalid version transitions
+
+Test concurrent/conflicting version creation where appropriate.
+
+---
+
+# PHASE 5 — LIFECYCLE
+
+Implement explicit lifecycle states.
+
+Use existing AG-002 lifecycle conventions when possible.
+
+Knowledge should support states such as:
+
+* ACTIVE
+* ARCHIVED
+* EXPIRED
+* DELETED
+
+Do not invent conflicting lifecycle semantics.
+
+Operations must enforce valid transitions.
+
+Examples:
+
+ACTIVE → ARCHIVED
+ARCHIVED → ACTIVE
+ACTIVE → EXPIRED
+EXPIRED → DELETE/erase according to policy
+
+Security must remain fail-closed.
+
+---
+
+# PHASE 6 — AUTHORIZATION & SECURITY
+
+Reuse AG-002 security architecture where appropriate.
+
+Knowledge operations must distinguish at minimum:
+
+* read
+* create
+* update/version
+* archive
+* restore
+* expire
+* delete/erase
+* lifecycle management
+
+Authorization must happen before exposing protected content.
+
+Implement:
+
+* actor context
+* namespace/scope restrictions
+* security classification filtering
+* fail-closed authorization
+* canonical redaction where required
+
+Never return unauthorized knowledge merely because it matched retrieval criteria.
+
+Test:
+
+* authorized read
+* unauthorized read
+* cross-namespace access
+* missing actor
+* invalid actor
+* restricted knowledge
+* redaction
+* lifecycle restrictions
+
+---
+
+# PHASE 7 — REPOSITORY ABSTRACTION
+
+Create the AG-003 repository abstraction.
+
+Separate:
+
+Domain/service logic
+↓
+Repository interface
+↓
+Storage adapter
+
+Support:
+
+* create
+* get by ID
+* get current version
+* get specific version
+* update/version
+* list
+* delete/erase
+* lifecycle update
+* chunk retrieval
+* metadata retrieval
+
+Use deterministic pagination.
+
+Avoid loading entire knowledge bases into memory unnecessarily.
+
+---
+
+# PHASE 8 — POSTGRESQL DURABLE STORAGE
+
+Integrate AG-003 with the existing Neon PostgreSQL architecture.
+
+Reuse the existing AG-002 database conventions where appropriate.
+
+Create versioned migrations.
+
+Potential schema structure:
+
+knowledge_documents
+knowledge_versions
+knowledge_chunks
+knowledge_events
+
+Adapt names/types to existing conventions if required.
+
+Requirements:
+
+* parameterized SQL
+* proper primary keys
+* foreign keys
+* uniqueness constraints
+* useful indexes
+* version constraints
+* namespace indexes
+* checksum indexes where appropriate
+* transaction safety
+* deterministic ordering
+* durable restart persistence
+
+Never silently fall back to in-memory storage when durable mode is configured.
+
+Follow the existing fail-closed storage behavior.
+
+---
+
+# PHASE 9 — KNOWLEDGE RETRIEVAL ENGINE
+
+Implement deterministic retrieval.
+
+Initial retrieval may use lexical/text matching rather than embeddings.
+
+Architecture must allow future vector/semantic retrieval.
+
+Pipeline should resemble:
+
+candidate retrieval
+→ lifecycle filtering
+→ authorization filtering
+→ namespace/scope filtering
+→ security filtering
+→ relevance scoring
+→ ranking
+→ deduplication
+→ version selection
+→ limits
+→ context budget
+→ response
+
+Do not claim semantic/vector search if it is not actually implemented.
+
+---
+
+# RETRIEVAL SCORING
+
+Implement a deterministic baseline scorer.
+
+Possible signals:
+
+* title match
+* metadata match
+* exact token match
+* normalized content match
+* source priority
+* version recency where appropriate
+
+Make scoring explainable.
+
+Each result should be able to expose why it ranked where it did.
+
+Avoid random scoring.
+
+---
+
+# PHASE 10 — KNOWLEDGE CONTEXT BUILDER
+
+Create a KnowledgeContextBuilder.
+
+Its job is to convert retrieved knowledge into an AG-001-compatible context structure.
+
+Requirements:
+
+* priority-aware selection
+* token/size budget
+* deduplication
+* metadata preservation
+* source attribution
+* document/version/chunk references
+* security filtering
+* deterministic ordering
+
+Do not duplicate AG-002 MemoryContextBuilder logic.
+
+Reuse shared abstractions when possible.
+
+---
+
+# PHASE 11 — EVENT/AUDIT SYSTEM
+
+Integrate AG-003 with the existing event architecture.
+
+Emit events for important operations:
+
+* knowledge.created
+* knowledge.version.created
+* knowledge.updated
+* knowledge.archived
+* knowledge.restored
+* knowledge.expired
+* knowledge.deleted
+* knowledge.retrieved
+
+Follow existing AG-002 canonical event conventions.
+
+Events must include appropriate:
+
+* event ID
+* timestamp
+* actor
+* namespace
+* entity ID
+* operation
+* correlation ID
+* causation ID where supported
+* metadata
+
+Do not expose sensitive knowledge content inside audit events unless existing security architecture explicitly permits it.
+
+---
+
+# PHASE 12 — AG-001 INTEGRATION
+
+Integrate AG-003 with the existing Master Orchestrator.
+
+The architecture should support:
+
+User request
+→ AG-001 intent detection
+→ context construction
+→ knowledge retrieval
+→ memory retrieval where appropriate
+→ routing
+→ planning
+→ agent execution
+→ response
+
+Do not destroy or bypass existing AG-002 memory flow.
+
+AG-001 should be able to request knowledge context through a clean interface.
+
+Keep knowledge retrieval independently testable.
+
+---
+
+# PHASE 13 — RUNTIME INTEGRATION
+
+Integrate AG-003 into Sprint 14's production composition root.
+
+Requirements:
+
+* dependency injection
+* configuration
+* storage backend selection
+* lifecycle services
+* repository
+* retrieval service
+* event bridge
+* health/readiness reporting
+
+Do not introduce hidden global initialization.
+
+The runtime must start successfully in the existing configuration.
+
+---
+
+# PHASE 14 — KNOWLEDGE API
+
+If Sprint 14 runtime conventions support application routes, add production-safe endpoints for the core knowledge operations.
+
+Potential endpoints:
+
+POST /knowledge
+GET /knowledge/:id
+GET /knowledge/:id/versions
+POST /knowledge/:id/versions
+POST /knowledge/:id/archive
+POST /knowledge/:id/restore
+DELETE /knowledge/:id
+POST /knowledge/search
+
+Follow the existing runtime/API conventions.
+
+Do not expose unauthorized content.
+
+Validate all request input.
+
+Return typed error responses.
+
+Do not leak stack traces or secrets.
+
+---
+
+# PHASE 15 — HEALTH & CAPABILITIES
+
+Extend health/readiness only if appropriate.
+
+Expose truthful information such as:
+
+* knowledge subsystem available
+* storage backend
+* database connectivity
+* migration state
+* repository readiness
+
+Do not report healthy when the required durable backend is unavailable.
+
+Do not expose credentials or connection strings.
+
+---
+
+# PHASE 16 — TESTING
+
+Create comprehensive tests.
+
+Minimum categories:
+
+## Unit tests
+
+* domain models
+* normalization
+* checksums
+* chunking
+* versioning
+* lifecycle
+* authorization
+* scoring
+* ranking
+* deduplication
+* context builder
+* configuration
+* error mapping
+
+## Repository tests
+
+* create
+* read
+* update
+* version
+* delete
+* pagination
+* constraints
+* lifecycle
+* deterministic ordering
+
+## PostgreSQL integration tests
+
+Use the existing Neon configuration/gating conventions.
+
+Test:
+
+* durable insert
+* restart persistence
+* versions
+* chunks
+* transactions
+* rollback
+* constraints
+* deletion
+* lifecycle
+* retrieval
+* events
+
+Do not skip tests silently.
+
+---
+
+# PHASE 17 — END-TO-END TESTS
+
+Create real E2E scenarios.
+
+At minimum:
+
+### Scenario 1
+
+Create knowledge document
+→ normalize
+→ persist
+→ chunk
+→ retrieve
+→ return authorized result
+
+### Scenario 2
+
+Create version 2
+→ version 1 remains immutable
+→ current version becomes version 2
+
+### Scenario 3
+
+Unauthorized actor
+→ retrieval denied/redacted
+
+### Scenario 4
+
+Archive knowledge
+→ normal retrieval excludes archived knowledge
+
+### Scenario 5
+
+Restore knowledge
+→ retrieval becomes available again
+
+### Scenario 6
+
+Restart application
+→ knowledge remains available from Neon
+
+### Scenario 7
+
+Knowledge retrieval through AG-001
+→ AG-001 receives knowledge context
+→ agent execution remains functional
+
+### Scenario 8
+
+Runtime event
+→ AG-003 event
+→ event bridge
+→ durable event log
+
+---
+
+# PHASE 18 — FAILURE TESTING
+
+Explicitly test:
+
+* malformed input
+* missing actor
+* unauthorized actor
+* invalid namespace
+* invalid lifecycle transition
+* invalid version
+* duplicate version
+* duplicate document
+* database unavailable
+* transaction rollback
+* malformed configuration
+* empty content
+* huge content
+* corrupted data
+* missing referenced document
+* deleted document
+* archived document
+* expired document
+
+The system must fail predictably.
+
+---
+
+# PHASE 19 — PERFORMANCE/HARDENING
+
+Review:
+
+* unnecessary database queries
+* N+1 queries
+* unbounded result sets
+* large memory allocations
+* oversized context
+* duplicate retrieval
+* unsafe string handling
+* SQL injection risks
+* prototype pollution
+* authorization bypasses
+* race conditions
+* concurrent writes
+* transaction boundaries
+
+Use indexes where justified.
+
+Do not prematurely optimize without evidence.
+
+---
+
+# PHASE 20 — DOCUMENTATION
+
+Create/update documentation for AG-003.
+
+Document:
+
+* architecture
+* domain model
+* ingestion
+* normalization
+* chunking
+* versioning
+* lifecycle
+* authorization
+* storage
+* PostgreSQL schema
+* retrieval pipeline
+* ranking
+* context building
+* events
+* AG-001 integration
+* runtime integration
+* API
+* configuration
+* testing
+* future vector-search extension points
+
+Clearly distinguish implemented functionality from future functionality.
+
+---
+
+# PHASE 21 — FINAL ARCHITECTURE REVIEW
+
+Before declaring Sprint 15 complete, inspect the entire implementation.
+
+Verify:
+
+* no duplicate abstractions
+* no dead production code
+* no test doubles in production path
+* no unsafe `any`
+* no unnecessary casts
+* no security bypass
+* no hidden fallback
+* no hardcoded secrets
+* no broken AG-001 behavior
+* no broken AG-002 behavior
+* no broken Sprint 14 runtime behavior
+* no migration conflicts
+* no API regressions
+
+---
+
+# MANDATORY QUALITY GATES
+
+Run all applicable project checks.
+
+At minimum:
+
+1. full test suite
+2. AG-003 unit tests
+3. AG-003 integration tests
+4. runtime E2E tests
+5. PostgreSQL/Neon integration tests where configured
+6. TypeScript typecheck
+7. ESLint
+8. production build
+9. runtime smoke test
+10. health/readiness check
+
+Required result:
+
+* 0 failing tests
+* 0 TypeScript errors
+* 0 ESLint errors
+* successful production build
+* successful runtime boot
+* successful health check
+* successful knowledge create/retrieve flow
+
+If an existing command is known to be unstable on this machine, use the repository's reliable equivalent command rather than misreporting failure.
+
+---
+
+# IMPORTANT — DO NOT STOP EARLY
+
+Do NOT stop after creating interfaces.
+
+Do NOT stop after creating database tables.
+
+Do NOT stop after unit tests.
+
+Complete the entire Sprint 15 implementation end-to-end.
+
+If you encounter an implementation problem:
+
+1. inspect the relevant existing architecture
+2. identify the root cause
+3. fix it properly
+4. add a regression test
+5. continue
+
+Do not merely describe what remains.
+
+---
+
+# IMPORTANT — PRESERVE EXISTING SYSTEM
+
+AG-001, AG-002 and Sprint 14 are already production foundations.
+
+Do not rewrite them unnecessarily.
+
+Prefer small, compatible integrations.
+
+Existing tests must remain green.
+
+If an architectural conflict is discovered, resolve it in the cleanest backward-compatible way.
+
+---
+
+# FINAL REPORT
+
+At the end provide a concise report containing:
+
+## Implementation
+
+* files created
+* files modified
+* major components
+* database migrations
+* runtime integration
+
+## Testing
+
+* total test count
+* AG-003 tests
+* integration tests
+* E2E tests
+* Neon tests
+
+## Quality Gates
+
+* typecheck
+* lint
+* build
+* runtime smoke test
+* health check
+
+## Architecture
+
+* AG-001 integration
+* AG-002 integration
+* runtime integration
+* event integration
+
+## Remaining Work
+
+Only list genuinely remaining Sprint 15 scope.
+
+Do not call Sprint 15 complete if any mandatory quality gate is failing.
+
+Do NOT commit or push automatically unless explicitly instructed.
+
+Start now.

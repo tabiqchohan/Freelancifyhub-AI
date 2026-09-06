@@ -7,6 +7,7 @@ import type {
 import type { AgentId, IsoTimestamp, TraceId } from '../ag-001-master-orchestrator/types/index.js';
 import type { MemoryNamespace, MemorySecurityLevel } from '../ag-002-memory-manager/index.js';
 import type { LLMUsage } from '../../llm/types/index.js';
+import type { AgenticLoopStatus } from './agentic/contracts.js';
 
 export type {
   AgentCapability,
@@ -64,6 +65,15 @@ export interface RuntimeReasoningContext {
   readonly usage?: LLMUsage;
   readonly latencyMs: number;
   readonly correlationId?: string;
+  /** Present when the request was served by the agentic tool-calling loop. */
+  readonly agentic?: {
+    readonly status: AgenticLoopStatus;
+    readonly turns: number;
+    readonly reasoningCalls: number;
+    readonly toolCalls: number;
+    readonly rejections: number;
+    readonly clarification?: string;
+  };
 }
 
 /** Result produced by a {@link RuntimeAgent}. */

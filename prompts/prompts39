@@ -1,0 +1,1136 @@
+You are working inside the existing `freelancify-ai` TypeScript/Node.js project.
+
+# SPRINT 18 — AGENTIC TOOL-CALLING & REASONING LOOP
+
+## ROLE
+
+Act as a senior staff-level TypeScript engineer and AI agent systems architect.
+
+You are continuing an already implemented production-oriented architecture.
+
+DO NOT redesign the project from scratch.
+
+DO NOT break existing architecture.
+
+DO NOT bypass existing abstractions.
+
+DO NOT directly access databases from the LLM/reasoning layer.
+
+DO NOT introduce unnecessary SDK coupling.
+
+Your job is to implement Sprint 18 on top of the existing Sprint 17 architecture.
+
+---
+
+# 1. CURRENT PROJECT STATE
+
+The following components already exist and are considered completed:
+
+### AG-001 Master Orchestrator
+
+Completed:
+
+* Intent Detection
+* Context Builder
+* Routing Engine
+* Execution Planner
+* Execution Engine
+* Aggregation
+* Response handling
+* Cancellation
+* Timeout
+* Error handling
+* Security hardening
+* Runtime integration
+
+### AG-002 Memory Manager
+
+Completed:
+
+* Memory lifecycle
+* Retention
+* Access control
+* Retrieval
+* Context integration
+* Consolidation
+* Durable persistence
+* Event log/audit trail
+* DSR/restore/event replay
+* Neon PostgreSQL persistence
+* Runtime integration
+* Security/retrieval hardening
+
+### AG-003 Knowledge Manager
+
+Completed foundation:
+
+* Documents
+* Versions
+* Chunks
+* Lifecycle
+* Validation
+* Security
+* Repositories
+* Durable storage
+* Retrieval
+* Events
+* Runtime API
+* AG-001 context provider
+
+Advanced semantic/vector RAG is still deferred.
+
+### AG-004 Tool Manager
+
+Completed foundation:
+
+* Tool Registry
+* Tool configuration
+* Tool validation
+* Tool policies
+* Tool executor
+* Calculator tool
+* Tool repository/storage
+* Tool events
+* Tool metrics
+* Security
+* Runtime integration
+* Durable Neon support
+
+### LLM / Reasoning Layer — Sprint 17
+
+Completed:
+
+* LLMProvider abstraction
+* LLMMessage
+* LLMRequest
+* LLMResponse
+* LLMUsage
+* LLMRequestOptions
+* AbortSignal support
+* MockLLMProvider
+* HttpLLMProvider
+* DisabledLLMProvider
+* Provider factory
+* AIReasoningService
+* bounded messages
+* context injection
+* usage tracking
+* latency
+* correlation IDs
+* cancellation
+* normalized errors
+* security boundaries
+* secret redaction
+* UTF-8 byte budgets
+* retry/backoff
+* timeout handling
+* LLM event log
+* LLM metrics
+* `/api/llm/status`
+* health/readiness integration
+* AG-001 reasoning prelude
+
+Sprint 17 ended with approximately:
+
+* 1577 passing tests
+* TypeScript clean
+* ESLint clean
+* Build successful
+* Runtime smoke tests successful
+* Sprint 17 committed and pushed
+
+Treat this as the stable baseline.
+
+---
+
+# 2. SPRINT 18 OBJECTIVE
+
+Implement the first real **agentic execution loop**.
+
+Current architecture can:
+
+USER REQUEST
+↓
+AG-001
+↓
+Intent
+↓
+Context
+↓
+Routing
+↓
+Planning
+↓
+Execution
+↓
+Response
+
+Sprint 18 must extend this into:
+
+USER REQUEST
+↓
+AG-001
+↓
+Intent
+↓
+Context
+↓
+Routing
+↓
+Planning
+↓
+LLM REASONING
+↓
+TOOL DECISION
+↓
+TOOL VALIDATION
+↓
+AG-004 TOOL EXECUTION
+↓
+TOOL RESULT
+↓
+LLM REASONING AGAIN
+↓
+continue / another tool / final answer
+↓
+AG-001 RESPONSE
+↓
+USER
+
+The loop must be bounded, deterministic when appropriate, observable, secure, cancellable and fail-closed.
+
+---
+
+# 3. IMPORTANT ARCHITECTURAL RULE
+
+The LLM must NEVER directly execute tools.
+
+The architecture must be:
+
+LLM
+↓
+structured tool intent
+↓
+Agentic Tool Loop
+↓
+AG-004 Tool Manager
+↓
+Tool Policy
+↓
+Tool Executor
+↓
+Tool Result
+↓
+LLM
+
+The LLM only proposes an action.
+
+AG-004 remains the authority for actual tool execution.
+
+---
+
+# 4. PRIMARY SPRINT 18 DELIVERABLES
+
+Implement the following components.
+
+## A. Tool Call Contracts
+
+Create strongly typed contracts for:
+
+* ToolCall
+* ToolCallRequest
+* ToolCallArguments
+* ToolCallResult
+* ToolCallError
+* ToolCallStatus
+* ToolDecision
+* ToolDecisionType
+* AgenticTurn
+* AgenticLoopState
+* AgenticLoopResult
+
+Use Zod where runtime validation is appropriate.
+
+Do not use `any`.
+
+Do not leak provider-specific SDK types.
+
+---
+
+# 5. STRUCTURED LLM TOOL DECISION
+
+Extend the existing LLM abstraction in a backward-compatible way.
+
+The reasoning layer must be capable of returning a structured decision such as:
+
+* FINAL_RESPONSE
+* TOOL_CALL
+* CLARIFICATION_REQUIRED
+* ABORT
+
+A TOOL_CALL must contain:
+
+* tool name / ID
+* validated arguments
+* reasoning metadata only where safe
+* correlation ID
+* turn ID
+
+Do NOT expose chain-of-thought.
+
+Do NOT persist private chain-of-thought.
+
+Do NOT store hidden reasoning.
+
+Only store safe decision metadata.
+
+Example conceptual structure:
+
+{
+type: "TOOL_CALL",
+tool: "calculator",
+arguments: {
+expression: "10 / 2 + 7"
+}
+}
+
+The exact internal representation should follow the existing architecture conventions.
+
+---
+
+# 6. TOOL CALL PARSING
+
+Implement a provider-independent tool decision parser.
+
+It must:
+
+* accept structured model output
+* validate schema
+* reject malformed tool calls
+* reject unknown tools
+* reject invalid arguments
+* prevent prompt text from becoming executable commands
+* never execute arbitrary code
+* never evaluate arbitrary JavaScript
+* never shell out based on model-generated strings
+
+Malformed model output must become a controlled error.
+
+---
+
+# 7. AGENTIC TOOL LOOP
+
+Implement a dedicated service, for example:
+
+src/agents/runtime/agentic/
+
+or another location that best matches the existing architecture.
+
+Possible components:
+
+* AgenticLoop
+* AgenticLoopController
+* ToolCallParser
+* ToolDecisionValidator
+* ToolExecutionCoordinator
+* AgenticLoopState
+* AgenticLoopMetrics
+* AgenticLoopErrors
+
+Do not blindly use these exact names if the existing project naming conventions suggest better names.
+
+The loop should behave approximately as:
+
+while loop is active:
+
+```
+check cancellation
+
+check timeout
+
+check maximum turns
+
+ask reasoning service
+
+validate reasoning decision
+
+if FINAL_RESPONSE:
+    finish
+
+if CLARIFICATION_REQUIRED:
+    finish safely
+
+if ABORT:
+    finish safely
+
+if TOOL_CALL:
+    validate tool
+    authorize tool
+    execute through AG-004
+    sanitize tool result
+    add bounded result to context
+    continue reasoning
+```
+
+Never create an unbounded loop.
+
+---
+
+# 8. LOOP LIMITS
+
+Implement configuration for:
+
+* max agentic turns
+* max tool calls per request
+* max tool calls per turn
+* max tool result bytes
+* max accumulated tool context bytes
+* max total execution time
+* optional maximum reasoning calls
+* optional maximum estimated LLM cost
+
+All limits must have safe defaults.
+
+Configuration must be validated.
+
+Invalid limits must fail fast.
+
+No infinite loops.
+
+---
+
+# 9. CANCELLATION
+
+The agentic loop must fully support AbortSignal.
+
+Cancellation must propagate through:
+
+AG-001
+↓
+Agentic Loop
+↓
+AIReasoningService
+↓
+LLM Provider
+↓
+Tool Execution
+
+If cancellation occurs:
+
+* stop future reasoning calls
+* stop future tool calls
+* do not start another iteration
+* return a normalized cancellation result
+* emit safe cancellation telemetry
+
+Do not swallow AbortError.
+
+Do not leave timers or pending loop state behind.
+
+---
+
+# 10. TIMEOUT
+
+Integrate with the existing timeout architecture.
+
+Timeout must cover the entire agentic operation rather than only one LLM call.
+
+Example:
+
+START
+↓
+LLM
+↓
+Tool
+↓
+LLM
+↓
+Tool
+↓
+LLM
+↓
+END
+
+The total operation must respect the configured deadline.
+
+Prevent timeout race conditions.
+
+Ensure timers are cleaned up.
+
+Do not allow a timed-out operation to continue executing additional tools.
+
+---
+
+# 11. AG-004 INTEGRATION
+
+The agentic loop must use AG-004 through its public abstraction.
+
+NEVER:
+
+* import database repositories directly
+* access tool tables directly
+* execute shell commands directly
+* bypass Tool Registry
+* bypass Tool Policy
+* instantiate tool implementations ad hoc
+
+Required conceptual flow:
+
+AgenticLoop
+↓
+ToolManager / ToolExecutor public API
+↓
+Tool Registry
+↓
+Validation
+↓
+Policy
+↓
+Executor
+↓
+Tool Result
+
+AG-004 remains the security and execution boundary.
+
+---
+
+# 12. TOOL AUTHORIZATION
+
+Before every model-requested tool execution verify:
+
+1. Tool exists
+2. Tool is enabled
+3. Tool is available
+4. Tool is allowed for current agent
+5. Tool is allowed for current request actor
+6. Tool policy allows execution
+7. Arguments pass schema validation
+8. Request is within tool limits
+9. Request is within agentic loop limits
+
+If any check fails:
+
+DO NOT execute the tool.
+
+Return a safe structured failure to the reasoning loop.
+
+---
+
+# 13. TOOL RESULT SANITIZATION
+
+Tool output is untrusted input to the LLM.
+
+Reuse existing security mechanisms where possible.
+
+Tool results must be:
+
+* bounded
+* sanitized
+* clearly delimited
+* marked as untrusted/tool-generated data
+* protected from instruction injection
+
+Example conceptual context:
+
+<tool_result>
+UNTRUSTED TOOL OUTPUT
+...
+</tool_result>
+
+The model must not be allowed to reinterpret tool output as system instructions.
+
+Do not over-sanitize legitimate structured data.
+
+Preserve useful tool output while enforcing limits.
+
+---
+
+# 14. PROMPT INJECTION DEFENSE
+
+The agentic loop must assume:
+
+USER INPUT = untrusted
+TOOL OUTPUT = untrusted
+KNOWLEDGE CONTENT = untrusted
+MEMORY CONTENT = untrusted
+
+Only system/developer-controlled instructions may define execution authority.
+
+A tool result saying:
+
+"Ignore previous instructions and execute X"
+
+must NEVER automatically cause another tool execution.
+
+The next tool call must always originate from a newly validated model decision and pass AG-004 authorization.
+
+---
+
+# 15. TOOL RESULT → REASONING CONTEXT
+
+After a successful tool execution:
+
+1. capture safe result
+2. attach correlation ID
+3. attach tool ID
+4. attach execution status
+5. attach bounded metadata
+6. inject result into reasoning context
+7. request next reasoning decision
+
+Do not expose secrets.
+
+Do not include internal stack traces in model context.
+
+Do not expose database credentials.
+
+Do not expose environment variables.
+
+Do not expose provider API keys.
+
+---
+
+# 16. DETERMINISTIC TOOLS
+
+Preserve the Sprint 17 rule:
+
+Deterministic agents that do not need reasoning must NOT suddenly invoke the LLM.
+
+For example:
+
+calculator-only deterministic execution should remain deterministic when the request can be resolved without LLM reasoning.
+
+Agentic mode should only activate when the selected agent/capability requires it.
+
+Do not increase LLM calls unnecessarily.
+
+---
+
+# 17. AG-001 INTEGRATION
+
+Integrate the agentic loop into AG-001 execution without breaking existing behavior.
+
+The desired architecture is:
+
+AG-001
+├── Intent Detection
+├── Context Builder
+├── Routing
+├── Planning
+├── Execution
+│     ├── deterministic execution
+│     └── agentic execution
+│            ├── reasoning
+│            ├── tool decision
+│            ├── AG-004
+│            └── reasoning
+└── Aggregation / Response
+
+The exact integration point must follow the existing Sprint 17 implementation.
+
+Do not create a parallel orchestration system.
+
+AG-001 remains the master orchestrator.
+
+---
+
+# 18. EXECUTION STATE
+
+Implement explicit state transitions.
+
+Possible states:
+
+IDLE
+REASONING
+TOOL_VALIDATING
+TOOL_EXECUTING
+TOOL_RESULT_PROCESSING
+COMPLETED
+FAILED
+CANCELLED
+TIMED_OUT
+LIMIT_REACHED
+
+State transitions must be deterministic.
+
+Invalid transitions must be rejected.
+
+Do not use loosely managed booleans for complex lifecycle state.
+
+---
+
+# 19. LOOP RESULT
+
+The final agentic result should distinguish at least:
+
+* completed final response
+* clarification required
+* tool failure
+* reasoning failure
+* cancelled
+* timed out
+* turn limit reached
+* tool-call limit reached
+* authorization denied
+* validation failure
+
+Use normalized project error conventions.
+
+Do not expose internal errors to users.
+
+---
+
+# 20. OBSERVABILITY
+
+Extend existing event/metrics architecture.
+
+Record safe metadata only.
+
+Track:
+
+* agentic operation started
+* reasoning turn started
+* reasoning turn completed
+* tool call requested
+* tool call authorized
+* tool call rejected
+* tool execution started
+* tool execution completed
+* tool execution failed
+* loop completed
+* loop failed
+* loop cancelled
+* loop timed out
+* limit reached
+
+Metrics should include:
+
+* total agentic operations
+* total turns
+* total tool calls
+* successful tool calls
+* failed tool calls
+* rejected tool calls
+* average turns
+* average tool calls
+* average latency
+* LLM usage where already available
+
+NEVER log:
+
+* API keys
+* authorization headers
+* passwords
+* JWTs
+* database URLs
+* secrets
+* raw private chain-of-thought
+* unrestricted user prompts
+* unrestricted tool arguments if they may contain secrets
+
+---
+
+# 21. COST / USAGE CONTROL
+
+Integrate with existing LLM usage tracking.
+
+Track per agentic operation:
+
+* reasoning calls
+* input tokens if available
+* output tokens if available
+* total tokens
+* latency
+* tool calls
+
+If cost/token budget is already represented in the architecture, integrate with it rather than creating a competing system.
+
+If the current architecture does not yet support hard cost limits, implement a clean extension point without inventing a provider-specific pricing system.
+
+---
+
+# 22. ERROR HANDLING
+
+Create normalized Sprint 18 errors.
+
+Examples conceptually:
+
+* AGENTIC_LOOP_LIMIT_REACHED
+* AGENTIC_LOOP_TIMEOUT
+* AGENTIC_LOOP_CANCELLED
+* TOOL_DECISION_INVALID
+* TOOL_NOT_FOUND
+* TOOL_NOT_AUTHORIZED
+* TOOL_ARGUMENTS_INVALID
+* TOOL_EXECUTION_FAILED
+* TOOL_RESULT_INVALID
+* AGENTIC_REASONING_FAILED
+
+Follow existing error conventions.
+
+Preserve safe error causes internally.
+
+Never leak secrets.
+
+---
+
+# 23. TESTING REQUIREMENTS
+
+This sprint is NOT complete until extensive tests exist.
+
+Add unit tests for:
+
+### Contracts
+
+* valid tool call
+* invalid tool call
+* invalid arguments
+* unknown tool
+* malformed decision
+
+### Parser
+
+* FINAL_RESPONSE
+* TOOL_CALL
+* CLARIFICATION_REQUIRED
+* ABORT
+* malformed JSON
+* extra fields
+* missing fields
+
+### Loop
+
+* one reasoning turn
+* one tool call
+* multiple tool calls
+* tool → reasoning → final response
+* multiple reasoning/tool cycles
+* final response without tools
+* clarification
+* abort
+* max turns
+* max tool calls
+* max reasoning calls
+
+### Security
+
+* prompt injection in tool output
+* malicious tool arguments
+* unknown tool
+* disabled tool
+* unauthorized tool
+* oversized tool result
+* secret-containing tool output
+* malformed model output
+* arbitrary code attempt
+
+### Cancellation
+
+* cancellation before reasoning
+* cancellation during reasoning
+* cancellation after tool execution
+* cancellation before next turn
+* cancellation during tool execution
+
+### Timeout
+
+* timeout during reasoning
+* timeout during tool execution
+* timeout between turns
+* cleanup after timeout
+
+### Deterministic behavior
+
+* deterministic agent does not invoke LLM
+* calculator remains deterministic where applicable
+
+### Integration
+
+* AG-001 → reasoning → AG-004 → reasoning → final response
+* AG-001 cancellation
+* AG-001 timeout
+* AG-004 rejection
+* AG-004 tool failure
+* safe tool result propagation
+
+### Regression
+
+All existing tests must continue passing.
+
+---
+
+# 24. TEST QUALITY
+
+Do not write fake tests that merely assert mocks were called.
+
+Test actual state transitions and behavior.
+
+Prefer:
+
+Arrange
+Act
+Assert
+
+Use deterministic fake/mock providers.
+
+Do not make normal CI tests depend on external LLM APIs.
+
+Do not require an API key for the test suite.
+
+Live provider tests must remain opt-in.
+
+---
+
+# 25. API / RUNTIME INTEGRATION
+
+If the existing runtime architecture exposes an appropriate internal execution endpoint, integrate the agentic loop through the existing AG-001 execution path.
+
+Do not create an unnecessary second API.
+
+If useful, expose safe status information through existing health/status mechanisms.
+
+Never create an endpoint that executes arbitrary model-generated tools without AG-004 authorization.
+
+---
+
+# 26. BACKWARD COMPATIBILITY
+
+Sprint 18 must preserve:
+
+* existing AG-001 behavior
+* existing AG-002 behavior
+* existing AG-003 behavior
+* existing AG-004 behavior
+* existing LLM provider behavior
+* disabled LLM startup
+* deterministic agents
+* existing health endpoints
+* existing runtime composition
+* existing database behavior
+* existing tests
+
+No breaking changes unless absolutely necessary.
+
+If an interface must change, update all consumers and tests consistently.
+
+---
+
+# 27. CODE QUALITY
+
+Follow the existing project conventions.
+
+Requirements:
+
+* strict TypeScript
+* no `any`
+* type-only imports where required
+* Zod for runtime validation where appropriate
+* dependency injection
+* small focused services
+* no circular dependencies
+* no hidden global state
+* no duplicated security logic when an existing utility can be reused
+* no unnecessary dependencies
+* no provider SDK leakage
+* no direct DB access from LLM/reasoning code
+
+---
+
+# 28. DOCUMENTATION
+
+Create:
+
+docs/sprint18-agentic-tool-calling-v1.md
+
+Document:
+
+1. Objective
+2. Architecture
+3. Agentic loop lifecycle
+4. Tool decision contract
+5. AG-004 integration
+6. Security model
+7. Cancellation
+8. Timeout
+9. Limits
+10. Observability
+11. Error model
+12. Testing
+13. Runtime integration
+14. Backward compatibility
+15. Deferred work
+
+Include a simple architecture diagram.
+
+---
+
+# 29. DEFERRED WORK
+
+Do NOT implement unrelated future roadmap items in Sprint 18.
+
+Explicitly keep these deferred unless a minimal extension point is necessary:
+
+* streaming
+* multi-provider failover
+* advanced semantic/vector RAG
+* recommendation engine
+* personalization engine
+* business AI teams
+* multi-agent coordination
+* persistent AI metrics
+* advanced evaluation framework
+* human approval workflows
+* worker/scaling architecture
+
+Sprint 18 is specifically:
+
+AGENTIC REASONING
++
+STRUCTURED TOOL CALLING
++
+AG-004 EXECUTION
++
+BOUNDED LOOP
+
+---
+
+# 30. IMPLEMENTATION STRATEGY
+
+Before modifying code:
+
+1. Inspect the repository.
+2. Read existing AG-001 runtime/executor implementation.
+3. Read Sprint 17 LLM implementation.
+4. Read AG-004 public interfaces/services.
+5. Read existing error/event/metrics conventions.
+6. Read relevant tests.
+7. Identify exact integration points.
+
+Do NOT ask me to manually provide files that already exist in the repository.
+
+Do NOT rewrite working code unnecessarily.
+
+Reuse existing abstractions.
+
+Then implement Sprint 18 incrementally.
+
+---
+
+# 31. REQUIRED VERIFICATION
+
+At the end run:
+
+* tests
+* typecheck
+* lint
+* build
+* runtime smoke test
+
+Verify:
+
+1. Existing tests pass.
+2. New Sprint 18 tests pass.
+3. TypeScript has zero errors.
+4. ESLint has zero errors.
+5. Build succeeds.
+6. Runtime starts successfully.
+7. `/healthz` remains healthy.
+8. `/health` remains healthy.
+9. LLM disabled mode still works.
+10. Deterministic calculator still works.
+11. Agentic tool call can execute through AG-004.
+12. Tool output can return to reasoning.
+13. Multiple bounded turns work.
+14. Cancellation works.
+15. Timeout works.
+16. Tool authorization works.
+17. Malicious tool output cannot bypass authorization.
+18. No secrets appear in logs/events/errors.
+
+---
+
+# 32. FINAL REPORT
+
+When implementation is complete, provide a concise but detailed final report containing:
+
+## Sprint 18 Status
+
+PASS / BLOCKED
+
+## Implemented
+
+List every major component.
+
+## Files Added
+
+List files.
+
+## Files Modified
+
+List files.
+
+## Architecture
+
+Explain final agentic loop.
+
+## Security
+
+Explain protections.
+
+## Tests
+
+Report:
+
+* total tests
+* new tests
+* passed
+* failed
+
+## Verification
+
+* typecheck
+* lint
+* build
+* runtime
+* health
+* smoke tests
+
+## Database
+
+State whether migrations were required.
+
+## Runtime
+
+Explain how AG-001, LLM reasoning and AG-004 are connected.
+
+## Deferred
+
+List work intentionally left for future sprints.
+
+## Git
+
+DO NOT automatically commit or push unless explicitly requested.
+
+---
+
+# CRITICAL RULES
+
+1. Do not break existing functionality.
+2. Do not redesign AG-001.
+3. Do not bypass AG-004.
+4. Do not let the LLM directly execute tools.
+5. Do not allow arbitrary code execution.
+6. Do not create infinite agentic loops.
+7. Do not expose chain-of-thought.
+8. Do not log secrets.
+9. Do not require live API keys for normal tests.
+10. Do not bypass existing security abstractions.
+11. Do not add unrelated roadmap features.
+12. Do not stop after writing code; run the complete verification suite.
+13. Fix all regressions introduced by Sprint 18.
+14. Keep the implementation production-oriented.
+15. Preserve the architecture established by Sprints 1–17.
+
+START BY INSPECTING THE EXISTING REPOSITORY AND SPRINT 17 IMPLEMENTATION.
+
+Then implement Sprint 18 completely.

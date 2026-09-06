@@ -1,0 +1,700 @@
+We are continuing the `freelancify-ai` project.
+
+## SPRINT 14 — Production Runtime, Real Agent Execution & AG-001 ↔ AG-002 Runtime Wiring
+
+### IMPORTANT
+
+This is a production-focused implementation sprint.
+
+Do NOT redesign AG-001 or AG-002.
+Do NOT rewrite working code unnecessarily.
+Do NOT start AG-003 or AG-004 yet.
+Do NOT add fake/mock production implementations.
+Do NOT silently bypass security, authorization, persistence, lifecycle, or error handling.
+
+Use the existing architecture and contracts wherever possible.
+
+The current baseline is:
+
+* AG-001 Master Orchestrator implemented and heavily tested
+* AG-002 Memory Manager implemented and heavily tested
+* PostgreSQL/Neon durable persistence implemented
+* Retrieval and Context Integration implemented
+* Security/authorization implemented
+* Event log/replay/DSR implemented
+* 1246 tests passing
+* Typecheck clean
+* Lint clean
+* Build successful
+
+The remaining major blockers are:
+
+1. No proper production composition root
+2. AG-001 ↔ AG-002 is not fully wired as a real runtime dependency graph
+3. ExecutionEngine has no real production AgentExecutor path
+4. Runtime events are not fully emitted from actual operations
+5. There is no complete end-to-end runtime path from request → orchestrator → agent → memory → response
+
+Your job is to remove these blockers.
+
+---
+
+# PHASE 0 — Repository Reconnaissance
+
+Before modifying code:
+
+1. Inspect the entire current architecture.
+2. Identify:
+
+   * AG-001 entry points
+   * AG-001 orchestration service
+   * ExecutionEngine
+   * execution plan types
+   * AgentExecutor contracts
+   * routing contracts
+   * MemoryManager contracts
+   * MemoryContextProviderAdapter
+   * event log interfaces
+   * PostgreSQL storage adapter
+   * configuration system
+   * current `/healthz` entry point
+   * package exports
+   * existing tests and test doubles
+3. Search for TODO/FIXME/unimplemented/stub production methods.
+4. Identify all places where runtime dependencies are currently manually constructed or missing.
+5. Produce a short implementation map before coding.
+
+Do not stop after the map. Continue with implementation.
+
+---
+
+# PHASE 1 — Production Composition Root
+
+Create a clean production composition root.
+
+The application must have one authoritative place responsible for constructing production dependencies.
+
+It should construct and connect:
+
+```text
+Configuration
+   ↓
+Storage
+   ↓
+Repository
+   ↓
+Memory Services
+   ↓
+Memory Manager
+   ↓
+Memory Context Provider
+   ↓
+Event Log
+   ↓
+Agent Registry
+   ↓
+Agent Executor
+   ↓
+Execution Engine
+   ↓
+Routing / Planning
+   ↓
+Master Orchestrator
+   ↓
+Application Runtime
+```
+
+Requirements:
+
+* No production dependency should rely on test doubles.
+* No circular dependency.
+* No duplicate singleton instances of critical services.
+* Dependencies should be explicitly injectable.
+* Production composition must honor environment configuration.
+* Durable mode must use PostgreSQL/Neon.
+* Never silently fall back from durable PostgreSQL to in-memory storage.
+* Fail closed on invalid production configuration.
+* Startup must validate critical dependencies.
+* Shutdown must gracefully close resources such as PostgreSQL pools.
+* Configuration errors must be typed and actionable.
+* Secrets must never be printed in startup logs.
+
+Add tests for:
+
+* successful composition
+* invalid configuration
+* durable storage initialization
+* missing database URL
+* dependency identity
+* graceful shutdown
+* no test-double usage in production composition
+
+---
+
+# PHASE 2 — Real Agent Registry
+
+Implement a production AgentRegistry using the existing architecture.
+
+The registry must support:
+
+* register agent
+* unregister agent
+* get agent
+* list agents
+* check availability
+* metadata/capability lookup
+* deterministic lookup
+* duplicate registration protection
+
+Agent metadata should support whatever existing AG-001 routing contracts require, such as:
+
+* agent ID
+* name
+* capabilities
+* supported intents
+* version
+* status
+* cost metadata if already defined
+* timeout metadata if already defined
+
+Do not invent unnecessary fields if existing contracts already cover them.
+
+Security:
+
+* Agent lookup must not bypass authorization.
+* Unknown agents must fail with typed errors.
+* Duplicate IDs must fail deterministically.
+
+Tests:
+
+* registration
+* duplicate registration
+* lookup
+* unknown agent
+* unregister
+* listing
+* capability lookup
+* deterministic behavior
+* concurrency where appropriate
+
+---
+
+# PHASE 3 — Real AgentExecutor
+
+This is one of the most important parts of Sprint 14.
+
+Implement the production AgentExecutor path required by the existing ExecutionEngine.
+
+The ExecutionEngine must no longer universally fail with:
+
+`AGENT_EXECUTOR_UNAVAILABLE`
+
+when a valid registered agent exists.
+
+The executor must:
+
+1. Receive an execution step.
+2. Resolve the target agent.
+3. Validate the agent is available.
+4. Build the agent execution context.
+5. Provide relevant memory context through the existing AG-002 MemoryContextProvider.
+6. Execute the agent handler.
+7. Enforce timeout.
+8. Support cancellation.
+9. Capture structured execution result.
+10. Emit appropriate runtime events.
+11. Return a typed result to the ExecutionEngine.
+12. Map failures into existing typed errors.
+
+Do NOT create fake AI behavior just to make tests pass.
+
+Create a clean agent handler abstraction, for example conceptually:
+
+```text
+Agent
+ ├── metadata
+ └── execute(context)
+```
+
+Use the existing contracts if an equivalent abstraction already exists.
+
+The executor must support at minimum:
+
+* success
+* agent not found
+* agent unavailable
+* validation failure
+* timeout
+* cancellation
+* agent execution error
+* malformed result
+* security failure
+
+Do not swallow exceptions.
+
+Do not expose secrets in error messages.
+
+Add comprehensive tests.
+
+---
+
+# PHASE 4 — First Real Runtime Agent
+
+Create a minimal but REAL built-in runtime agent so that the complete pipeline can actually execute.
+
+This is NOT the final intelligent agent system.
+
+It is the first production-compatible execution target used to validate the runtime architecture.
+
+The agent should:
+
+* receive structured execution context
+* receive memory context when requested
+* produce a deterministic structured response
+* expose capabilities
+* integrate through AgentRegistry
+* execute through the production AgentExecutor
+* generate runtime events
+
+Do not hard-code the orchestrator to this agent.
+
+The agent must be registered through the normal registry mechanism.
+
+Design it so future AG-003/AG-004/LLM-backed agents can plug into the same interface.
+
+---
+
+# PHASE 5 — AG-001 ↔ AG-002 Runtime Wiring
+
+Wire the real production objects together.
+
+Required flow:
+
+```text
+Incoming Request
+      ↓
+MasterOrchestrator
+      ↓
+Intent Detection
+      ↓
+Context Builder
+      ↓
+MemoryContextProvider
+      ↓
+AG-002 MemoryManager
+      ↓
+Retrieval / Authorization / Security
+      ↓
+Routing
+      ↓
+Execution Planning
+      ↓
+Execution Engine
+      ↓
+AgentRegistry
+      ↓
+AgentExecutor
+      ↓
+Real Agent
+      ↓
+Result
+      ↓
+Aggregation
+      ↓
+Response
+```
+
+The MemoryContextProvider must use the real AG-002 implementation.
+
+Do not use test doubles in production.
+
+Ensure:
+
+* authorization is preserved
+* namespace isolation is preserved
+* security filtering is preserved
+* redaction is preserved
+* lifecycle filtering is preserved
+* memory retrieval failures are handled safely
+* missing memory context does not accidentally bypass authorization
+* cancellation propagates through the whole chain
+* timeout propagates correctly
+* correlation IDs remain consistent
+
+Add integration tests proving this complete chain.
+
+---
+
+# PHASE 6 — Runtime Event Wiring
+
+The event log must become connected to actual runtime operations.
+
+Wire events for important operations such as:
+
+* request received
+* orchestration started
+* intent classified
+* memory retrieval started/completed/failed
+* routing completed
+* plan created
+* execution started
+* agent execution started
+* agent execution completed
+* agent execution failed
+* orchestration completed
+* orchestration failed
+* cancellation
+* timeout
+
+Use existing event contracts/types wherever possible.
+
+Events must:
+
+* contain correlation ID
+* contain appropriate actor information
+* preserve namespace/security rules
+* never contain secrets
+* never persist raw credentials
+* never expose sensitive memory content unnecessarily
+* remain deterministic where required
+* persist through the existing PostgreSQL event sink when durable mode is active
+
+Do not create a second independent event system.
+
+Use the existing AG-002 event infrastructure.
+
+---
+
+# PHASE 7 — Runtime API / Application Entry Point
+
+Replace the current minimal `/healthz`-only application stub with a proper application runtime entry point while keeping the existing health endpoint working.
+
+Create a clean application layer capable of:
+
+```text
+start()
+handleRequest()
+shutdown()
+```
+
+The HTTP layer can remain minimal.
+
+At minimum provide an endpoint/path capable of exercising the real orchestration pipeline.
+
+Requirements:
+
+* validate input
+* create/request correlation ID
+* construct actor/security context
+* invoke MasterOrchestrator
+* return structured response
+* map typed errors to safe HTTP responses
+* never leak stack traces/secrets
+* support graceful shutdown
+
+Keep transport concerns separate from agent business logic.
+
+Do not tightly couple MasterOrchestrator to HTTP.
+
+---
+
+# PHASE 8 — Health & Readiness
+
+Implement truthful health/readiness checks.
+
+Health should verify:
+
+* application initialized
+* memory subsystem
+* storage
+* PostgreSQL when durable mode is enabled
+* event subsystem
+* agent registry
+* execution subsystem
+
+Readiness must fail when a required production dependency is unavailable.
+
+Do not claim healthy when PostgreSQL is configured but unavailable.
+
+Do not expose:
+
+* database URL
+* credentials
+* tokens
+* secret values
+* internal sensitive configuration
+
+Add tests for healthy and unhealthy states.
+
+---
+
+# PHASE 9 — End-to-End Tests
+
+Create a complete production-style E2E test flow:
+
+```text
+Request
+ ↓
+Composition Root
+ ↓
+Master Orchestrator
+ ↓
+Memory Context
+ ↓
+AG-002 Retrieval
+ ↓
+Authorization
+ ↓
+Routing
+ ↓
+Execution Plan
+ ↓
+Agent Registry
+ ↓
+AgentExecutor
+ ↓
+Real Runtime Agent
+ ↓
+Result Aggregation
+ ↓
+Response
+ ↓
+Runtime Event
+ ↓
+PostgreSQL persistence
+```
+
+Test at least:
+
+### E2E-1
+
+Simple request with no memory.
+
+### E2E-2
+
+Request with authorized memory context.
+
+### E2E-3
+
+Unauthorized memory must NOT reach the agent.
+
+### E2E-4
+
+Sensitive memory content is properly redacted.
+
+### E2E-5
+
+Agent timeout.
+
+### E2E-6
+
+Agent cancellation.
+
+### E2E-7
+
+Unknown agent.
+
+### E2E-8
+
+Agent execution failure.
+
+### E2E-9
+
+PostgreSQL restart/reload behavior.
+
+### E2E-10
+
+Runtime events persisted.
+
+### E2E-11
+
+Correlation ID preserved across orchestration and memory events.
+
+### E2E-12
+
+Graceful shutdown.
+
+---
+
+# PHASE 10 — Production Hardening
+
+Audit the implementation for:
+
+* `any`
+* unsafe casts
+* swallowed errors
+* empty catch blocks
+* TODO production stubs
+* fake implementations
+* test-double imports in production
+* accidental in-memory fallback
+* missing authorization checks
+* secret logging
+* unsafe error exposure
+* race conditions
+* duplicate singleton creation
+* resource leaks
+* unclosed PostgreSQL connections
+* missing timeout handling
+* missing cancellation handling
+
+Fix real issues.
+
+Do not blindly modify correct code.
+
+---
+
+# PHASE 11 — Documentation
+
+Update/create concise documentation for:
+
+1. Production architecture
+2. Composition root
+3. Runtime request flow
+4. Agent registration
+5. AgentExecutor
+6. AG-001 ↔ AG-002 integration
+7. Runtime events
+8. Health/readiness
+9. Environment variables
+10. Local production-mode startup
+
+Include an ASCII architecture diagram.
+
+---
+
+# HARD QUALITY GATES
+
+Before declaring Sprint 14 complete, run:
+
+1. Full test suite
+2. Typecheck
+3. Lint
+4. Production build
+5. Runtime smoke test
+6. PostgreSQL/Neon integration tests
+
+Target:
+
+* 0 failed tests
+* 0 skipped tests unless explicitly justified
+* 0 TypeScript errors
+* 0 lint errors
+* successful production build
+* successful runtime smoke test
+* durable mode verified against real PostgreSQL/Neon
+
+If plain `npm run typecheck` crashes Node because of the machine's memory/stack limitation, use the previously successful explicit TypeScript command with increased Node memory/stack instead of changing application code just to satisfy the command.
+
+---
+
+# IMPORTANT DEFINITION OF DONE
+
+Sprint 14 is NOT complete merely because tests pass.
+
+It is complete only if a real runtime flow works:
+
+```text
+START APPLICATION
+      ↓
+LOAD PRODUCTION CONFIG
+      ↓
+CONNECT TO NEON POSTGRESQL
+      ↓
+INITIALIZE AG-002
+      ↓
+INITIALIZE AG-001
+      ↓
+REGISTER REAL AGENT
+      ↓
+START APPLICATION
+      ↓
+SEND REAL REQUEST
+      ↓
+MASTER ORCHESTRATOR
+      ↓
+MEMORY CONTEXT
+      ↓
+ROUTING
+      ↓
+EXECUTION PLAN
+      ↓
+REAL AGENT EXECUTION
+      ↓
+AGGREGATED RESPONSE
+      ↓
+RUNTIME EVENTS
+      ↓
+EVENTS PERSISTED
+      ↓
+SAFE RESPONSE
+      ↓
+GRACEFUL SHUTDOWN
+```
+
+Do not claim this works unless you actually execute and verify it.
+
+---
+
+# FINAL REPORT
+
+At the end provide:
+
+## Sprint 14 Summary
+
+### Implemented
+
+* ...
+
+### New/Modified Files
+
+* ...
+
+### Runtime Architecture
+
+* ...
+
+### Real Execution Path
+
+* ...
+
+### AG-001 ↔ AG-002 Wiring
+
+* ...
+
+### Event Wiring
+
+* ...
+
+### E2E Verification
+
+* ...
+
+### Test Count
+
+* Before:
+* Added:
+* After:
+* Failed:
+* Skipped:
+
+### Quality Gates
+
+* Typecheck:
+* Lint:
+* Build:
+* Runtime smoke test:
+* Neon integration:
+
+### Remaining Blockers
+
+Only list genuine remaining blockers.
+
+### Commit Recommendation
+
+Give the exact recommended commit message, but DO NOT commit or push automatically.
+
+IMPORTANT:
+Do not stop after implementing one phase.
+Complete the entire Sprint 14 scope in this task unless a genuine technical blocker prevents completion.
+If a blocker occurs, investigate and fix it rather than simply reporting it.

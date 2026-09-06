@@ -16,11 +16,31 @@ export {
   LLM_PROVIDER_MOCK,
   LLM_PROVIDER_HTTP,
   LLM_REASONING_CAPABILITY,
+  LLM_AGENTIC_CAPABILITY,
   REASONING_UNAVAILABLE_CODE,
   REASONING_REQUIRED_CODE,
   DEFAULT_LLM_BACKOFF_BASE_MS,
   DEFAULT_LLM_BACKOFF_MAX_MS,
 } from './constants.js';
+export {
+  ToolDecisionType,
+  ToolDecisionSchema,
+  StructuredToolCallSchema,
+  ToolCallArgumentsSchema,
+  LLMJsonSchema,
+  parseStructuredDecision,
+  extractDecisionEnvelope,
+  DECISION_OPEN_MARKER,
+  DECISION_CLOSE_MARKER,
+  type ToolDecision,
+  type StructuredToolCall,
+  type StructuredFinalResponse,
+  type StructuredClarification,
+  type StructuredAbort,
+  type LLMJsonValue,
+  type DecisionRejection,
+  type StructuredDecisionOutcome,
+} from './decisions/index.js';
 export { createLLMProvider } from './providers/index.js';
 export {
   MockLLMProvider,

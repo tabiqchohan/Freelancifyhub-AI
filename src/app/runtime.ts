@@ -26,6 +26,7 @@ import {
 
 import type { ProductionComposition } from './composition-root.js';
 import type { RequestActorBinding } from './request-actors.js';
+import { agenticLimitSummary } from '../agents/runtime/agentic/config.js';
 
 /** Options for constructing the production HTTP runtime (Phase 7). */
 export interface ProductionRuntimeOptions {
@@ -208,6 +209,8 @@ export class ProductionRuntime {
   /**
    * LLM status endpoint (Sprint 17). Exposes configuration status, event-log
    * counts, and metric totals. Never exposes prompts, responses, or secrets.
+   * Sprint 18 adds the agentic loop status block (limits + observability
+   * totals only).
    */
   private async handleLlmStatus(res: ServerResponse): Promise<void> {
     const reasoning = this.composition.services.aiReasoning;
@@ -219,12 +222,48 @@ export class ProductionRuntime {
       provider: reasoning.providerInfo().provider,
       model: reasoning.providerInfo().model,
       executor: executorStatus,
+      agentic: this.agenticStatus(),
       events: {
         total: eventLog.count(),
         latest: eventLog.latest(10),
       },
       metrics: this.composition.services.llmMetrics.snapshot(),
     });
+  }
+
+  private agenticStatus(): {
+    enabled: boolean;
+    limits: Readonly<Record<string, number>>;
+    events: { total: number };
+    metrics: {
+      totals: Readonly<{
+        operations: number;
+        turns: number;
+        toolCalls: number;
+        toolCallSuccesses: number;
+        toolCallFailures: number;
+        toolCallRejections: number;
+        reasoningCalls: number;
+        cancellations: number;
+        timeouts: number;
+        limitReached: number;
+        failures: number;
+        inputTokens: number;
+        outputTokens: number;
+        totalTokens: number;
+      }>;
+      totalDurationMs: number;
+    };
+  } {
+    const loop = this.composition.services.agenticLoop;
+    const eventLog = this.composition.services.agenticEventLog;
+    const metrics = this.composition.services.agenticMetrics.snapshot();
+    return {
+      enabled: loop.isEnabled(),
+      limits: agenticLimitSummary(this.composition.env.agentic),
+      events: { total: eventLog.count() },
+      metrics,
+    };
   }
 
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {

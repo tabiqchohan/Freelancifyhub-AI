@@ -64,7 +64,7 @@ suite('AG-003 - real PostgreSQL knowledge backend (integration)', () => {
       const again = await migrateKnowledgeSchema(pool);
       expect(again).toBe(0);
       expect(KNOWLEDGE_SCHEMA_VERSION).toBeGreaterThanOrEqual(100);
-    });
+    }, 30000);
   });
 
   describe('durable CRUD + restart durability', () => {

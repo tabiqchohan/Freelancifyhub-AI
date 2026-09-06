@@ -43,6 +43,10 @@ export class RequestActorRegistry {
     return this.bindings.get(requestId);
   }
 
+  resolve(requestId: string): RequestActorBinding | undefined {
+    return this.bindings.get(requestId);
+  }
+
   resolveLoadInput(
     requestId: string,
     overrides?: Partial<Pick<MemoryContextLoadInput, 'query' | 'maxResults'>>,

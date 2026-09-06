@@ -87,6 +87,12 @@ describe('ProductionRuntime - LLM (Sprint 17)', () => {
       const status = (await (await fetch(`${baseUrl}/api/llm/status`)).json()) as {
         enabled: boolean;
         provider: string;
+        agentic: {
+          enabled: boolean;
+          limits: Record<string, number>;
+          events: { total: number };
+          metrics: { totals: Record<string, number> };
+        };
         events: { total: number };
         metrics: { totals: { requests: number } };
       };
@@ -94,6 +100,12 @@ describe('ProductionRuntime - LLM (Sprint 17)', () => {
       expect(status.provider).toBe('disabled');
       expect(status.events.total).toBe(0);
       expect(status.metrics.totals.requests).toBe(0);
+      expect(status.agentic.enabled).toBe(false);
+      expect(status.agentic.limits.maxTurns).toBe(8);
+      expect(status.agentic.limits.maxToolCalls).toBe(6);
+      expect(status.agentic.limits.maxTotalMs).toBe(60000);
+      expect(status.agentic.events.total).toBe(0);
+      expect(status.agentic.metrics.totals.operations).toBe(0);
     } finally {
       await runtime.shutdown();
     }
@@ -107,9 +119,11 @@ describe('ProductionRuntime - LLM (Sprint 17)', () => {
       const status = (await (await fetch(`${baseUrl}/api/llm/status`)).json()) as {
         enabled: boolean;
         provider: string;
+        agentic: { enabled: boolean };
       };
       expect(status.enabled).toBe(true);
       expect(status.provider).toBe('mock');
+      expect(status.agentic.enabled).toBe(true);
     } finally {
       await runtime.shutdown();
     }

@@ -15,7 +15,7 @@ import type {
   RuntimeAgentExecutionContext,
   RuntimeAgentExecutionResult,
 } from './types.js';
-import { LLM_REASONING_CAPABILITY } from '../../llm/constants.js';
+import { LLM_AGENTIC_CAPABILITY, LLM_REASONING_CAPABILITY } from '../../llm/constants.js';
 
 /** Error code returned when a runtime agent is asked to fail (test knob). */
 export const RUNTIME_AGENT_FAILURE_CODE = 'RUNTIME_AGENT_FAILURE';
@@ -43,6 +43,8 @@ export interface RuntimeAgentOptions {
   readonly capabilityIds?: readonly string[];
   /** Declares the `agent.reasoning` capability and requires reasoned context. */
   readonly requiresReasoning?: boolean;
+  /** Declares the `agent.agentic` capability (bounded tool-calling loop). */
+  readonly requiresAgentic?: boolean;
   readonly logger?: Logger;
 }
 
@@ -71,9 +73,12 @@ export function createRuntimeAgent(options: RuntimeAgentOptions = {}): RuntimeAg
   const version = options.version ?? DEFAULT_RUNTIME_AGENT_VERSION;
   const baseCapabilities = options.capabilityIds ?? DEFAULT_RUNTIME_CAPABILITIES;
   const requiresReasoning = options.requiresReasoning ?? false;
-  const capabilityIds = requiresReasoning
-    ? [...baseCapabilities, LLM_REASONING_CAPABILITY]
-    : baseCapabilities;
+  const requiresAgentic = options.requiresAgentic ?? false;
+  const capabilityIds = requiresAgentic
+    ? [...baseCapabilities, LLM_AGENTIC_CAPABILITY]
+    : requiresReasoning
+      ? [...baseCapabilities, LLM_REASONING_CAPABILITY]
+      : baseCapabilities;
   const logger = options.logger ?? createOrchestratorLogger('runtime-agent');
 
   const capabilities: readonly AgentCapability[] = capabilityIds.map((id) => ({
@@ -131,7 +136,7 @@ export function createRuntimeAgent(options: RuntimeAgentOptions = {}): RuntimeAg
       };
     }
 
-    if (requiresReasoning && context.reasoning === undefined) {
+    if ((requiresReasoning || requiresAgentic) && context.reasoning === undefined) {
       return {
         success: false,
         error: {

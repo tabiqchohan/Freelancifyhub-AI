@@ -9,6 +9,8 @@ export const LLM_PROVIDER_HTTP = 'http';
 
 /** Capability id that marks an agent as requiring LLM reasoning. */
 export const LLM_REASONING_CAPABILITY = 'agent.reasoning';
+/** Capability id that marks an agent as requiring the agentic tool loop. */
+export const LLM_AGENTIC_CAPABILITY = 'agent.agentic';
 
 /** Error code produced when a reasoning-required agent cannot reason. */
 export const REASONING_UNAVAILABLE_CODE = 'REASONING_UNAVAILABLE';

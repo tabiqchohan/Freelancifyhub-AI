@@ -1,0 +1,1275 @@
+# 🚀 AG-004 Tool Manager & Tool Registry — Sprint 16 Master Prompt
+
+You are working inside the existing `freelancify-ai` TypeScript/Node.js repository.
+
+## CURRENT VERIFIED BASELINE
+
+Sprint 14 and Sprint 15 are complete.
+
+Current architecture includes:
+
+* AG-001 Master Orchestrator ✅
+* AG-002 Memory Manager ✅
+* AG-003 Knowledge Manager ✅
+* Neon PostgreSQL durable persistence ✅
+* Production composition root ✅
+* Real AgentRegistry ✅
+* ProductionAgentExecutor ✅
+* AG-101 runtime agent ✅
+* Runtime API ✅
+* Runtime event bridge ✅
+* Health/readiness ✅
+* AG-002 durable event/audit infrastructure ✅
+* AG-003 KnowledgeEventLog ✅
+* AG-001 ↔ AG-002 integration ✅
+* AG-001 ↔ AG-003 integration ✅
+* Knowledge ingestion/normalization/chunking/versioning/lifecycle/security/retrieval/context building ✅
+* 118 test files / 1402 tests passing after Sprint 15
+* TypeScript clean
+* ESLint clean
+* Production build successful
+* Runtime smoke test successful
+* Real Neon integration successful
+
+Sprint 15 was NOT committed/pushed automatically.
+
+DO NOT commit or push automatically.
+
+Before implementation, verify the actual repository state.
+
+---
+
+# PRIMARY OBJECTIVE
+
+Implement **AG-004 Tool Manager & Tool Registry** as a production-grade subsystem.
+
+AG-004 must provide the infrastructure required for agents to safely discover, authorize, validate, execute, monitor and audit tools.
+
+The target architecture is:
+
+```text
+                    ┌──────────────────────┐
+                    │       AG-001         │
+                    │ Master Orchestrator  │
+                    └──────────┬───────────┘
+                               │
+                               ▼
+                    ┌──────────────────────┐
+                    │       AG-004         │
+                    │   Tool Manager       │
+                    └──────────┬───────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+       Tool Registry      Authorization     Validator
+              │                │                │
+              └────────────────┼────────────────┘
+                               ▼
+                        Tool Executor
+                               │
+                    ┌──────────┼──────────┐
+                    ▼          ▼          ▼
+                 Result     Metrics     Audit
+```
+
+The system must support future real tools such as:
+
+* HTTP/API tools
+* search tools
+* calculator tools
+* filesystem tools
+* database tools
+* payment tools
+* email tools
+* browser tools
+* project-management tools
+* internal application tools
+
+BUT DO NOT implement dangerous or external integrations unnecessarily in this sprint.
+
+Sprint 16 should establish the **secure tool-management foundation and runtime execution architecture**.
+
+---
+
+# NON-NEGOTIABLE RULES
+
+1. Inspect existing architecture before coding.
+2. Reuse existing AG-001/AG-002/AG-003 patterns.
+3. Do not duplicate security abstractions unnecessarily.
+4. Do not break existing tests.
+5. Do not introduce hidden global state.
+6. Use dependency injection.
+7. Use strongly typed interfaces.
+8. Avoid `any`.
+9. Avoid unsafe casts.
+10. Fail closed on authorization/configuration errors.
+11. Validate tool inputs before execution.
+12. Never execute an unregistered tool.
+13. Never execute an unauthorized tool.
+14. Never trust caller-supplied tool metadata.
+15. Never expose secrets through tool results, logs or audit events.
+16. Do not silently fall back from durable storage to memory.
+17. Do not create fake production implementations.
+18. Do not add external API integrations unless explicitly necessary.
+19. Do not commit/push automatically.
+20. Do not stop after creating interfaces; complete implementation, tests and runtime integration.
+
+---
+
+# PHASE 0 — RECONNAISSANCE
+
+Before modifying code inspect:
+
+* repository structure
+* AG-001 architecture
+* AG-002 architecture
+* AG-003 architecture
+* Sprint 14 runtime
+* Sprint 15 runtime integration
+* composition root
+* existing configuration system
+* existing error conventions
+* authorization/security conventions
+* event/audit conventions
+* PostgreSQL storage abstraction
+* migration system
+* AgentRegistry
+* AgentExecutor
+* runtime request pipeline
+* existing tests
+* package.json
+* tsconfig
+* eslint configuration
+
+Search for any existing AG-004 files.
+
+If partial AG-004 code already exists, extend/refactor it rather than blindly duplicating it.
+
+---
+
+# PHASE 1 — AG-004 DOMAIN MODEL
+
+Create a strongly typed Tool domain.
+
+At minimum define concepts equivalent to:
+
+## ToolDefinition
+
+Potential fields:
+
+* id
+* name
+* description
+* version
+* category
+* input schema
+* output schema
+* permissions
+* security classification
+* execution policy
+* timeout
+* retry policy
+* enabled/disabled state
+* metadata
+* createdAt
+* updatedAt
+
+Adapt the exact field naming to repository conventions.
+
+Tool definitions must be immutable after registration except through explicit versioning/update mechanisms.
+
+---
+
+# TOOL IDENTIFIERS
+
+Implement deterministic/validated tool identifiers.
+
+Tool IDs must:
+
+* be unique
+* be normalized
+* be safe for logs/routes
+* not contain arbitrary executable content
+
+Support tool versions.
+
+Example conceptual identity:
+
+```text
+tool:calculator:v1
+tool:web-search:v1
+tool:internal-project-query:v1
+```
+
+Do not require this exact format if the repository already has a better convention.
+
+---
+
+# PHASE 2 — TOOL CATEGORIES
+
+Create extensible categories.
+
+Examples:
+
+* COMPUTATION
+* SEARCH
+* HTTP
+* DATABASE
+* FILESYSTEM
+* COMMUNICATION
+* INTERNAL
+* EXTERNAL
+* OTHER
+
+Use enums/constants rather than uncontrolled strings where appropriate.
+
+Do not overdesign categories.
+
+---
+
+# PHASE 3 — TOOL REGISTRY
+
+Implement a real ToolRegistry.
+
+Responsibilities:
+
+* register tool
+* unregister tool
+* enable tool
+* disable tool
+* replace/version tool
+* get tool
+* list tools
+* find tools
+* check existence
+* resolve version
+* expose only valid registered definitions
+
+Requirements:
+
+* deterministic behavior
+* duplicate detection
+* version conflict detection
+* disabled-tool handling
+* immutable returned definitions
+* safe concurrent access
+
+A tool must never become executable merely because an arbitrary caller supplies its name.
+
+Only registry-approved tools can execute.
+
+---
+
+# PHASE 4 — TOOL SCHEMA VALIDATION
+
+Implement input/output validation abstractions.
+
+At minimum support:
+
+```text
+ToolInputValidator
+ToolOutputValidator
+```
+
+Tool definitions should declare schemas.
+
+Validation must occur:
+
+```text
+caller input
+     ↓
+schema validation
+     ↓
+authorization
+     ↓
+execution
+     ↓
+output validation
+     ↓
+sanitized result
+```
+
+Actually use the project's existing validation library if available.
+
+Do not invent a custom JSON-schema engine if a suitable existing dependency is already present.
+
+If no validation library exists, create a minimal safe abstraction with deterministic validation.
+
+---
+
+# PHASE 5 — TOOL EXECUTION CONTRACT
+
+Create a clean execution abstraction.
+
+Conceptually:
+
+```text
+ToolExecutor
+  execute(tool, input, executionContext)
+```
+
+Execution context should support concepts such as:
+
+* actor
+* request ID
+* correlation ID
+* namespace
+* agent ID
+* permissions
+* timeout
+* cancellation signal
+
+Never allow tools to access unrestricted application state.
+
+---
+
+# PHASE 6 — PRODUCTION TOOL EXECUTOR
+
+Implement the real production executor.
+
+Responsibilities:
+
+1. resolve registered tool
+2. verify enabled state
+3. verify authorization
+4. validate input
+5. enforce execution policy
+6. enforce timeout
+7. support cancellation
+8. execute
+9. validate output
+10. sanitize result
+11. record metrics
+12. emit audit event
+13. return typed result
+
+Execution failures must be typed.
+
+Do not leak internal stack traces to callers.
+
+---
+
+# PHASE 7 — FIRST SAFE REAL TOOL
+
+Create at least one genuinely executable safe internal tool.
+
+Recommended:
+
+### Calculator Tool
+
+Capabilities:
+
+* addition
+* subtraction
+* multiplication
+* division
+* basic arithmetic expression handling
+
+Security requirements:
+
+* no arbitrary JavaScript evaluation
+* no `eval`
+* no `Function(...)`
+* no shell execution
+* bounded expression/input size
+* deterministic result
+
+Register it automatically through the composition root.
+
+The purpose is to prove the full production tool execution path.
+
+Do NOT create shell execution, arbitrary code execution or unrestricted filesystem access as the first tool.
+
+---
+
+# PHASE 8 — TOOL PERMISSIONS
+
+Integrate AG-004 with existing authorization/security conventions.
+
+Define permission concepts such as:
+
+* tool.read
+* tool.execute
+* tool.register
+* tool.update
+* tool.enable
+* tool.disable
+* tool.delete
+* tool.admin
+
+Execution should require explicit authorization.
+
+Default behavior must be deny.
+
+If actor/permission information is missing, execution must fail closed.
+
+---
+
+# PHASE 9 — TOOL EXECUTION POLICIES
+
+Implement configurable policies for:
+
+* timeout
+* maximum input size
+* maximum output size
+* retry count
+* concurrency
+* rate limit abstraction
+* cancellation
+* enabled/disabled
+* allowed actors/groups
+* security classification
+
+Do not implement distributed rate limiting unless required by existing architecture.
+
+Create clean extension points for future implementations.
+
+---
+
+# PHASE 10 — TIMEOUT & CANCELLATION
+
+Tool execution must support:
+
+* timeout
+* AbortSignal/cancellation
+* cleanup
+* deterministic timeout errors
+
+Do not allow a timed-out execution to incorrectly report success.
+
+Pay special attention to race conditions.
+
+Test:
+
+```text
+success vs timeout
+success vs cancellation
+timeout vs cancellation
+failure vs timeout
+```
+
+The result must always reflect the actual winning execution state.
+
+---
+
+# PHASE 11 — RETRY POLICY
+
+Implement safe retry infrastructure.
+
+Retries must be:
+
+* bounded
+* configurable
+* deterministic
+* disabled for non-retryable errors
+* cancellation-aware
+
+Classify errors as:
+
+* retryable
+* non-retryable
+* authorization
+* validation
+* timeout
+* cancellation
+* internal
+
+Do not blindly retry authorization or validation failures.
+
+---
+
+# PHASE 12 — RESULT MODEL
+
+Create a typed ToolResult.
+
+It should distinguish:
+
+* success
+* validation failure
+* authorization failure
+* timeout
+* cancellation
+* execution failure
+
+Results should include safe metadata such as:
+
+* tool ID
+* tool version
+* execution ID
+* duration
+* status
+* error code where applicable
+
+Never include:
+
+* secrets
+* API keys
+* credentials
+* sensitive environment variables
+* internal stack traces
+
+---
+
+# PHASE 13 — TOOL RESULT SANITIZATION
+
+Implement a result sanitization layer.
+
+Prevent accidental leakage of:
+
+* environment variables
+* tokens
+* passwords
+* connection strings
+* authorization headers
+* secret keys
+
+Use existing security/redaction utilities if available.
+
+Do not log full arbitrary tool input/output by default.
+
+---
+
+# PHASE 14 — TOOL METRICS
+
+Create ToolMetrics abstraction.
+
+Track at minimum:
+
+* execution count
+* success count
+* failure count
+* timeout count
+* cancellation count
+* authorization failures
+* validation failures
+* execution duration
+* tool-specific counts
+
+Metrics must not contain sensitive payloads.
+
+Use deterministic in-process metrics unless existing architecture already provides a metrics backend.
+
+---
+
+# PHASE 15 — TOOL EVENTS / AUDIT
+
+Integrate AG-004 with the existing event architecture.
+
+Emit events for:
+
+* tool.registered
+* tool.updated
+* tool.enabled
+* tool.disabled
+* tool.removed
+* tool.execution.started
+* tool.execution.succeeded
+* tool.execution.failed
+* tool.execution.timeout
+* tool.execution.cancelled
+* tool.authorization.denied
+
+Audit events must include appropriate:
+
+* event ID
+* timestamp
+* actor
+* tool ID
+* version
+* execution ID
+* request/correlation ID
+* status
+* safe metadata
+
+Never put sensitive tool input/output directly into audit events.
+
+---
+
+# PHASE 16 — TOOL STORAGE
+
+Create repository abstraction for tool definitions.
+
+Support:
+
+* register
+* get
+* list
+* update/version
+* enable
+* disable
+* remove
+
+Separate:
+
+```text
+Tool Service
+    ↓
+Tool Repository
+    ↓
+Storage
+```
+
+Do not make the service depend directly on PostgreSQL.
+
+---
+
+# PHASE 17 — POSTGRES DURABLE STORAGE
+
+Integrate AG-004 with the existing Neon PostgreSQL infrastructure.
+
+Use versioned migrations that do NOT conflict with AG-002 or AG-003.
+
+Before selecting migration numbers, inspect the actual migration state.
+
+Potential tables:
+
+```text
+tool_definitions
+tool_versions
+tool_events
+```
+
+Adapt schema to repository conventions.
+
+Requirements:
+
+* parameterized SQL
+* primary keys
+* foreign keys
+* unique constraints
+* version constraints
+* indexes
+* deterministic pagination
+* transaction safety
+* restart persistence
+
+Do not store executable JavaScript/code in the database as an implicit execution mechanism.
+
+The database stores definitions/metadata, not arbitrary executable payloads.
+
+---
+
+# PHASE 18 — CONFIGURATION
+
+Extend application configuration.
+
+Potential environment variables:
+
+```text
+TOOLS_ENABLED=true
+TOOLS_STORAGE_BACKEND=durable
+TOOLS_DATABASE_URL=...
+TOOLS_DEFAULT_TIMEOUT_MS=...
+TOOLS_MAX_INPUT_BYTES=...
+TOOLS_MAX_OUTPUT_BYTES=...
+TOOLS_DEFAULT_RETRY_COUNT=...
+```
+
+Use existing configuration patterns.
+
+Requirements:
+
+* validated configuration
+* safe defaults
+* fail-closed behavior where appropriate
+* no secret leakage
+* environment-driven backend selection
+
+Do not duplicate database URLs if existing infrastructure already provides the database configuration.
+
+Prefer reuse.
+
+---
+
+# PHASE 19 — COMPOSITION ROOT
+
+Integrate AG-004 through:
+
+```text
+src/app/composition-root.ts
+```
+
+Dependency graph should become approximately:
+
+```text
+AG-001
+ ├── AG-002 Memory Manager
+ ├── AG-003 Knowledge Manager
+ └── AG-004 Tool Manager
+          ├── Tool Registry
+          ├── Tool Authorization
+          ├── Tool Validator
+          ├── Tool Executor
+          ├── Tool Repository
+          ├── Tool Metrics
+          └── Tool Events
+```
+
+Do not initialize AG-004 through hidden globals.
+
+Register the calculator tool through the composition root or an explicit bootstrap mechanism.
+
+---
+
+# PHASE 20 — AG-001 INTEGRATION
+
+Integrate tools into the Master Orchestrator cleanly.
+
+AG-001 should be able to:
+
+1. determine that a request requires a tool
+2. select a registered tool
+3. request authorization
+4. validate input
+5. execute tool
+6. receive safe result
+7. continue execution planning
+8. include tool result in final context/response
+
+Do not hardcode calculator-specific logic into AG-001.
+
+AG-001 must depend on abstractions.
+
+---
+
+# PHASE 21 — AG-002 / AG-003 CONTEXT INTEGRATION
+
+Tool results should be capable of becoming context for later orchestration.
+
+Potential flow:
+
+```text
+User Request
+     ↓
+AG-001
+     ↓
+Knowledge + Memory Context
+     ↓
+Tool Selection
+     ↓
+Tool Execution
+     ↓
+Tool Result
+     ↓
+Context
+     ↓
+Agent
+     ↓
+Response
+```
+
+Do not duplicate Memory or Knowledge context builders.
+
+Reuse existing context abstractions.
+
+---
+
+# PHASE 22 — RUNTIME API
+
+If compatible with existing runtime conventions, add production-safe endpoints.
+
+Potential endpoints:
+
+```text
+GET  /api/tools
+GET  /api/tools/:id
+POST /api/tools/:id/execute
+POST /api/tools/:id/enable
+POST /api/tools/:id/disable
+```
+
+Only expose management operations to authorized actors.
+
+Execution endpoint must:
+
+* validate input
+* authorize actor
+* resolve registered tool
+* enforce policy
+* execute safely
+* sanitize output
+* return typed result
+
+Do not expose internal tool implementation details.
+
+Do not return stack traces.
+
+---
+
+# PHASE 23 — HEALTH / READINESS
+
+Extend runtime health where appropriate.
+
+Health should truthfully report:
+
+* AG-004 available
+* registry ready
+* storage ready
+* tool execution subsystem ready
+
+Durable configuration must fail closed if its required database is unavailable.
+
+Do not expose:
+
+* database URLs
+* credentials
+* environment variables
+* secrets
+
+---
+
+# PHASE 24 — SECURITY HARDENING
+
+Perform a dedicated security review.
+
+Look specifically for:
+
+* arbitrary code execution
+* eval
+* Function constructor
+* shell command injection
+* SQL injection
+* prototype pollution
+* authorization bypass
+* tool-name injection
+* schema bypass
+* output leakage
+* oversized payloads
+* infinite execution
+* retry amplification
+* timeout races
+* cancellation races
+* disabled-tool bypass
+* version confusion
+* cross-namespace execution
+
+The calculator tool MUST NOT use arbitrary code execution.
+
+---
+
+# PHASE 25 — TESTING
+
+Create comprehensive AG-004 tests.
+
+## Unit tests
+
+Test:
+
+* domain model
+* IDs
+* configuration
+* registry
+* duplicate registration
+* versioning
+* enable/disable
+* validation
+* permissions
+* executor
+* timeout
+* cancellation
+* retry
+* result mapping
+* sanitization
+* metrics
+* event generation
+* calculator
+
+## Repository tests
+
+Test:
+
+* register
+* read
+* update
+* version
+* enable
+* disable
+* remove
+* duplicate constraints
+* pagination
+* deterministic ordering
+
+## Security tests
+
+Test:
+
+* unauthorized execution
+* missing actor
+* invalid actor
+* disabled tool
+* unknown tool
+* invalid input
+* oversized input
+* malicious input
+* output leakage
+* namespace mismatch
+
+---
+
+# PHASE 26 — POSTGRES / NEON INTEGRATION TESTS
+
+Use the existing Neon integration test conventions.
+
+Do not silently skip configured integration tests.
+
+Test:
+
+1. durable tool registration
+2. restart persistence
+3. version persistence
+4. enable/disable persistence
+5. transaction commit
+6. transaction rollback
+7. uniqueness constraints
+8. event persistence
+9. deterministic retrieval
+
+If integration tests are intentionally environment-gated, follow the existing project convention and report exactly what happened.
+
+---
+
+# PHASE 27 — RUNTIME E2E TESTS
+
+Create real end-to-end scenarios.
+
+## Scenario 1 — Registry
+
+Register calculator
+→ registry resolves it
+→ tool is executable
+
+## Scenario 2 — Successful execution
+
+Authorized actor
+→ calculator
+→ valid input
+→ execution
+→ validated result
+
+## Scenario 3 — Unauthorized execution
+
+Unauthorized actor
+→ execution rejected
+→ no tool execution occurs
+
+## Scenario 4 — Invalid input
+
+Bad input
+→ validation failure
+→ executor never runs tool
+
+## Scenario 5 — Disabled tool
+
+Disable calculator
+→ execution rejected
+
+## Scenario 6 — Timeout
+
+Slow test tool
+→ timeout
+→ typed timeout result
+→ no false success
+
+## Scenario 7 — Cancellation
+
+Cancel execution
+→ cancellation result
+→ cleanup
+
+## Scenario 8 — Audit
+
+Execution
+→ AG-004 event
+→ event log
+→ correct correlation/execution ID
+
+## Scenario 9 — Restart
+
+Register tool
+→ restart application
+→ durable registry contains tool
+
+## Scenario 10 — AG-001
+
+User request
+→ AG-001
+→ tool selection
+→ AG-004
+→ calculator
+→ result
+→ orchestrated response
+
+---
+
+# PHASE 28 — FAILURE / CHAOS TESTING
+
+Test:
+
+* database unavailable
+* malformed configuration
+* unknown tool
+* duplicate tool
+* duplicate version
+* invalid schema
+* unauthorized actor
+* timeout
+* cancellation
+* tool throws
+* tool returns malformed result
+* storage transaction failure
+* event logging failure
+* oversized input
+* oversized output
+
+Ensure failures are predictable and safe.
+
+---
+
+# PHASE 29 — EVENT FAILURE POLICY
+
+Determine and document what happens if:
+
+```text
+tool execution succeeds
+BUT
+audit event persistence fails
+```
+
+Do not silently invent semantics.
+
+Follow existing AG-002/AG-003 event guarantees.
+
+Ensure security/audit requirements are preserved.
+
+---
+
+# PHASE 30 — PERFORMANCE
+
+Review:
+
+* registry lookup complexity
+* unnecessary DB queries
+* repeated authorization checks
+* repeated schema compilation
+* large input/output memory usage
+* unbounded tool listing
+* unbounded result storage
+* metrics overhead
+* event overhead
+
+Use appropriate indexes and caching only where justified.
+
+Do not introduce a complex distributed cache in this sprint.
+
+---
+
+# PHASE 31 — DOCUMENTATION
+
+Create/update:
+
+```text
+docs/sprint16-tool-manager-v1.md
+```
+
+Document:
+
+* AG-004 architecture
+* ToolDefinition
+* ToolRegistry
+* ToolExecutor
+* permissions
+* validation
+* execution lifecycle
+* timeout
+* cancellation
+* retries
+* result model
+* sanitization
+* metrics
+* audit events
+* repository
+* PostgreSQL schema
+* configuration
+* runtime API
+* AG-001 integration
+* testing
+* security model
+* future tool extension points
+
+Clearly mark future/deferred capabilities.
+
+Future possibilities may include:
+
+* HTTP tools
+* web search
+* browser tools
+* external APIs
+* payment tools
+* email
+* filesystem sandbox
+* vector search
+* LLM-driven tool selection
+
+Do not claim these are implemented unless they actually are.
+
+---
+
+# PHASE 32 — FINAL ARCHITECTURE REVIEW
+
+Before declaring Sprint 16 complete, review the entire implementation.
+
+Verify:
+
+* AG-001 still works
+* AG-002 still works
+* AG-003 still works
+* Sprint 14 runtime still works
+* Sprint 15 runtime still works
+* no duplicated authorization system
+* no duplicated event system
+* no duplicated database abstraction
+* no hidden globals
+* no test doubles in production
+* no unsafe `any`
+* no unsafe casts
+* no arbitrary code execution
+* no secret leakage
+* no authorization bypass
+* no silent durable fallback
+* no broken migrations
+* no API regressions
+* no race-condition bugs
+
+---
+
+# MANDATORY QUALITY GATES
+
+Run:
+
+1. full test suite
+2. AG-004 unit tests
+3. repository tests
+4. security tests
+5. Neon integration tests
+6. runtime E2E tests
+7. TypeScript typecheck
+8. ESLint
+9. production build
+10. runtime smoke test
+11. `/healthz`
+12. `/health`
+13. calculator execution through production runtime
+
+Required:
+
+```text
+0 failing tests
+0 TypeScript errors
+0 ESLint errors
+successful production build
+successful runtime boot
+successful health
+successful calculator execution
+successful durable registry persistence
+```
+
+---
+
+# DO NOT STOP EARLY
+
+Do not stop after interfaces.
+
+Do not stop after the registry.
+
+Do not stop after the calculator.
+
+Do not stop after tests.
+
+Complete the full architecture.
+
+If something fails:
+
+1. inspect root cause
+2. fix it
+3. add regression coverage
+4. rerun affected tests
+5. rerun full gates
+6. continue
+
+Do not simply report an unresolved issue if it can be fixed within Sprint 16 scope.
+
+---
+
+# PRESERVE EXISTING ARCHITECTURE
+
+AG-001, AG-002, AG-003 and the production runtime are established foundations.
+
+Do not rewrite them unnecessarily.
+
+Use additive integration.
+
+Existing tests must remain green.
+
+---
+
+# FINAL REPORT FORMAT
+
+At completion report:
+
+## Implementation
+
+* files created
+* files modified
+* AG-004 components
+* calculator tool
+* storage
+* migrations
+* runtime integration
+* AG-001 integration
+
+## Testing
+
+* total test files
+* total tests
+* AG-004 unit tests
+* security tests
+* PostgreSQL tests
+* E2E tests
+
+## Quality Gates
+
+* typecheck
+* ESLint
+* build
+* smoke test
+* health
+* calculator execution
+
+## Security
+
+* authorization
+* validation
+* sanitization
+* timeout
+* cancellation
+* arbitrary-code-execution protection
+
+## Architecture
+
+* AG-001
+* AG-002
+* AG-003
+* AG-004
+* runtime
+* events
+* PostgreSQL
+
+## Deferred Work
+
+Only list genuinely deferred features.
+
+Do NOT commit or push.
+
+Do NOT declare complete unless all mandatory quality gates are green.
+
+Start implementation now.

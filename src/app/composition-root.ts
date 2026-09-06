@@ -64,6 +64,14 @@ import {
 
 import { AIReasoningService, LLMEventLog, LLMMetrics, createLLMProvider } from '../llm/index.js';
 
+import {
+  AgenticLoopService,
+  AgenticEventLog,
+  AgenticLoopMetrics,
+  AgenticToolManagerAdapter,
+} from '../agents/runtime/agentic/index.js';
+import type { AgenticToolActorBuilder } from '../agents/runtime/executor.js';
+
 import type { Environment } from './env.js';
 import { parseCompiledEnv } from './env.js';
 import { AgentRegistry } from '../agents/runtime/registry.js';
@@ -116,6 +124,12 @@ export interface ProductionComposition {
     readonly llmEventLog: LLMEventLog;
     /** LLM metrics (Sprint 17). */
     readonly llmMetrics: LLMMetrics;
+    /** Agentic tool-calling loop (Sprint 18). */
+    readonly agenticLoop: AgenticLoopService;
+    /** Agentic event trail (Sprint 18). */
+    readonly agenticEventLog: AgenticEventLog;
+    /** Agentic metrics (Sprint 18). */
+    readonly agenticMetrics: AgenticLoopMetrics;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -396,11 +410,43 @@ export async function createProductionComposition(
     metrics: llmMetrics,
   });
 
+  // ---- agentic tool-calling loop (Sprint 18) ------------------------------
+  // Wraps AG-004 exclusively through the narrow coordinator port and reuses
+  // the same reasoning stack. Independent event log + metrics for observability.
+  const agenticEventLog = new AgenticEventLog();
+  const agenticMetrics = new AgenticLoopMetrics();
+  const agenticLoop = new AgenticLoopService({
+    reasoning: aiReasoning,
+    tools: new AgenticToolManagerAdapter(toolManager),
+    config: env.agentic,
+    eventLog: agenticEventLog,
+    metrics: agenticMetrics,
+    logger,
+    defaultNamespace: 'default',
+  });
+
+  const agenticToolActor: AgenticToolActorBuilder = (req) => {
+    const actor = requestActors.resolve(req.executionId);
+    return actor === undefined
+      ? {
+          group: ToolActorGroup.Orchestrator,
+          id: `agentic-${req.agentId}`,
+          namespaces: ['default'],
+        }
+      : {
+          group: ToolActorGroup.Orchestrator,
+          id: actor.actorId ?? `agentic-${req.agentId}`,
+          namespaces: actor.namespaces.length > 0 ? actor.namespaces : ['default'],
+        };
+  };
+
   const executor = new ProductionAgentExecutor({
     registry,
     memoryProvider,
     memoryInputBuilder: (req) => memoryInputBuilder.build(req),
     reasoningService: aiReasoning,
+    agenticLoop,
+    agenticToolActor,
     logger,
     onEvent: (event) => eventBridge.accept(event),
   });
@@ -469,6 +515,9 @@ export async function createProductionComposition(
       aiReasoning,
       llmEventLog,
       llmMetrics,
+      agenticLoop,
+      agenticEventLog,
+      agenticMetrics,
       requestActors,
     },
     storage: {

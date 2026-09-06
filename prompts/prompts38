@@ -1,0 +1,1174 @@
+You are working inside the existing TypeScript/Node.js project:
+
+D:\Quarter04\freelancer_app\freelancify-ai
+
+Implement **SPRINT 17 — LLM PROVIDER & AI REASONING LAYER v1.0**.
+
+IMPORTANT:
+
+* This is an existing production-oriented architecture.
+* DO NOT rewrite existing agents.
+* DO NOT remove or weaken existing tests.
+* DO NOT bypass existing AG-001 Master Orchestrator.
+* DO NOT bypass AG-002 Memory Manager.
+* DO NOT bypass AG-003 Knowledge Manager.
+* DO NOT bypass AG-004 Tool Manager.
+* Preserve all existing architecture contracts.
+* Inspect the repository before modifying anything.
+* Follow existing naming, folder, dependency-injection, error-handling, logging, validation, testing, and configuration conventions.
+* Do not invent duplicate abstractions if an existing abstraction can be extended safely.
+* Never put secrets/API keys into source code or tests.
+* Never commit .env values.
+* Use deterministic mocks/fakes in unit tests.
+* Real LLM/network calls must NOT be required for the normal test suite.
+
+CURRENT ARCHITECTURE CONTEXT
+
+The project already contains:
+
+AG-001 Master Orchestrator:
+validation → intent detection → context building → routing → execution planning → execution → aggregation → response.
+
+AG-002 Memory Manager:
+memory lifecycle, retrieval, access control, persistence, event log, restore/replay, DSR, durable Neon PostgreSQL support.
+
+AG-003 Knowledge Manager:
+knowledge documents, versions, chunks, lifecycle, security, repositories/storage/retrieval/events, runtime API, KnowledgeContextProviderAdapter.
+
+AG-004 Tool Manager:
+tool registry, validation, executor, policies, calculator tool, repository/storage, events, metrics, security, runtime integration.
+
+The production composition root already wires AG-001 through AG-004.
+
+The existing production composition root currently creates ProductionAgentExecutor with approximately this dependency shape:
+
+{
+registry,
+memoryProvider,
+memoryInputBuilder,
+logger,
+onEvent
+}
+
+The current runtime environment configuration is split between:
+
+src/config/env.ts
+src/config/index.ts
+src/app/env.ts
+
+Current base EnvSchema only contains:
+NODE_ENV
+HOST
+PORT
+LOG_LEVEL
+LOG_PRETTY
+
+src/app/env.ts combines:
+base
+memory
+knowledge
+tools
+
+and parseCompiledEnv() currently returns:
+{
+base,
+memory,
+knowledge,
+tools
+}
+
+Therefore Sprint 17 must introduce a clean LLM configuration layer without breaking the existing configuration architecture.
+
+==================================================
+SPRINT 17 OBJECTIVE
+===================
+
+Build a provider-agnostic LLM abstraction and AI reasoning layer that can be consumed by the existing runtime/orchestrator architecture.
+
+The system must support:
+
+1. LLM provider abstraction
+2. Provider configuration
+3. Model configuration
+4. Secure API-key configuration
+5. Request/response contracts
+6. AI reasoning service
+7. Prompt/message abstraction
+8. Token/usage metadata abstraction
+9. Timeout handling
+10. Retry handling
+11. Cancellation via AbortSignal
+12. Provider error normalization
+13. Deterministic mock provider
+14. Runtime dependency injection
+15. Agent execution integration
+16. Event/audit support
+17. Security/redaction
+18. Comprehensive tests
+19. Health/readiness integration where appropriate
+20. Documentation
+
+Do NOT hard-code a single provider into the core domain.
+
+The architecture should allow future providers such as:
+
+* OpenAI
+* Anthropic
+* Google
+* OpenRouter
+* local/self-hosted models
+
+but Sprint 17 v1 only needs the provider implementation(s) that are appropriate for the existing project and available dependencies.
+
+If there is already an SDK dependency in package.json, inspect and reuse it where appropriate.
+
+If there is no provider SDK, do NOT blindly install multiple SDKs.
+
+Prefer a clean provider interface + deterministic mock provider + one production provider implementation if configuration/dependencies justify it.
+
+==================================================
+PHASE 0 — REPOSITORY AUDIT
+==========================
+
+Before changing files:
+
+1. Inspect:
+
+   * package.json
+   * tsconfig.json
+   * existing source tree
+   * existing tests
+   * src/app/composition-root.ts
+   * src/app/env.ts
+   * src/config/env.ts
+   * AG-001 ProductionAgentExecutor
+   * AG-001 orchestrator contracts
+   * AG-002 memory contracts
+   * AG-003 knowledge contracts
+   * AG-004 tool manager contracts
+   * runtime API/server
+   * event infrastructure
+   * logger infrastructure
+   * existing error classes
+   * existing dependency injection patterns
+
+2. Search for:
+
+   * provider
+   * model
+   * inference
+   * completion
+   * chat
+   * reasoning
+   * prompt
+   * executor
+   * AgentExecutor
+   * AbortSignal
+   * retry
+   * timeout
+   * event
+   * usage
+   * token
+
+3. Reuse existing abstractions whenever possible.
+
+4. Before implementing, determine the smallest architecture-compatible change.
+
+==================================================
+PHASE 1 — LLM DOMAIN CONTRACTS
+==============================
+
+Create a dedicated LLM module following the repository's existing structure.
+
+Recommended conceptual location:
+
+src/llm/
+
+or another location consistent with existing architecture.
+
+Create provider-agnostic contracts for:
+
+LLMProvider
+
+Responsibilities:
+
+* provider identity
+* model identity
+* generate/complete operation
+* capability information if useful
+
+Use an AbortSignal-aware API.
+
+Example conceptual contract:
+
+interface LLMProvider {
+readonly id: string;
+readonly model: string;
+
+generate(
+request: LLMRequest,
+options?: LLMRequestOptions
+): Promise<LLMResponse>;
+}
+
+Do not blindly copy this exact API if an existing project convention is better.
+
+Define:
+
+LLMMessage
+
+* role
+* content
+
+Roles should support at minimum:
+
+* system
+* user
+* assistant
+
+Define:
+
+LLMRequest
+
+* messages
+* model if override is allowed
+* temperature if supported
+* max output tokens if supported
+* metadata if appropriate
+
+Define:
+
+LLMResponse
+
+* text/content
+* provider
+* model
+* usage
+* finish reason if available
+* request/correlation ID if appropriate
+
+Define:
+
+LLMUsage
+
+* input tokens
+* output tokens
+* total tokens
+
+Make usage fields nullable/optional when a provider does not return them.
+
+Define:
+
+LLMRequestOptions
+
+* signal
+* timeout
+* request ID/correlation ID
+* retry policy where appropriate
+
+Do not expose provider SDK-specific types from the domain layer.
+
+==================================================
+PHASE 2 — CONFIGURATION
+=======================
+
+Extend the existing environment configuration pattern.
+
+DO NOT create a second unrelated environment parser.
+
+Add a dedicated LLM configuration schema, following the same style as:
+
+src/config/env.ts
+src/app/env.ts
+AG-002 config
+AG-003 config
+AG-004 config
+
+Possible fields:
+
+LLM_PROVIDER
+LLM_MODEL
+LLM_API_KEY
+LLM_BASE_URL
+LLM_TIMEOUT_MS
+LLM_MAX_RETRIES
+LLM_TEMPERATURE
+LLM_MAX_OUTPUT_TOKENS
+LLM_ENABLED
+
+Use sensible defaults where safe.
+
+IMPORTANT:
+
+* API key must never be logged.
+* API key must never appear in thrown errors.
+* API key must never appear in event payloads.
+* API key must never appear in metrics.
+* API key must never appear in test snapshots.
+* Production should fail closed if a real provider is enabled but required credentials are missing.
+* Tests should be able to use a mock provider without requiring credentials.
+
+Do not make the application impossible to boot in test mode just because no LLM API key exists.
+
+Extend src/app/env.ts so Environment contains the LLM config.
+
+Preserve existing:
+base
+memory
+knowledge
+tools
+
+Add:
+llm
+
+Do not break existing callers.
+
+==================================================
+PHASE 3 — PROVIDER FACTORY
+==========================
+
+Implement a provider factory/registry.
+
+Conceptual:
+
+LLMProviderFactory
+or
+LLMProviderRegistry
+
+Responsibilities:
+
+* resolve configured provider
+* validate provider configuration
+* construct provider
+* prevent unsupported providers
+* expose provider metadata
+
+The core system must depend on LLMProvider, not a concrete SDK.
+
+If a provider is disabled:
+
+* return a deterministic disabled/no-op implementation OR clearly prevent reasoning execution according to existing application semantics.
+
+Do not silently pretend an LLM response exists.
+
+Errors should be explicit.
+
+==================================================
+PHASE 4 — PROVIDER IMPLEMENTATION
+=================================
+
+Implement the production provider using the best existing dependency available in the repository.
+
+If no SDK is available:
+
+Prefer a minimal HTTP-based provider implementation rather than adding unnecessary dependencies, provided this fits the project's existing standards.
+
+Requirements:
+
+* no SDK types leak into domain contracts
+* API key supplied through configuration
+* correct authentication
+* timeout
+* AbortSignal
+* normalized errors
+* response validation
+* malformed response handling
+* provider request ID extraction when available
+* usage extraction when available
+* no secret leakage
+
+Do not implement unsupported provider-specific features merely for completeness.
+
+Keep v1 small and reliable.
+
+==================================================
+PHASE 5 — ERROR MODEL
+=====================
+
+Create provider-agnostic normalized errors.
+
+At minimum distinguish:
+
+LLMConfigurationError
+LLMAuthenticationError
+LLMRateLimitError
+LLMTimeoutError
+LLMNetworkError
+LLMInvalidRequestError
+LLMProviderError
+LLMResponseValidationError
+LLMCancelledError
+
+Use existing project error conventions if available.
+
+Each error should support safe metadata.
+
+Never include:
+
+* API keys
+* Authorization headers
+* full sensitive request payloads
+* credentials
+
+Retryability must be explicit.
+
+For example:
+
+retryable = true
+or
+retryable = false
+
+Do not retry:
+
+* authentication errors
+* invalid request errors
+* malformed configuration
+
+Potentially retry:
+
+* transient network errors
+* rate limits
+* provider 5xx
+* timeout where appropriate
+
+Respect cancellation.
+
+==================================================
+PHASE 6 — RETRY + TIMEOUT
+=========================
+
+Implement robust but bounded retry handling.
+
+Requirements:
+
+* configurable max retries
+* exponential backoff
+* bounded delay
+* no infinite retries
+* AbortSignal-aware waiting
+* timeout-aware requests
+* no retry after cancellation
+* no retry on permanent failures
+
+Do not make tests depend on real sleep durations.
+
+Use injectable clock/sleep or equivalent deterministic mechanism if the existing project supports it.
+
+Unit tests must verify:
+
+* successful first request
+* retry then success
+* max retries reached
+* permanent error not retried
+* cancellation during request
+* cancellation during backoff
+* timeout
+* retry configuration validation
+
+==================================================
+PHASE 7 — AI REASONING SERVICE
+==============================
+
+Create a provider-independent AI reasoning service.
+
+Conceptual:
+
+AIReasoningService
+
+Responsibilities:
+
+* receive structured reasoning input
+* construct messages
+* call LLMProvider
+* validate output
+* return structured reasoning result
+* attach usage metadata
+* preserve correlation/request ID
+* handle cancellation
+* normalize errors
+
+Do NOT allow arbitrary uncontrolled prompt concatenation.
+
+Create a prompt/message abstraction.
+
+Possible:
+
+ReasoningRequest
+
+* systemInstruction
+* userInput
+* context
+* optional memoryContext
+* optional knowledgeContext
+* optional toolResults
+* correlationId
+
+ReasoningResult
+
+* output
+* provider
+* model
+* usage
+* latency
+* correlationId
+
+The reasoning service should not directly access the database.
+
+==================================================
+PHASE 8 — CONTEXT INTEGRATION
+=============================
+
+Integrate the reasoning layer with the existing AG-001 context pipeline.
+
+The existing architecture already has:
+
+AG-002 memory context
+AG-003 knowledge context
+AG-004 tools
+
+Use the context already prepared by AG-001.
+
+Do NOT independently query Memory Manager, Knowledge Manager, or Tool Manager from the LLM provider.
+
+Correct direction:
+
+AG-001 builds context
+↓
+Execution / agent layer
+↓
+AIReasoningService
+↓
+LLMProvider
+
+For tool-enabled reasoning:
+
+AG-001 / execution engine
+↓
+AG-004 Tool Manager
+↓
+tool results
+↓
+AIReasoningService
+
+Do not allow the LLM provider to directly bypass AG-004.
+
+==================================================
+PHASE 9 — PRODUCTION AGENT EXECUTOR INTEGRATION
+===============================================
+
+Inspect ProductionAgentExecutor carefully.
+
+Integrate AIReasoningService using dependency injection.
+
+Do not hard-code construction inside the executor.
+
+Conceptually:
+
+ProductionAgentExecutor({
+registry,
+memoryProvider,
+memoryInputBuilder,
+reasoningService,
+logger,
+onEvent
+})
+
+Adapt this to the actual existing constructor/contracts.
+
+The executor should decide when an agent requires LLM reasoning according to existing agent metadata/capabilities.
+
+Do not make every existing agent automatically depend on a real LLM.
+
+Introduce an explicit capability such as:
+
+requiresReasoning
+or
+executionMode = deterministic | reasoning
+
+only if the existing architecture supports this cleanly.
+
+Preserve deterministic agents such as calculator/tool execution.
+
+==================================================
+PHASE 10 — AGENT REASONING FLOW
+===============================
+
+Implement a safe reasoning flow.
+
+Conceptual flow:
+
+request
+↓
+AG-001 validation
+↓
+intent detection
+↓
+context builder
+↓
+routing
+↓
+execution planning
+↓
+execution
+↓
+agent executor
+↓
+reasoning service
+↓
+LLM provider
+↓
+reasoning result
+↓
+aggregation
+↓
+final response
+
+Do not move orchestration responsibility into AIReasoningService.
+
+AIReasoningService is a capability, not the master orchestrator.
+
+==================================================
+PHASE 11 — MEMORY + KNOWLEDGE SAFETY
+====================================
+
+Reasoning context may contain data from:
+
+* memory
+* knowledge
+* tools
+
+Before sending context to an external provider:
+
+1. Respect existing access control.
+2. Respect scope/namespace restrictions.
+3. Respect existing security classification.
+4. Do not include secrets.
+5. Do not include credentials.
+6. Do not include internal database connection strings.
+7. Do not include authorization headers.
+8. Do not leak internal system metadata unless explicitly allowed.
+9. Apply reasonable context size limits.
+10. Preserve existing context prioritization.
+
+If the existing system has redaction/sanitization utilities, reuse them.
+
+Do not invent a competing security framework.
+
+==================================================
+PHASE 12 — PROMPT INJECTION DEFENSE
+===================================
+
+Implement basic v1 prompt-boundary protection.
+
+Treat:
+
+* user input
+* retrieved memory
+* knowledge documents
+* tool output
+
+as untrusted data.
+
+System instructions must remain structurally separate from untrusted content.
+
+Do not simply concatenate everything into one system prompt.
+
+Clearly delimit context sections.
+
+The model must not be instructed to reveal:
+
+* API keys
+* system secrets
+* internal credentials
+* private infrastructure information
+
+Add deterministic tests for context boundary handling.
+
+This is v1 defense, not a claim of complete prompt-injection prevention.
+
+==================================================
+PHASE 13 — EVENTS / OBSERVABILITY
+=================================
+
+Integrate LLM execution into the existing event architecture if appropriate.
+
+Events should capture safe metadata such as:
+
+* request/correlation ID
+* agent ID
+* provider ID
+* model ID
+* start/end timestamps
+* duration
+* success/failure
+* retry count
+* token usage
+* error category
+
+NEVER emit:
+
+* API key
+* Authorization header
+* raw credentials
+
+Be careful with raw prompts and responses.
+
+Do not automatically persist full user prompts/responses if existing privacy architecture does not permit it.
+
+Follow existing event/audit conventions.
+
+==================================================
+PHASE 14 — METRICS
+==================
+
+If the project already has metrics conventions, integrate:
+
+* total LLM requests
+* successful requests
+* failed requests
+* retries
+* latency
+* token usage
+* provider/model labels
+
+Avoid high-cardinality labels.
+
+Never label metrics with:
+
+* user prompt
+* response content
+* API key
+* raw request IDs if high cardinality
+
+==================================================
+PHASE 15 — HEALTH / READINESS
+=============================
+
+Inspect existing health/readiness architecture.
+
+Do NOT make `/health` fail merely because an external LLM provider is temporarily unavailable unless the existing application's readiness semantics explicitly require external dependency availability.
+
+Prefer separating:
+
+LLM configuration health
+from
+LLM live connectivity
+
+Do not make normal health checks call the real LLM API.
+
+If appropriate, expose safe provider status such as:
+
+* configured
+* disabled
+* misconfigured
+
+without exposing credentials.
+
+==================================================
+PHASE 16 — DETERMINISTIC MOCK PROVIDER
+======================================
+
+Create:
+
+MockLLMProvider
+
+It must:
+
+* implement LLMProvider
+* return deterministic responses
+* support configurable responses
+* support simulated errors
+* support simulated latency if useful
+* support cancellation
+* expose call count for tests
+* expose captured safe request metadata where appropriate
+
+It must never require network access.
+
+This provider will be the main test dependency for AG-001 integration tests.
+
+==================================================
+PHASE 17 — TEST SUITE
+=====================
+
+Write comprehensive tests.
+
+At minimum:
+
+A. Configuration
+
+* valid config
+* defaults
+* invalid provider
+* missing API key for enabled real provider
+* disabled provider without API key
+* invalid timeout
+* invalid retry count
+* invalid temperature
+* invalid max output tokens
+
+B. Contracts/provider
+
+* successful generation
+* provider metadata
+* usage parsing
+* finish reason
+* malformed provider response
+
+C. Errors
+
+* authentication
+* rate limit
+* timeout
+* network
+* invalid request
+* provider 5xx
+* response validation
+* cancellation
+
+D. Retry
+
+* success first try
+* retry transient failure
+* retry count
+* no retry permanent errors
+* cancellation during retry
+
+E. AIReasoningService
+
+* correct message construction
+* system/user separation
+* context inclusion
+* tool result inclusion
+* memory/knowledge context inclusion
+* output validation
+* usage propagation
+* error mapping
+* cancellation
+
+F. Security
+
+* API key never logged
+* API key never in event
+* API key never in error
+* Authorization header never exposed
+* sensitive context redaction
+* prompt boundary protection
+
+G. AG-001 integration
+
+* deterministic agent remains deterministic
+* reasoning-capable agent calls reasoning service
+* AG-001 context reaches reasoning service
+* cancellation propagates
+* failures map correctly
+* final aggregation still works
+
+H. Composition root
+
+* mock provider can be injected
+* production provider can be constructed from config
+* existing AG-002/003/004 wiring remains intact
+* existing calculator execution remains intact
+
+I. Runtime
+
+* application boots with LLM disabled
+* application boots with mock/test provider
+* invalid production LLM configuration fails closed
+* health/readiness remains correct
+
+Do not require live API tests in the default suite.
+
+If integration tests for a real provider are added, gate them explicitly behind an environment flag such as:
+
+RUN_LLM_INTEGRATION_TESTS=true
+
+and never require them for normal CI.
+
+==================================================
+PHASE 18 — REGRESSION TESTING
+=============================
+
+After implementation run the complete existing test suite.
+
+Required gates:
+
+1. npm test / project test command
+2. TypeScript typecheck
+3. ESLint
+4. production build
+5. existing runtime smoke test
+6. existing health endpoint
+7. existing readiness endpoint
+8. existing AG-002 Neon integration tests
+9. existing AG-003 Neon integration tests
+10. existing AG-004 Neon integration tests
+
+Do not weaken existing tests to make Sprint 17 pass.
+
+If a regression appears:
+
+* identify root cause
+* fix implementation
+* rerun affected tests
+* rerun complete suite
+
+==================================================
+PHASE 19 — DOCUMENTATION
+========================
+
+Create:
+
+docs/sprint17-llm-provider-reasoning-v1.md
+
+Document:
+
+1. Objective
+2. Architecture
+3. LLM provider abstraction
+4. Configuration
+5. Provider factory
+6. AIReasoningService
+7. ProductionAgentExecutor integration
+8. Context flow
+9. Memory/knowledge/tool boundaries
+10. Security
+11. Prompt injection boundary
+12. Retry/timeout
+13. Errors
+14. Events
+15. Metrics
+16. Health/readiness
+17. Testing
+18. Environment variables
+19. How to enable LLM
+20. How to use mock provider
+21. Future provider expansion
+22. Known limitations
+23. Deferred work
+
+Clearly state that semantic/vector retrieval and autonomous tool-calling are NOT automatically introduced unless already supported by the existing architecture.
+
+==================================================
+ENVIRONMENT VARIABLES
+=====================
+
+Use names consistent with the repository.
+
+If introducing these:
+
+LLM_ENABLED=false
+LLM_PROVIDER=
+LLM_MODEL=
+LLM_API_KEY=
+LLM_BASE_URL=
+LLM_TIMEOUT_MS=
+LLM_MAX_RETRIES=
+LLM_TEMPERATURE=
+LLM_MAX_OUTPUT_TOKENS=
+
+document them.
+
+Do not put actual values in documentation.
+
+Use placeholders only.
+
+==================================================
+ARCHITECTURAL RULES
+===================
+
+STRICT:
+
+1. Core domain depends on interfaces.
+2. Infrastructure implements interfaces.
+3. Composition root constructs concrete implementations.
+4. No secret in source.
+5. No secret in tests.
+6. No direct provider SDK usage in AG-001 domain code.
+7. No direct database calls from LLM provider.
+8. No direct database calls from AIReasoningService.
+9. No bypassing AG-004 for tool execution.
+10. No bypassing AG-002 for memory access.
+11. No bypassing AG-003 for knowledge access.
+12. No moving orchestration into reasoning service.
+13. No uncontrolled infinite retries.
+14. No real network dependency in standard unit tests.
+15. Preserve backward compatibility where practical.
+16. Keep public APIs stable unless a change is necessary.
+17. Use type-only imports where lint rules require them.
+18. Follow existing ESM conventions.
+19. Follow existing strict TypeScript conventions.
+20. Use existing logger/event/error abstractions where possible.
+
+==================================================
+IMPORTANT IMPLEMENTATION DETAIL
+===============================
+
+The existing src/app/env.ts currently returns:
+
+{
+base,
+memory,
+knowledge,
+tools
+}
+
+Extend it safely to:
+
+{
+base,
+memory,
+knowledge,
+tools,
+llm
+}
+
+The existing src/config/env.ts currently defines the base EnvSchema.
+
+Do not replace it with an unrelated configuration framework.
+
+Follow the same Zod + parser approach already used by the project.
+
+==================================================
+COMPOSITION ROOT
+================
+
+Update:
+
+src/app/composition-root.ts
+
+so it constructs:
+
+1. LLM configuration
+2. provider registry/factory
+3. concrete provider
+4. AIReasoningService
+5. injects reasoning capability into ProductionAgentExecutor
+
+Do this while preserving all existing AG-002, AG-003 and AG-004 construction.
+
+The composition root must remain the application's dependency injection boundary.
+
+Do not instantiate providers deep inside business logic.
+
+==================================================
+BACKWARD COMPATIBILITY
+======================
+
+Existing deterministic functionality must continue working.
+
+Especially:
+
+AG-004 calculator:
+10 / 2 + 7
+must continue returning:
+12
+
+Do not make calculator execution dependent on an LLM.
+
+Do not make application startup require a real LLM API key when LLM is disabled.
+
+==================================================
+DELIVERABLES
+============
+
+At completion provide:
+
+1. Full implementation
+2. New/modified source files
+3. New tests
+4. Updated configuration
+5. Updated composition root
+6. Documentation
+7. Test count before/after
+8. Typecheck result
+9. ESLint result
+10. Build result
+11. Runtime smoke result
+12. Health result
+13. Readiness result
+14. Existing AG-002/003/004 regression results
+15. Any limitations/deferred work
+16. Git status
+
+Do NOT commit automatically unless the repository's existing workflow explicitly requires it.
+
+==================================================
+EXECUTION STRATEGY
+==================
+
+Work autonomously.
+
+Do not stop after merely creating interfaces.
+
+Implement the entire Sprint 17 end-to-end.
+
+Before each major modification inspect the relevant existing implementation.
+
+After each logical section run targeted tests.
+
+At the end run the full verification suite.
+
+If a test fails:
+
+* diagnose
+* fix
+* rerun
+
+Do not simply report failures without attempting to resolve them.
+
+Do not ask me for confirmation between phases unless there is a genuinely destructive architectural decision that cannot be resolved from the existing repository.
+
+==================================================
+FINAL REPORT FORMAT
+===================
+
+At the end report exactly:
+
+# SPRINT 17 STATUS
+
+Implementation:
+
+* LLM abstraction:
+* Configuration:
+* Provider:
+* Provider factory:
+* AI reasoning:
+* AG-001 integration:
+* AG-002 integration:
+* AG-003 integration:
+* AG-004 integration:
+* Security:
+* Retry/timeout:
+* Events/metrics:
+* Health/readiness:
+* Documentation:
+
+Verification:
+
+* Tests:
+* Typecheck:
+* ESLint:
+* Build:
+* Runtime smoke:
+* Health:
+* Readiness:
+* Neon AG-002:
+* Neon AG-003:
+* Neon AG-004:
+
+Files changed:
+
+* ...
+
+Deferred:
+
+* ...
+
+Git status:
+
+* ...
+
+MOST IMPORTANT:
+Do not claim Sprint 17 complete unless the implementation and verification actually pass.
