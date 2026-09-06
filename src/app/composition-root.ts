@@ -71,6 +71,18 @@ import {
   AgenticToolManagerAdapter,
 } from '../agents/runtime/agentic/index.js';
 import type { AgenticToolActorBuilder } from '../agents/runtime/executor.js';
+import {
+  AgentDefinitionRegistry,
+  AgentPlatformGateway,
+  AgentPlatformMetrics,
+  AgentPlatformEventLog,
+  AgentExecutionMode,
+  DEFAULT_BUDGET_ESTIMATOR_AGENT,
+  withPlatformAwareness,
+} from '../agents/agent-platform/index.js';
+import type { AgentDefinition } from '../agents/agent-platform/index.js';
+import { RoutingRegistry } from '../agents/ag-001-master-orchestrator/routing/registry/index.js';
+import { LLM_AGENTIC_CAPABILITY, LLM_REASONING_CAPABILITY } from '../llm/constants.js';
 
 import type { Environment } from './env.js';
 import { parseCompiledEnv } from './env.js';
@@ -78,6 +90,7 @@ import { AgentRegistry } from '../agents/runtime/registry.js';
 import { ProductionAgentExecutor, ProductionExecutorRegistry } from '../agents/runtime/executor.js';
 import { RuntimeAgentEventType } from '../agents/runtime/types.js';
 import { createRuntimeAgent } from '../agents/runtime/runtime-agent.js';
+import type { RuntimeAgent } from '../agents/runtime/types.js';
 import { RuntimeEventBridge } from './runtime-event-bridge.js';
 import { RequestActorRegistry } from './request-actors.js';
 import { MemoryAwareContextInputBuilder } from './memory-context-builder.js';
@@ -130,6 +143,14 @@ export interface ProductionComposition {
     readonly agenticEventLog: AgenticEventLog;
     /** Agentic metrics (Sprint 18). */
     readonly agenticMetrics: AgenticLoopMetrics;
+    /** Sprint 19 agent platform execution gate. */
+    readonly platformGateway: AgentPlatformGateway;
+    /** Sprint 19 agent definition/lifecycle registry (catalog + readiness). */
+    readonly platformRegistry: AgentDefinitionRegistry;
+    /** Sprint 19 policy metrics. */
+    readonly platformMetrics: AgentPlatformMetrics;
+    /** Sprint 19 platform event trail. */
+    readonly platformEventLog: AgentPlatformEventLog;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -154,6 +175,56 @@ function requiredString(env: Environment, key: string): string {
     });
   }
   return value;
+}
+
+/**
+ * Derives a Sprint 19 platform definition that mirrors a registered runtime
+ * agent (Sprint 19 §24). The definition is validated at registration time; the
+ * executor claims exactly these capability/permission ids at the gate, so the
+ * mirror must stay aligned with the runtime agent manifest. Tool access is
+ * fail-closed (empty allowlist) until explicitly granted.
+ */
+function agentDefinitionFromRuntimeAgent(agent: RuntimeAgent): AgentDefinition {
+  const { configuration } = agent;
+  const requiresAgentic = configuration.capabilities.some(
+    (capability) => capability.id === LLM_AGENTIC_CAPABILITY,
+  );
+  const requiresReasoning = configuration.capabilities.some(
+    (capability) => capability.id === LLM_REASONING_CAPABILITY,
+  );
+  const executionModes = requiresAgentic
+    ? [AgentExecutionMode.Agentic]
+    : requiresReasoning
+      ? [AgentExecutionMode.Deterministic, AgentExecutionMode.Reasoning]
+      : [AgentExecutionMode.Deterministic];
+  return {
+    agentId: configuration.agentId,
+    name: configuration.name,
+    version: configuration.version,
+    description: `${configuration.name} (platform mirror of the runtime agent)`,
+    team: 'platform',
+    category: configuration.category,
+    status: configuration.status,
+    capabilities: configuration.capabilities.map((capability) => ({
+      id: capability.id,
+      name: capability.name,
+      description: capability.description,
+      enabled: capability.enabled,
+    })),
+    executionModes,
+    allowedTools: [],
+    permissions: configuration.permissions ?? [],
+    limits: {
+      maxExecutionTimeMs: 30_000,
+      maxReasoningTurns: requiresAgentic ? 8 : 0,
+      maxToolCalls: requiresAgentic ? 6 : 0,
+      maxContextBytes: 65_536,
+      maxOutputBytes: 65_536,
+      maxConcurrentExecutions: 4,
+    },
+    dependencies: [],
+    configuration: {},
+  };
 }
 
 /**
@@ -440,6 +511,37 @@ export async function createProductionComposition(
         };
   };
 
+  // ---- Sprint 19 agent platform (capability framework + lifecycle gate) ----
+  const platformMetrics = new AgentPlatformMetrics();
+  const platformEventLog = new AgentPlatformEventLog();
+  const platformRegistry = new AgentDefinitionRegistry({
+    metrics: platformMetrics,
+    eventLog: platformEventLog,
+    toolExists: (toolName) => toolsEnabled && toolManager.exists(toolName),
+  });
+
+  // AG-101 mirrors the registered runtime agent so the executor's capability
+  // claims always match the platform definition (identity + capability are the
+  // same contract, seen from two layers). Optional forward references are the
+  // only dependencies allowed; AG-102 depends on AG-101 (non-blocking).
+  const runtimeAgent101 = registry.get('AG-101');
+  if (runtimeAgent101 === undefined) {
+    throw new DiagnosticError('AG-101 runtime agent is not registered', {
+      code: 'PLATFORM_AGENT_MIRROR_MISSING',
+      details: { agentId: 'AG-101' },
+    });
+  }
+  platformRegistry.registerAgent(agentDefinitionFromRuntimeAgent(runtimeAgent101), {
+    activate: true,
+  });
+  platformRegistry.registerAgent(DEFAULT_BUDGET_ESTIMATOR_AGENT);
+
+  const platformGateway = new AgentPlatformGateway({
+    registry: platformRegistry,
+    metrics: platformMetrics,
+    eventLog: platformEventLog,
+  });
+
   const executor = new ProductionAgentExecutor({
     registry,
     memoryProvider,
@@ -447,6 +549,7 @@ export async function createProductionComposition(
     reasoningService: aiReasoning,
     agenticLoop,
     agenticToolActor,
+    agentPlatform: platformGateway,
     logger,
     onEvent: (event) => eventBridge.accept(event),
   });
@@ -459,7 +562,10 @@ export async function createProductionComposition(
   });
 
   // ---- routing / planning / intent / context / aggregation ----------------
-  const routingEngine = new RoutingEngine();
+  // The routing registry is decorated so platform-managed agents expose their
+  // live lifecycle (READY/RUNNING only) as routing availability.
+  const routingRegistry = withPlatformAwareness(new RoutingRegistry(), platformRegistry);
+  const routingEngine = new RoutingEngine({ registry: routingRegistry });
   const planBuilder = new ExecutionPlanBuilder();
   const intentClassifier = new RuleBasedIntentClassifier();
   const contextBuilder: ContextBuilderType = new ContextBuilder();
@@ -518,6 +624,10 @@ export async function createProductionComposition(
       agenticLoop,
       agenticEventLog,
       agenticMetrics,
+      platformGateway,
+      platformRegistry,
+      platformMetrics,
+      platformEventLog,
       requestActors,
     },
     storage: {

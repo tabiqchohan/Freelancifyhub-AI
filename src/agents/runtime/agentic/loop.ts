@@ -107,6 +107,7 @@ interface RunContext {
   readonly toolOutcomes: ToolCallOutcome[];
   readonly rejections: AgenticToolRejection[];
   readonly accumulated: BoundedToolResult[];
+  readonly allowedTools?: readonly string[];
   readonly deadline: number;
   startedAt: number;
   provider?: string;
@@ -327,13 +328,21 @@ export class AgenticLoopService {
           }),
         );
 
-        const info = this.tools.get(tool, input.actor, run.namespace);
         const rejection =
-          info === undefined
-            ? this.rejection(call, 'TOOL_NOT_FOUND', `Tool "${tool}" is not available`)
-            : info.enabled === true
-              ? undefined
-              : this.rejection(call, 'TOOL_DISABLED', `Tool "${tool}" is disabled`);
+          run.allowedTools !== undefined && !run.allowedTools.includes(tool)
+            ? this.rejection(
+                call,
+                'TOOL_NOT_ALLOWED',
+                `Tool "${tool}" is not on this agent's allowlist (Sprint 19 gate)`,
+              )
+            : (() => {
+                const info = this.tools.get(tool, input.actor, run.namespace);
+                return info === undefined
+                  ? this.rejection(call, 'TOOL_NOT_FOUND', `Tool "${tool}" is not available`)
+                  : info.enabled === true
+                    ? undefined
+                    : this.rejection(call, 'TOOL_DISABLED', `Tool "${tool}" is disabled`);
+              })();
 
         if (rejection !== undefined) {
           run.rejections.push(rejection);
@@ -430,7 +439,7 @@ export class AgenticLoopService {
     readonly reasoningLatencyMs?: number;
     readonly detectedAt: string;
   }> {
-    const availableTools = this.listTools(input, run.namespace);
+    const availableTools = this.listTools(run, run.namespace);
     const toolResults = [...run.accumulated]; // already bounded + sanitized
 
     const request: ReasoningRequest = {
@@ -590,9 +599,14 @@ export class AgenticLoopService {
     };
   }
 
-  /** Lists tools through the authorized coordinator. */
-  private listTools(input: AgenticLoopRunInput, namespace: string): readonly AgenticToolInfo[] {
-    return this.tools.list(input.actor, namespace);
+  /** Lists tools through the authorized coordinator, honed by the platform
+   * allowlist when present so the model can never even propose a denied tool. */
+  private listTools(run: RunContext, namespace: string): readonly AgenticToolInfo[] {
+    const tools = this.tools.list(run.actor, namespace);
+    if (run.allowedTools === undefined) {
+      return tools;
+    }
+    return tools.filter((tool) => run.allowedTools!.includes(tool.name));
   }
 
   /** Builds the agentic system instruction (guard framing + contract). */
@@ -664,6 +678,7 @@ export class AgenticLoopService {
       toolOutcomes: [],
       rejections: [],
       accumulated: [],
+      allowedTools: input.allowedTools,
       deadline,
       startedAt,
       reasoningCalls: 0,

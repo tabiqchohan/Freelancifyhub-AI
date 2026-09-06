@@ -1,0 +1,122 @@
+import { describe, expect, it } from 'vitest';
+import type { AddressInfo } from 'node:net';
+
+import { createProductionComposition } from '../../../src/app/composition-root.js';
+import { createProductionRuntime } from '../../../src/app/runtime.js';
+import { parseCompiledEnv } from '../../../src/app/env.js';
+
+function inMemoryEnv(overrides: Record<string, string> = {}): ReturnType<typeof parseCompiledEnv> {
+  const env = parseCompiledEnv(overrides);
+  env.memory.MEMORY_STORAGE_BACKEND = 'in-memory';
+  return env;
+}
+
+describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
+  it('registers AG-101 (mirror, activated) and AG-102 (definition-only)', async () => {
+    const composition = await createProductionComposition({ env: inMemoryEnv() });
+    try {
+      const registry = composition.services.platformRegistry;
+      expect(registry.getAgent('AG-101')?.name).toBe('Project Description Agent');
+      expect(
+        registry.getAgent('AG-102')?.capabilities.some((c) => c.id === 'budget.estimate'),
+      ).toBe(true);
+      expect(registry.lifecycleStateOf('AG-101')?.toString()).toBe('READY');
+      expect(registry.snapshot().registered).toBe(2);
+      expect(registry.snapshot().ready).toBe(1);
+      expect(composition.services.platformGateway.isPlatformManaged('AG-101')).toBe(true);
+      expect(composition.services.platformGateway.isPlatformManaged('AG-001')).toBe(false);
+      expect(composition.services.platformGateway.isToolAllowed('AG-101', 'calculator')).toBe(
+        false,
+      );
+    } finally {
+      await composition.storage.close();
+    }
+  });
+
+  it('surfaces the platform block in /healthz', async () => {
+    const composition = await createProductionComposition({ env: inMemoryEnv() });
+    const runtime = createProductionRuntime({
+      composition,
+      logger: (await import('pino')).default({ level: 'silent' }),
+    });
+    const server = await runtime.start(0, '127.0.0.1');
+    const { port } = server.address() as AddressInfo;
+    try {
+      const health = (await (await fetch(`http://127.0.0.1:${port}/healthz`)).json()) as {
+        platform: { registered: number; ready: number; running: number; healthy: boolean };
+      };
+      expect(health.platform.registered).toBe(2);
+      expect(health.platform.ready).toBe(1);
+      expect(health.platform.running).toBe(0);
+      expect(health.platform.healthy).toBe(true);
+      expect(JSON.stringify(health)).not.toMatch(/postgres|neon|database_url/i);
+    } finally {
+      await runtime.shutdown();
+      await composition.storage.close();
+    }
+  });
+
+  it('executes AG-101 through the platform gate end-to-end', async () => {
+    const composition = await createProductionComposition({ env: inMemoryEnv() });
+    try {
+      const result = await composition.services.executor.execute({
+        executionId: 'exec_platform_app-1',
+        stepId: 'step-1',
+        agentId: 'AG-101',
+        inputs: { 'request.input': 'design a freight marketplace' },
+        policy: {
+          timeoutMs: 5000,
+          retry: { maxRetries: 0, retryable: true, backoffMs: 1 },
+          failureBehavior: 'fail_fast' as never,
+          continueOnFailure: false,
+          stopOnFailure: true,
+          fallbackAllowed: false,
+          maxSteps: 1,
+          maxTotalExecutionTimeMs: 20000,
+        },
+        traceId: 'trace-platform-app-1',
+      });
+      expect(result.success).toBe(true);
+      // Lease closed: lifecycle returns to READY with no residual slot.
+      expect(composition.services.platformRegistry.lifecycleStateOf('AG-101')?.toString()).toBe(
+        'READY',
+      );
+      expect(
+        composition.services.platformRegistry.lifecycleController.activeExecutionCount('AG-101'),
+      ).toBe(0);
+    } finally {
+      await composition.storage.close();
+    }
+  });
+
+  it('fails closed when AG-101 is paused by the platform operator', async () => {
+    const composition = await createProductionComposition({ env: inMemoryEnv() });
+    composition.services.platformRegistry.pauseAgent('AG-101');
+    try {
+      const result = await composition.services.executor.execute({
+        executionId: 'exec_platform_app-2',
+        stepId: 'step-1',
+        agentId: 'AG-101',
+        inputs: { 'request.input': 'design a freight marketplace' },
+        policy: {
+          timeoutMs: 5000,
+          retry: { maxRetries: 0, retryable: true, backoffMs: 1 },
+          failureBehavior: 'fail_fast' as never,
+          continueOnFailure: false,
+          stopOnFailure: true,
+          fallbackAllowed: false,
+          maxSteps: 1,
+          maxTotalExecutionTimeMs: 20000,
+        },
+        traceId: 'trace-platform-app-2',
+      });
+      expect(result.success).toBe(false);
+      expect(result.error?.code).toBe('AGENT_NOT_READY');
+      expect(
+        composition.services.platformRegistry.lifecycleController.activeExecutionCount('AG-101'),
+      ).toBe(0);
+    } finally {
+      await composition.storage.close();
+    }
+  });
+});

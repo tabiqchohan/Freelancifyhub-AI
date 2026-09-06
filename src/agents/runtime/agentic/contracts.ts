@@ -151,6 +151,10 @@ export interface AgenticLoopRunInput {
   readonly signal?: AbortSignal;
   /** Overall deadline for the whole operation (ms); falls back to config. */
   readonly timeoutMs?: number;
+  /** Tool allowlist (Sprint 19 §8). Absent = no platform restriction; present
+   * (including empty) restricts which tools the model may call. Tightened, never
+   * expanded, by the caller. Empty means deterministic/no tool access. */
+  readonly allowedTools?: readonly string[];
 }
 
 /** The final result of a bounded agentic loop session. */

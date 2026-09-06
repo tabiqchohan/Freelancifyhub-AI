@@ -1,0 +1,1331 @@
+You are working inside the existing `freelancify-ai` TypeScript/Node.js project.
+
+# SPRINT 19 — AGENT CAPABILITY FRAMEWORK & AGENT LIFECYCLE
+
+## ROLE
+
+Act as a senior staff-level TypeScript engineer, AI agent platform architect, and production runtime engineer.
+
+You are continuing the existing `freelancify-ai` architecture.
+
+Sprints 1–18 are already implemented.
+
+DO NOT redesign the project.
+
+DO NOT replace AG-001.
+
+DO NOT replace AG-002, AG-003, AG-004, or the Sprint 17 LLM layer.
+
+DO NOT bypass existing abstractions.
+
+DO NOT introduce a second orchestration system.
+
+DO NOT break existing behavior.
+
+Your job is to implement Sprint 19 as a clean Agent Platform layer on top of the existing architecture.
+
+---
+
+# 1. CURRENT BASELINE
+
+The project currently contains:
+
+## AG-001 Master Orchestrator
+
+Completed:
+
+* intent detection
+* context building
+* routing
+* execution planning
+* execution engine
+* aggregation
+* response handling
+* cancellation
+* timeout
+* security
+* runtime integration
+
+## AG-002 Memory Manager
+
+Completed:
+
+* memory lifecycle
+* retrieval
+* retention
+* access control
+* consolidation
+* durable Neon persistence
+* event log
+* audit trail
+* restore/replay
+* DSR
+* runtime integration
+
+## AG-003 Knowledge Manager
+
+Completed foundation:
+
+* documents
+* versions
+* chunks
+* lifecycle
+* validation
+* security
+* retrieval
+* durable storage
+* events
+* AG-001 context integration
+
+Advanced semantic/vector RAG remains deferred.
+
+## AG-004 Tool Manager
+
+Completed:
+
+* registry
+* validation
+* policies
+* authorization
+* executor
+* calculator
+* storage
+* events
+* metrics
+* security
+* runtime integration
+* durable Neon support
+
+## LLM / Reasoning
+
+Completed:
+
+* provider abstraction
+* Mock provider
+* HTTP provider
+* Disabled provider
+* provider factory
+* AIReasoningService
+* cancellation
+* timeout
+* retry
+* security boundaries
+* usage/latency
+* events/metrics
+
+## Sprint 18 Agentic Tool Calling
+
+Completed:
+
+* structured tool-call contracts
+* tool decision parsing
+* agentic loop
+* bounded turns
+* bounded tool calls
+* cancellation
+* timeout
+* AG-004 integration
+* authorization
+* tool-result sanitization
+* prompt-injection protection
+* loop state
+* observability
+* deterministic-agent preservation
+* extensive tests
+
+Current verified baseline:
+
+* 143 test files
+* 1623 tests passing
+* TypeScript clean
+* ESLint clean
+* build successful
+* Neon integration passing
+
+Sprint 18 is the stable baseline.
+
+---
+
+# 2. SPRINT 19 OBJECTIVE
+
+Build a formal **Agent Platform / Agent Capability Framework**.
+
+The system currently has runtime agents and execution infrastructure.
+
+Sprint 19 must establish a standardized contract describing:
+
+WHAT an agent IS
+WHAT an agent CAN DO
+WHAT tools an agent MAY USE
+WHAT execution modes it supports
+WHAT lifecycle state it is in
+WHAT permissions it requires
+WHAT limits apply
+HOW it is registered
+HOW it is activated/deactivated
+HOW the runtime safely resolves and executes it
+
+The target architecture becomes:
+
+```
+                AGENT PLATFORM
+
+                     │
+          ┌──────────┴──────────┐
+          │                     │
+   Agent Definition       Agent Lifecycle
+          │                     │
+   Capabilities            State Machine
+          │                     │
+   Permissions             Activation
+          │                     │
+   Tool Access             Deactivation
+          │                     │
+   Execution Modes         Health
+          │                     │
+          └──────────┬──────────┘
+                     │
+               Agent Registry
+                     │
+                AG-001 Runtime
+                     │
+         ┌───────────┼───────────┐
+         │           │           │
+       LLM         AG-002      AG-003
+    Reasoning      Memory     Knowledge
+                     │
+                   AG-004
+                    Tools
+```
+
+---
+
+# 3. CORE PRINCIPLE
+
+AG-001 remains the Master Orchestrator.
+
+Sprint 19 must NOT create another orchestrator.
+
+The Agent Platform provides:
+
+* identity
+* metadata
+* capabilities
+* lifecycle
+* permissions
+* execution policy
+* registration
+* discovery
+* validation
+
+AG-001 remains responsible for:
+
+* intent
+* routing
+* planning
+* execution coordination
+* response aggregation
+
+AG-004 remains responsible for actual tool execution.
+
+---
+
+# 4. AGENT DEFINITION CONTRACT
+
+Create a strongly typed agent definition.
+
+The exact location and naming should follow existing project conventions.
+
+Conceptually an agent definition should support:
+
+* agent ID
+* name
+* version
+* description
+* team
+* category
+* status
+* capabilities
+* execution modes
+* allowed tools
+* required permissions
+* limits
+* dependencies
+* configuration
+* health metadata
+
+Example conceptual structure:
+
+AgentDefinition
+
+{
+id,
+name,
+version,
+description,
+team,
+category,
+status,
+capabilities,
+executionModes,
+allowedTools,
+permissions,
+limits,
+dependencies
+}
+
+Use strict TypeScript.
+
+Use Zod for runtime validation.
+
+Do not use `any`.
+
+Do not leak provider-specific types.
+
+---
+
+# 5. AGENT IDENTITY
+
+Create a stable agent identity model.
+
+Agent IDs must be:
+
+* unique
+* deterministic
+* validated
+* suitable for registry lookup
+* safe for logs/events
+
+Support versioning without changing the stable identity unnecessarily.
+
+Do not use random IDs for built-in agents.
+
+Follow existing ID conventions if the project already has them.
+
+---
+
+# 6. AGENT CAPABILITIES
+
+Create a capability model.
+
+Capabilities describe WHAT an agent is allowed/designed to do.
+
+Examples:
+
+* reasoning
+* memory_read
+* memory_write
+* knowledge_read
+* knowledge_write
+* tool_use
+* multi_turn
+* agentic_execution
+* planning
+* external_action
+* client_operations
+* freelancer_operations
+* marketplace_operations
+* marketing_operations
+* admin_operations
+
+Do not grant capabilities automatically merely because an agent requests them.
+
+Capabilities must be part of the agent definition.
+
+Use explicit allowlists.
+
+---
+
+# 7. EXECUTION MODES
+
+Formalize supported execution modes.
+
+At minimum support the concepts already present in the project:
+
+* deterministic
+* reasoning
+* agentic
+
+If the existing architecture already has equivalent execution mode concepts, reuse them rather than duplicating them.
+
+Rules:
+
+### Deterministic
+
+No LLM call unless explicitly required by the agent definition.
+
+### Reasoning
+
+LLM reasoning may be used.
+
+### Agentic
+
+LLM reasoning plus bounded tool execution through Sprint 18.
+
+Invalid execution mode combinations must be rejected.
+
+---
+
+# 8. TOOL CAPABILITY BOUNDARY
+
+Agent definitions must explicitly declare allowed tools.
+
+Example:
+
+allowedTools:
+
+* calculator
+
+The model must NOT be able to expand this list.
+
+The user must NOT be able to expand this list.
+
+A tool call is valid only if:
+
+Agent Capability
++
+Request Authorization
++
+AG-004 Tool Policy
++
+Tool Schema
++
+Agentic Loop Limits
+
+all permit execution.
+
+This creates defense in depth.
+
+---
+
+# 9. PERMISSION MODEL
+
+Create a standardized permission abstraction for agents.
+
+Possible permissions include:
+
+* memory.read
+* memory.write
+* knowledge.read
+* knowledge.write
+* tool.execute
+* external.network
+* user.data.read
+* user.data.write
+* admin.operations
+
+Use the project's existing authorization/security conventions wherever possible.
+
+Do not create a completely separate security system.
+
+Agent permissions are declarative policy.
+
+They are NOT a replacement for AG-004 authorization or request actor authorization.
+
+---
+
+# 10. AGENT LIMITS
+
+Add agent-specific execution limits.
+
+Support concepts such as:
+
+* max execution time
+* max reasoning turns
+* max tool calls
+* max context size
+* max output size
+* max concurrent executions
+* optional cost/token budget
+
+These must integrate with existing Sprint 18 limits.
+
+Do not create conflicting duplicate limit systems.
+
+The most restrictive applicable limit should win.
+
+---
+
+# 11. LIFECYCLE STATE MACHINE
+
+Implement an explicit lifecycle state machine.
+
+At minimum:
+
+REGISTERED
+INITIALIZING
+READY
+RUNNING
+DRAINING
+PAUSED
+DISABLED
+FAILED
+TERMINATED
+
+If existing runtime states conflict, reconcile them carefully rather than duplicating states.
+
+Define valid transitions.
+
+Example:
+
+REGISTERED
+→ INITIALIZING
+→ READY
+→ RUNNING
+→ READY
+
+READY
+→ PAUSED
+
+PAUSED
+→ READY
+
+READY
+→ DRAINING
+→ DISABLED
+
+READY
+→ FAILED
+
+FAILED
+→ INITIALIZING
+
+DISABLED
+→ INITIALIZING
+
+Invalid transitions must be rejected.
+
+No direct arbitrary state mutation.
+
+---
+
+# 12. LIFECYCLE CONTROLLER
+
+Implement a lifecycle service/controller responsible for:
+
+* register
+* initialize
+* activate
+* pause
+* resume
+* drain
+* disable
+* recover
+* terminate
+* state inspection
+
+Lifecycle operations must be idempotent where appropriate.
+
+Examples:
+
+Calling `activate()` twice must not corrupt state.
+
+Calling `disable()` twice must not corrupt state.
+
+Invalid transitions must produce normalized errors.
+
+---
+
+# 13. RUNNING / DRAINING SEMANTICS
+
+Implement safe draining behavior.
+
+When an agent enters DRAINING:
+
+* new executions should be rejected or prevented
+* existing executions may finish
+* cancellation must remain functional
+* once active executions reach zero, the agent can become DISABLED
+
+Do not kill active requests abruptly unless explicitly required by the existing architecture.
+
+Track active execution count safely.
+
+Prevent negative active execution counts.
+
+---
+
+# 14. AGENT REGISTRY
+
+Formalize the existing runtime AgentRegistry.
+
+The registry should support:
+
+* register
+* unregister where safe
+* get
+* has
+* list
+* find by capability
+* find by team
+* find by status
+* find by execution mode
+* validate definition
+
+Avoid breaking the existing registry API.
+
+If the current AgentRegistry already exists, extend it rather than replacing it.
+
+---
+
+# 15. DUPLICATE REGISTRATION
+
+The registry must prevent unsafe duplicate registration.
+
+Rules:
+
+* same agent ID + same version → deterministic behavior
+* same agent ID + incompatible definition → reject
+* duplicate registration must not silently overwrite a running agent
+* lifecycle state must not unexpectedly reset
+
+Define normalized errors for conflicts.
+
+---
+
+# 16. AGENT DISCOVERY
+
+Provide controlled discovery APIs.
+
+Examples:
+
+findAgentsByCapability()
+findAgentsByTeam()
+findAgentsByExecutionMode()
+findReadyAgents()
+getAgentDefinition()
+
+Discovery must expose only safe metadata.
+
+Do not expose:
+
+* secrets
+* internal credentials
+* private prompts
+* hidden reasoning
+* sensitive configuration
+
+---
+
+# 17. AG-001 ROUTING INTEGRATION
+
+Integrate Agent Platform metadata into AG-001 routing.
+
+AG-001 should be able to determine:
+
+* whether an agent exists
+* whether it is READY
+* whether it supports the required capability
+* whether it supports the required execution mode
+* whether required tools are allowed
+* whether the request actor is authorized
+
+Routing must reject agents that are:
+
+* disabled
+* terminated
+* unavailable
+* missing required capabilities
+
+Do not allow routing to bypass lifecycle state.
+
+---
+
+# 18. AG-001 EXECUTION INTEGRATION
+
+Before execution:
+
+1. resolve agent
+2. validate lifecycle state
+3. validate capability
+4. validate execution mode
+5. validate permissions
+6. validate limits
+7. increment active execution count
+8. execute
+9. decrement active execution count
+10. maintain lifecycle consistency
+
+Use `try/finally` or equivalent guaranteed cleanup.
+
+A failed execution must not leave the agent permanently marked RUNNING.
+
+---
+
+# 19. SPRINT 18 INTEGRATION
+
+Sprint 19 must integrate cleanly with the existing agentic loop.
+
+For agentic agents:
+
+AgentDefinition
+↓
+Capability validation
+↓
+Lifecycle validation
+↓
+Permission validation
+↓
+Sprint 18 AgenticLoop
+↓
+LLM
+↓
+AG-004
+↓
+LLM
+↓
+Final response
+
+AgenticLoop must NOT be duplicated.
+
+Reuse Sprint 18 implementation.
+
+---
+
+# 20. DETERMINISTIC AGENTS
+
+Preserve deterministic behavior.
+
+If:
+
+executionMode = deterministic
+
+then:
+
+* no automatic LLM call
+* no automatic agentic loop
+* no automatic tool access unless explicitly defined
+* existing deterministic agents continue to behave exactly as before
+
+Calculator behavior must remain unchanged.
+
+---
+
+# 21. AGENT CONFIGURATION
+
+Create validated configuration where appropriate.
+
+Support safe agent configuration without allowing runtime arbitrary mutation of:
+
+* permissions
+* capabilities
+* allowed tools
+* security boundaries
+
+Configuration changes should be explicit and validated.
+
+Do not allow model-generated configuration changes.
+
+Do not allow user input to directly mutate agent definitions.
+
+---
+
+# 22. DEPENDENCIES
+
+Allow agents to declare dependencies where useful.
+
+Examples:
+
+requires:
+
+* AG-002
+* AG-003
+* AG-004
+
+Validate required dependencies during initialization/readiness.
+
+Do not automatically initialize arbitrary dependencies recursively without controlled lifecycle semantics.
+
+Avoid circular dependency problems.
+
+Detect cycles if dependency graphs are introduced.
+
+---
+
+# 23. HEALTH / READINESS
+
+Integrate agent lifecycle into runtime health.
+
+Expose safe information such as:
+
+* registered agent count
+* ready agent count
+* running agent count
+* disabled agent count
+* failed agent count
+
+Do not expose secrets.
+
+Do not make health checks invoke LLMs.
+
+Do not execute tools during health checks.
+
+---
+
+# 24. EVENTS
+
+Extend existing event architecture.
+
+Emit safe lifecycle events:
+
+* agent.registered
+* agent.initializing
+* agent.ready
+* agent.started
+* agent.paused
+* agent.resumed
+* agent.draining
+* agent.disabled
+* agent.failed
+* agent.recovered
+* agent.terminated
+
+Also emit safe capability/policy rejection events where useful.
+
+Event metadata may include:
+
+* agent ID
+* version
+* lifecycle state
+* capability
+* execution mode
+* correlation ID
+* timestamp
+* reason code
+
+Never include:
+
+* API keys
+* passwords
+* JWTs
+* database URLs
+* private prompts
+* chain-of-thought
+* secrets
+
+---
+
+# 25. METRICS
+
+Add agent-platform metrics.
+
+Track:
+
+* registered agents
+* ready agents
+* running agents
+* failed agents
+* lifecycle transitions
+* rejected executions
+* capability denials
+* permission denials
+* average execution count
+* active executions
+
+Reuse existing metrics conventions.
+
+Do not create duplicate global observability infrastructure.
+
+---
+
+# 26. CONCURRENCY
+
+Lifecycle and registry operations must be safe under concurrent requests.
+
+Protect against:
+
+* double activation
+* double disable
+* negative active executions
+* race during draining
+* registration races
+* state corruption
+* unregister while executing
+
+Use the simplest correct mechanism compatible with the Node.js runtime.
+
+Do not introduce unnecessary distributed locking.
+
+---
+
+# 27. SECURITY REQUIREMENTS
+
+The Agent Platform is a security boundary.
+
+Never trust:
+
+* user-supplied agent IDs
+* model-generated agent IDs
+* model-generated capabilities
+* model-generated permissions
+* model-generated tool lists
+* tool output
+* knowledge content
+* memory content
+
+All agent definitions must be server-controlled and validated.
+
+The model may REQUEST an action.
+
+It may never GRANT ITSELF a capability.
+
+---
+
+# 28. ERROR MODEL
+
+Create normalized errors following existing conventions.
+
+Examples:
+
+* AGENT_NOT_FOUND
+* AGENT_ALREADY_REGISTERED
+* AGENT_DEFINITION_INVALID
+* AGENT_VERSION_CONFLICT
+* AGENT_NOT_READY
+* AGENT_DISABLED
+* AGENT_TERMINATED
+* AGENT_LIFECYCLE_INVALID
+* AGENT_CAPABILITY_DENIED
+* AGENT_PERMISSION_DENIED
+* AGENT_EXECUTION_LIMIT_REACHED
+* AGENT_DEPENDENCY_UNAVAILABLE
+* AGENT_DEPENDENCY_CYCLE
+
+Use safe public messages and internal causes.
+
+Do not leak internal implementation details.
+
+---
+
+# 29. TESTING
+
+Sprint 19 must have extensive tests.
+
+## Agent Definition
+
+Test:
+
+* valid definition
+* invalid ID
+* invalid version
+* missing required fields
+* invalid capability
+* invalid execution mode
+* invalid permission
+* invalid limits
+* invalid tool reference
+
+## Registry
+
+Test:
+
+* register
+* get
+* has
+* list
+* duplicate registration
+* version conflict
+* unregister
+* capability discovery
+* team discovery
+* execution-mode discovery
+* ready-agent discovery
+
+## Lifecycle
+
+Test every valid transition.
+
+Test every important invalid transition.
+
+Test:
+
+* initialization
+* activation
+* pause
+* resume
+* draining
+* disable
+* recovery
+* termination
+* idempotency
+
+## Concurrency
+
+Test:
+
+* simultaneous activate
+* simultaneous disable
+* concurrent execution count
+* draining while executions are active
+* completion during draining
+* failed execution cleanup
+
+## Capabilities
+
+Test:
+
+* allowed capability
+* missing capability
+* denied capability
+* multiple capabilities
+
+## Permissions
+
+Test:
+
+* allowed permission
+* denied permission
+* tool permission
+* memory permission
+* knowledge permission
+
+## Limits
+
+Test:
+
+* agent limit
+* request limit
+* Sprint 18 limit
+* most restrictive limit wins
+
+## AG-001 Integration
+
+Test:
+
+* routing to READY agent
+* routing rejects DISABLED agent
+* routing rejects FAILED agent
+* routing rejects missing capability
+* routing rejects invalid mode
+* execution lifecycle cleanup
+* execution failure cleanup
+
+## Sprint 18 Integration
+
+Test:
+
+* agentic agent uses existing AgenticLoop
+* tool call still goes through AG-004
+* lifecycle remains correct after tool execution
+* lifecycle remains correct after cancellation
+* lifecycle remains correct after timeout
+
+## Deterministic Regression
+
+Test:
+
+* deterministic agent does not invoke LLM
+* deterministic calculator still works
+
+## Security
+
+Test:
+
+* model cannot grant itself capability
+* model cannot grant itself permission
+* model cannot add tools
+* user cannot mutate agent definition
+* disabled agent cannot execute
+* terminated agent cannot execute
+
+## Health / Events / Metrics
+
+Test:
+
+* correct counts
+* lifecycle events
+* safe metadata
+* no secrets
+
+ALL EXISTING TESTS MUST CONTINUE PASSING.
+
+---
+
+# 30. DATABASE REQUIREMENT
+
+Do NOT introduce database persistence for agent definitions unless the existing architecture clearly requires it.
+
+Prefer static/server-controlled definitions for this sprint.
+
+If persistence is genuinely required by existing architecture, inspect the existing storage patterns first and implement it consistently.
+
+Do not create unnecessary migrations.
+
+---
+
+# 31. API REQUIREMENT
+
+Do not create public administrative APIs merely for testing.
+
+If existing internal runtime APIs can expose safe agent status, extend them carefully.
+
+Never expose an endpoint allowing arbitrary users to:
+
+* create agents
+* modify capabilities
+* modify permissions
+* modify allowed tools
+* activate privileged agents
+
+without an established authorization model.
+
+---
+
+# 32. DOCUMENTATION
+
+Create:
+
+docs/sprint19-agent-capability-lifecycle-v1.md
+
+Follow the style of previous sprint documentation.
+
+Include:
+
+1. Objective
+2. Existing architecture
+3. Agent Definition
+4. Agent Identity
+5. Capability Model
+6. Permission Model
+7. Execution Modes
+8. Tool Access
+9. Agent Limits
+10. Lifecycle State Machine
+11. Lifecycle Controller
+12. Agent Registry
+13. AG-001 Integration
+14. Sprint 18 Integration
+15. Security Model
+16. Events
+17. Metrics
+18. Health/Readiness
+19. Testing
+20. Deferred Work
+
+Include architecture diagrams.
+
+---
+
+# 33. DEFERRED WORK
+
+Do NOT implement these in Sprint 19:
+
+* Client AI Team
+* Freelancer AI Team
+* Marketplace AI Team
+* Marketing AI Team
+* Admin AI Team
+* multi-agent coordination
+* advanced RAG
+* recommendation engine
+* personalization engine
+* streaming
+* provider failover
+* persistent AI metrics
+* advanced evaluation framework
+* human approval workflows
+* distributed workers
+* autoscaling
+
+Those belong to later roadmap stages.
+
+Sprint 19 is strictly:
+
+AGENT DEFINITION
++
+CAPABILITIES
++
+PERMISSIONS
++
+EXECUTION MODES
++
+LIFECYCLE
++
+REGISTRY
++
+AG-001 INTEGRATION
+
+---
+
+# 34. IMPLEMENTATION PROCESS
+
+Before writing code:
+
+1. Inspect repository structure.
+2. Inspect current AgentRegistry.
+3. Inspect RuntimeAgent.
+4. Inspect ProductionAgentExecutor.
+5. Inspect AG-001 routing/execution integration.
+6. Inspect Sprint 18 AgenticLoop.
+7. Inspect existing security/policy abstractions.
+8. Inspect existing events/metrics.
+9. Inspect existing tests.
+10. Identify compatibility constraints.
+
+Then implement.
+
+Do not ask me to provide files that already exist in the repository.
+
+Do not rewrite working architecture unnecessarily.
+
+Reuse existing abstractions wherever possible.
+
+---
+
+# 35. REQUIRED FINAL VERIFICATION
+
+Run:
+
+* `tsc --noEmit`
+* ESLint
+* Vitest full suite
+* `npm run build`
+* runtime smoke tests
+
+Verify:
+
+1. All existing tests pass.
+2. All Sprint 19 tests pass.
+3. TypeScript has 0 errors.
+4. ESLint has 0 errors.
+5. Build succeeds.
+6. Runtime starts.
+7. `/healthz` remains healthy.
+8. `/health` remains healthy.
+9. `/api/llm/status` remains healthy.
+10. Deterministic calculator still works.
+11. Existing Sprint 18 agentic loop still works.
+12. READY agents execute.
+13. DISABLED agents cannot execute.
+14. PAUSED agents cannot start new execution.
+15. DRAINING agents reject new execution but allow existing execution to finish.
+16. TERMINATED agents cannot execute.
+17. Capability checks work.
+18. Permission checks work.
+19. Tool allowlists remain enforced.
+20. Cancellation works.
+21. Timeout works.
+22. No secrets appear in logs/events.
+23. No database behavior regresses.
+
+---
+
+# 36. FINAL REPORT
+
+After implementation provide:
+
+## Sprint 19 Status
+
+PASS / BLOCKED
+
+## Summary
+
+What was implemented.
+
+## Agent Platform Architecture
+
+Explain the final architecture.
+
+## Agent Definition
+
+List the final contract.
+
+## Capability System
+
+Explain capabilities.
+
+## Permission System
+
+Explain authorization boundaries.
+
+## Lifecycle
+
+Show state machine.
+
+## Registry
+
+Explain discovery and registration.
+
+## AG-001 Integration
+
+Explain routing/execution integration.
+
+## Sprint 18 Integration
+
+Explain how AgenticLoop remains reused.
+
+## Security
+
+Explain enforcement boundaries.
+
+## Events / Metrics
+
+List implemented telemetry.
+
+## Files Added
+
+List all files.
+
+## Files Modified
+
+List all files.
+
+## Tests
+
+Report:
+
+* test files
+* total tests
+* new tests
+* passed
+* failed
+
+## Verification
+
+* typecheck
+* lint
+* build
+* runtime
+* health
+* smoke tests
+
+## Database
+
+State whether migrations were needed.
+
+## Deferred
+
+List intentionally deferred roadmap items.
+
+## Git
+
+DO NOT commit or push automatically.
+
+---
+
+# CRITICAL RULES
+
+1. AG-001 remains the Master Orchestrator.
+2. Do not create another orchestrator.
+3. AG-004 remains the tool execution authority.
+4. Never allow the LLM to grant itself capabilities.
+5. Never allow the LLM to grant itself permissions.
+6. Never allow the LLM to modify allowed tools.
+7. Never bypass AG-004 policy.
+8. Never bypass request authorization.
+9. Never execute a non-READY agent.
+10. Never create infinite lifecycle transitions.
+11. Never leave active execution counts corrupted.
+12. Preserve deterministic agents.
+13. Reuse Sprint 18 AgenticLoop.
+14. Do not expose chain-of-thought.
+15. Do not log secrets.
+16. Do not introduce unnecessary database migrations.
+17. Do not implement future business AI teams in this sprint.
+18. Maintain backward compatibility.
+19. Run the complete verification suite before declaring completion.
+20. Do not commit or push unless explicitly instructed.
+
+START BY INSPECTING THE EXISTING REPOSITORY.
+
+Then implement Sprint 19 completely.

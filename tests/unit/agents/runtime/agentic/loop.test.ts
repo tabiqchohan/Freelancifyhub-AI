@@ -259,6 +259,50 @@ describe('agentic loop service (Sprint 18)', () => {
     expect(result.reasoningCalls).toBe(2);
   });
 
+  it('denies a tool call not on the platform allowlist (Sprint 19)', async () => {
+    const reasoning = new FakeReasoning()
+      .then(
+        JSON.stringify({ type: 'TOOL_CALL', tool: 'calculator', arguments: { expression: '1+1' } }),
+      )
+      .then(JSON.stringify({ type: 'FINAL_RESPONSE', response: 'Nothing to compute.' }));
+    const tools = new FakeCoordinator();
+    const { loop } = makeLoop({ reasoning, tools });
+
+    const result = await loop.run({ ...runInput(), allowedTools: [] });
+    expect(result.status).toBe(AgenticLoopStatus.Completed);
+    expect(result.rejections).toHaveLength(1);
+    expect(result.rejections[0]?.code).toBe('TOOL_NOT_ALLOWED');
+    expect(tools.executeCalls).toEqual([]);
+    expect(result.reasoningCalls).toBe(2);
+  });
+
+  it('executes a tool that is on the platform allowlist (Sprint 19)', async () => {
+    const reasoning = new FakeReasoning()
+      .then(
+        JSON.stringify({ type: 'TOOL_CALL', tool: 'calculator', arguments: { expression: '1+1' } }),
+      )
+      .then(JSON.stringify({ type: 'FINAL_RESPONSE', response: 'The answer is 42.' }));
+    const tools = new FakeCoordinator();
+    const { loop } = makeLoop({ reasoning, tools });
+
+    const result = await loop.run({ ...runInput(), allowedTools: ['calculator'] });
+    expect(result.status).toBe(AgenticLoopStatus.Completed);
+    expect(tools.executeCalls).toEqual(['calculator']);
+    expect(result.rejections).toHaveLength(0);
+  });
+
+  it('only exposes allowlisted tools to the model (Sprint 19)', async () => {
+    const reasoning = new FakeReasoning().then(
+      JSON.stringify({ type: 'FINAL_RESPONSE', response: 'ok' }),
+    );
+    const tools = new FakeCoordinator();
+    const { loop } = makeLoop({ reasoning, tools });
+
+    await loop.run({ ...runInput(), allowedTools: ['other-tool'] });
+    const lastCall = reasoning.calls[reasoning.calls.length - 1];
+    expect(lastCall?.request.context?.availableTools).toEqual([]);
+  });
+
   it('feeds an authorization-failed execution back as a REJECTED bounded result', async () => {
     const reasoning = new FakeReasoning()
       .then(JSON.stringify({ type: 'TOOL_CALL', tool: 'calculator', arguments: {} }))

@@ -27,6 +27,7 @@ import {
 import type { ProductionComposition } from './composition-root.js';
 import type { RequestActorBinding } from './request-actors.js';
 import { agenticLimitSummary } from '../agents/runtime/agentic/config.js';
+import type { AgentPlatformStatusSnapshot } from '../agents/agent-platform/index.js';
 
 /** Options for constructing the production HTTP runtime (Phase 7). */
 export interface ProductionRuntimeOptions {
@@ -45,6 +46,8 @@ export interface HealthPayload {
   readonly tools: { healthy: boolean };
   /** LLM config status (Sprint 17). Never performs a live connectivity probe. */
   readonly llm: { enabled: boolean; configured: boolean; provider: string; model: string };
+  /** Sprint 19 agent platform status (safe aggregate; never secrets). */
+  readonly platform: AgentPlatformStatusSnapshot;
 }
 
 /** Default health payload; never surfaces secrets or connection strings. */
@@ -53,6 +56,7 @@ export async function defaultHealth(
   checkKnowledge?: ProductionComposition['health']['probeKnowledgeStorage'],
   checkTools?: ProductionComposition['health']['probeToolStorage'],
   llmInfo?: () => { enabled: boolean; configured: boolean; provider: string; model: string },
+  platformInfo?: () => AgentPlatformStatusSnapshot,
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
   const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
@@ -65,6 +69,18 @@ export async function defaultHealth(
     knowledge: { healthy: knowledgeHealth.healthy },
     tools: { healthy: toolsHealth.healthy },
     llm: llmInfo?.() ?? { enabled: false, configured: false, provider: 'disabled', model: '' },
+    platform: platformInfo?.() ?? {
+      registered: 0,
+      ready: 0,
+      running: 0,
+      paused: 0,
+      draining: 0,
+      disabled: 0,
+      failed: 0,
+      terminated: 0,
+      activeExecutions: 0,
+      healthy: false,
+    },
   };
 }
 
@@ -142,6 +158,7 @@ export class ProductionRuntime {
           options.composition.health.probeKnowledgeStorage,
           options.composition.health.probeToolStorage,
           () => options.composition.services.aiReasoning.providerInfo(),
+          () => options.composition.services.platformRegistry.snapshot(),
         ));
   }
 

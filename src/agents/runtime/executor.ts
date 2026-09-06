@@ -33,6 +33,9 @@ import { AgenticLoopStatus } from './agentic/contracts.js';
 import type { AgenticLoopService } from './agentic/loop.js';
 import type { ToolActor } from '../ag-004-tool-manager/index.js';
 import { ToolActorGroup } from '../ag-004-tool-manager/index.js';
+import type { AgentPlatformGateway } from '../agent-platform/gateway.js';
+import { AgentExecutionMode } from '../agent-platform/types.js';
+import type { AgentExecutionLease } from '../agent-platform/types.js';
 
 /** Builds the AG-002 memory load input for a given execution request. */
 export type MemoryContextInputBuilder = (
@@ -53,6 +56,10 @@ export interface ProductionAgentExecutorOptions {
   readonly agenticLoop?: AgenticLoopService;
   /** Builds the AG-004 actor for a request's agentic execution. */
   readonly agenticToolActor?: AgenticToolActorBuilder;
+  /** Optional Sprint 19 platform gate. When present, platform-managed agents
+   * must pass `beginExecution` before any work; the lease is closed in a
+   * finally block regardless of outcome. Unmanaged agents are untouched. */
+  readonly agentPlatform?: AgentPlatformGateway;
 }
 
 /** A safe actor used to execute agentic tool calls through AG-004. */
@@ -116,6 +123,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
   private readonly reasoningService: AIReasoningServiceContract | undefined;
   private readonly agenticLoop: AgenticLoopService | undefined;
   private readonly agenticToolActor: AgenticToolActorBuilder | undefined;
+  private readonly agentPlatform: AgentPlatformGateway | undefined;
   private readonly attemptCounters = new Map<string, number>();
   private readonly signals = new Map<string, CancellationSignalImpl>();
 
@@ -129,6 +137,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
     this.reasoningService = options.reasoningService;
     this.agenticLoop = options.agenticLoop;
     this.agenticToolActor = options.agenticToolActor;
+    this.agentPlatform = options.agentPlatform;
   }
 
   canExecute(agentId: AgentId): boolean {
@@ -199,118 +208,171 @@ export class ProductionAgentExecutor implements AgentExecutor {
       );
     }
 
-    const memory = await this.provisionMemory(request, {
-      executionId: request.executionId,
-      stepId: request.stepId,
-      agentId,
-      traceId,
-      requestId,
-    });
-
-    const timeoutMs = this.timeoutFor(request);
-
-    const reasoning = await this.resolveReasoning(request, agent, {
-      executionId: request.executionId,
-      stepId: request.stepId,
-      agentId,
-      traceId,
-      requestId,
-      memory,
-      signal,
-    });
-
-    if (reasoning.failed) {
-      this.emitEvent(RuntimeAgentEventTypeValue.ExecutionFailed, {
+    // --- Sprint 19 platform gate (managed agents only) ----------------------
+    const startedAtMs = performance.now();
+    let lease: AgentExecutionLease | undefined;
+    if (this.agentPlatform !== undefined && this.agentPlatform.isPlatformManaged(agentId)) {
+      const gate = this.agentPlatform.beginExecution({
         executionId: request.executionId,
-        stepId: request.stepId,
-        agentId,
-        traceId,
         requestId,
-        occurredAt: new Date().toISOString(),
-        errorCode: reasoning.errorCode,
-        metadata: { attempt, success: false, stage: 'reasoning' },
+        traceId,
+        correlationId: requestId,
+        agentId,
+        agentVersion: agent.configuration.version,
+        executionMode: this.executionModeFor(agent),
+        capabilities: agent.configuration.capabilities.map((capability) => capability.id),
+        permissions: agent.configuration.permissions ?? [],
       });
-      this.releaseSignal(request.executionId);
-      return this.failure(
-        {
-          code: reasoning.errorCode ?? 'REASONING_UNAVAILABLE',
-          message: reasoning.errorMessage ?? 'AI reasoning unavailable',
-          retryable: reasoning.retryable ?? false,
-        },
-        startedAt,
-        { executionId: request.executionId, traceId, requestId },
-      );
+
+      if (gate.failure !== undefined) {
+        this.logger.warn(
+          { executionId: request.executionId, agentId, reason: gate.failure.code },
+          'platform gate denied execution',
+        );
+        this.emitEvent(RuntimeAgentEventTypeValue.ExecutionFailed, {
+          executionId: request.executionId,
+          stepId: request.stepId,
+          agentId,
+          traceId,
+          requestId,
+          occurredAt: new Date().toISOString(),
+          errorCode: gate.failure.code,
+          metadata: { attempt, success: false, stage: 'platform-gate' },
+        });
+        this.releaseSignal(request.executionId);
+        return this.failure(
+          {
+            code: gate.failure.code,
+            message: gate.failure.message,
+            retryable: gate.failure.retryable,
+          },
+          startedAt,
+          { executionId: request.executionId, traceId, requestId },
+        );
+      }
+      lease = gate.lease;
     }
 
-    const context = {
-      agentId,
-      executionId: request.executionId,
-      stepId: request.stepId,
-      traceId,
-      requestId,
-      attempt,
-      startedAt,
-      timeoutMs,
-      inputs: request.inputs,
-      memory,
-      reasoning: reasoning.reasoning,
-      signal,
-    };
-
-    this.emitEvent(RuntimeAgentEventTypeValue.ExecutionStarted, {
-      executionId: request.executionId,
-      stepId: request.stepId,
-      agentId,
-      traceId,
-      requestId,
-      occurredAt: startedAt,
-      metadata: { attempt, agentVersion: agent.configuration.version, provider: 'runtime' },
-    });
-
-    let agentResult: RuntimeAgentExecutionResult;
     try {
-      agentResult = await this.guard(
-        Promise.resolve().then(() => agent.execute(context)),
-        signal,
-        Math.min(timeoutMs > 0 ? timeoutMs : Infinity, this.defaultTimeoutMs),
-      );
-    } catch (error) {
-      agentResult = {
-        success: false,
-        error: toExecutionError(error),
-      };
-    }
-
-    const completedAt = new Date().toISOString();
-    const durationMs = Math.max(0, new Date(completedAt).getTime() - new Date(startedAt).getTime());
-    const result = this.wrapAgentResult(
-      agentResult,
-      startedAt,
-      completedAt,
-      durationMs,
-      traceId,
-      requestId,
-      attempt,
-    );
-
-    this.emitEvent(
-      result.success
-        ? RuntimeAgentEventTypeValue.ExecutionCompleted
-        : RuntimeAgentEventTypeValue.ExecutionFailed,
-      {
+      const memory = await this.provisionMemory(request, {
         executionId: request.executionId,
         stepId: request.stepId,
         agentId,
         traceId,
         requestId,
-        occurredAt: completedAt,
-        errorCode: result.success ? undefined : result.error?.code,
-        metadata: { attempt, success: result.success },
-      },
-    );
+      });
 
-    this.releaseSignal(request.executionId);
-    return result;
+      const timeoutMs = this.timeoutFor(request);
+
+      const reasoning = await this.resolveReasoning(request, agent, {
+        executionId: request.executionId,
+        stepId: request.stepId,
+        agentId,
+        traceId,
+        requestId,
+        memory,
+        signal,
+        allowedTools: lease?.allowedTools,
+      });
+
+      if (reasoning.failed) {
+        this.emitEvent(RuntimeAgentEventTypeValue.ExecutionFailed, {
+          executionId: request.executionId,
+          stepId: request.stepId,
+          agentId,
+          traceId,
+          requestId,
+          occurredAt: new Date().toISOString(),
+          errorCode: reasoning.errorCode,
+          metadata: { attempt, success: false, stage: 'reasoning' },
+        });
+        this.releaseSignal(request.executionId);
+        return this.failure(
+          {
+            code: reasoning.errorCode ?? 'REASONING_UNAVAILABLE',
+            message: reasoning.errorMessage ?? 'AI reasoning unavailable',
+            retryable: reasoning.retryable ?? false,
+          },
+          startedAt,
+          { executionId: request.executionId, traceId, requestId },
+        );
+      }
+
+      const context = {
+        agentId,
+        executionId: request.executionId,
+        stepId: request.stepId,
+        traceId,
+        requestId,
+        attempt,
+        startedAt,
+        timeoutMs,
+        inputs: request.inputs,
+        memory,
+        reasoning: reasoning.reasoning,
+        signal,
+      };
+
+      this.emitEvent(RuntimeAgentEventTypeValue.ExecutionStarted, {
+        executionId: request.executionId,
+        stepId: request.stepId,
+        agentId,
+        traceId,
+        requestId,
+        occurredAt: startedAt,
+        metadata: { attempt, agentVersion: agent.configuration.version, provider: 'runtime' },
+      });
+
+      let agentResult: RuntimeAgentExecutionResult;
+      try {
+        agentResult = await this.guard(
+          Promise.resolve().then(() => agent.execute(context)),
+          signal,
+          Math.min(timeoutMs > 0 ? timeoutMs : Infinity, this.defaultTimeoutMs),
+        );
+      } catch (error) {
+        agentResult = {
+          success: false,
+          error: toExecutionError(error),
+        };
+      }
+
+      const completedAt = new Date().toISOString();
+      const durationMs = Math.max(
+        0,
+        new Date(completedAt).getTime() - new Date(startedAt).getTime(),
+      );
+      const result = this.wrapAgentResult(
+        agentResult,
+        startedAt,
+        completedAt,
+        durationMs,
+        traceId,
+        requestId,
+        attempt,
+      );
+
+      this.emitEvent(
+        result.success
+          ? RuntimeAgentEventTypeValue.ExecutionCompleted
+          : RuntimeAgentEventTypeValue.ExecutionFailed,
+        {
+          executionId: request.executionId,
+          stepId: request.stepId,
+          agentId,
+          traceId,
+          requestId,
+          occurredAt: completedAt,
+          errorCode: result.success ? undefined : result.error?.code,
+          metadata: { attempt, success: result.success },
+        },
+      );
+
+      this.releaseSignal(request.executionId);
+      return result;
+    } finally {
+      this.closeGate(lease, agentId, request.executionId, requestId, traceId, startedAtMs);
+    }
   }
 
   private async resolveReasoning(
@@ -324,6 +386,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
       requestId: string;
       memory: readonly RuntimeMemoryItem[];
       signal: CancellationSignal;
+      allowedTools?: readonly string[];
     },
   ): Promise<ReasoningOutcome> {
     const requiresReasoning = agent.configuration.capabilities.some(
@@ -410,6 +473,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
       requestId: string;
       memory: readonly RuntimeMemoryItem[];
       signal: CancellationSignal;
+      allowedTools?: readonly string[];
     },
   ): Promise<ReasoningOutcome> {
     if (this.agenticLoop === undefined || !this.agenticLoop.isEnabled()) {
@@ -439,6 +503,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
       traceId: info.traceId,
       signal: toAbortSignal(info.signal),
       timeoutMs: this.timeoutFor(request),
+      allowedTools: info.allowedTools,
     });
 
     const agentic = {
@@ -692,6 +757,48 @@ export class ProductionAgentExecutor implements AgentExecutor {
       agent.availability.available &&
       agent.configuration.status !== AgentStatus.Retired
     );
+  }
+
+  /** Effective Sprint 19 execution mode mirroring resolveReasoning precedence. */
+  private executionModeFor(
+    agent: NonNullable<Awaited<ReturnType<AgentRegistry['get']>>>,
+  ): AgentExecutionMode {
+    if (
+      agent.configuration.capabilities.some(
+        (capability) => capability.id === LLM_AGENTIC_CAPABILITY,
+      )
+    ) {
+      return AgentExecutionMode.Agentic;
+    }
+    if (
+      agent.configuration.capabilities.some(
+        (capability) => capability.id === LLM_REASONING_CAPABILITY,
+      )
+    ) {
+      return AgentExecutionMode.Reasoning;
+    }
+    return AgentExecutionMode.Deterministic;
+  }
+
+  /** Closes a platform gate lease when one was opened (idempotent, finally-safe). */
+  private closeGate(
+    lease: AgentExecutionLease | undefined,
+    agentId: AgentId,
+    executionId: string,
+    requestId: string,
+    traceId: string,
+    startedAtMs: number,
+  ): void {
+    if (lease === undefined || this.agentPlatform === undefined) {
+      return;
+    }
+    this.agentPlatform.endExecution({
+      agentId,
+      executionId,
+      requestId,
+      traceId,
+      startedAtMs,
+    });
   }
 
   private timeoutFor(request: AgentExecutionRequest): number {
