@@ -81,6 +81,14 @@ import {
   withPlatformAwareness,
 } from '../agents/agent-platform/index.js';
 import type { AgentDefinition } from '../agents/agent-platform/index.js';
+import {
+  AgentSelector,
+  CoordinationCoordinator,
+  CoordinationEventLog,
+  CoordinationMetrics,
+  CoordinationPlanner,
+  RuntimeAgentInvocationAdapter,
+} from '../agents/agent-platform/coordination/index.js';
 import { RoutingRegistry } from '../agents/ag-001-master-orchestrator/routing/registry/index.js';
 import { LLM_AGENTIC_CAPABILITY, LLM_REASONING_CAPABILITY } from '../llm/constants.js';
 
@@ -151,6 +159,14 @@ export interface ProductionComposition {
     readonly platformMetrics: AgentPlatformMetrics;
     /** Sprint 19 platform event trail. */
     readonly platformEventLog: AgentPlatformEventLog;
+    /** Sprint 20 multi-agent coordination coordinator. */
+    readonly coordination: CoordinationCoordinator;
+    /** Sprint 20 coordination planner (decomposition + agent selection). */
+    readonly coordinationPlanner: CoordinationPlanner;
+    /** Sprint 20 coordination event trail. */
+    readonly coordinationEventLog: CoordinationEventLog;
+    /** Sprint 20 coordination metrics. */
+    readonly coordinationMetrics: CoordinationMetrics;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -556,6 +572,25 @@ export async function createProductionComposition(
 
   const executorRegistry: ExecutorRegistry = new ProductionExecutorRegistry(executor);
 
+  // ---- Sprint 20 multi-agent coordination (reusable infrastructure) --------
+  // Sits strictly ABOVE the Sprint 19 platform; the coordinator drives agents
+  // ONLY through the runtime executor (which enforces the platform gate).
+  const coordinationSelector = new AgentSelector({
+    registry: platformRegistry,
+    gateway: platformGateway,
+    executorRegistry,
+  });
+  const coordinationPlanner = new CoordinationPlanner(coordinationSelector);
+  const coordinationEventLog = new CoordinationEventLog();
+  const coordinationMetrics = new CoordinationMetrics();
+  const coordinationInvocation = new RuntimeAgentInvocationAdapter({ executorRegistry });
+  const coordination = new CoordinationCoordinator({
+    planner: coordinationPlanner,
+    invocation: coordinationInvocation,
+    eventLog: coordinationEventLog,
+    metrics: coordinationMetrics,
+  });
+
   const executionEngine = new ExecutionEngine({
     registry: executorRegistry,
     config: executionConfig,
@@ -628,6 +663,10 @@ export async function createProductionComposition(
       platformRegistry,
       platformMetrics,
       platformEventLog,
+      coordination,
+      coordinationPlanner,
+      coordinationEventLog,
+      coordinationMetrics,
       requestActors,
     },
     storage: {

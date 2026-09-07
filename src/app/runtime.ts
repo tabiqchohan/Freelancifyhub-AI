@@ -48,6 +48,21 @@ export interface HealthPayload {
   readonly llm: { enabled: boolean; configured: boolean; provider: string; model: string };
   /** Sprint 19 agent platform status (safe aggregate; never secrets). */
   readonly platform: AgentPlatformStatusSnapshot;
+  /** Sprint 20 multi-agent coordination status (safe aggregate; never secrets). */
+  readonly coordination: CoordinationHealthSnapshot;
+}
+
+/** Safe coordination health snapshot for the runtime health block. */
+export interface CoordinationHealthSnapshot {
+  readonly healthy: boolean;
+  readonly activeCoordinations: number;
+  readonly activeTaskCount: number;
+  readonly eventCount: number;
+}
+
+/** Default coordination health snapshot when the layer is absent. */
+export function defaultCoordinationHealth(): CoordinationHealthSnapshot {
+  return { healthy: true, activeCoordinations: 0, activeTaskCount: 0, eventCount: 0 };
 }
 
 /** Default health payload; never surfaces secrets or connection strings. */
@@ -57,6 +72,7 @@ export async function defaultHealth(
   checkTools?: ProductionComposition['health']['probeToolStorage'],
   llmInfo?: () => { enabled: boolean; configured: boolean; provider: string; model: string },
   platformInfo?: () => AgentPlatformStatusSnapshot,
+  coordinationInfo?: () => CoordinationHealthSnapshot,
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
   const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
@@ -81,6 +97,7 @@ export async function defaultHealth(
       activeExecutions: 0,
       healthy: false,
     },
+    coordination: coordinationInfo?.() ?? defaultCoordinationHealth(),
   };
 }
 
@@ -159,6 +176,15 @@ export class ProductionRuntime {
           options.composition.health.probeToolStorage,
           () => options.composition.services.aiReasoning.providerInfo(),
           () => options.composition.services.platformRegistry.snapshot(),
+          () => {
+            const status = options.composition.services.coordination.status();
+            return {
+              healthy: status.healthy,
+              activeCoordinations: status.activeCoordinations,
+              activeTaskCount: status.activeTaskCount,
+              eventCount: status.eventCount,
+            };
+          },
         ));
   }
 
@@ -220,6 +246,10 @@ export class ProductionRuntime {
       return this.handleLlmStatus(res);
     }
 
+    if (url.pathname === '/api/coordination/status') {
+      return this.handleCoordinationStatus(res);
+    }
+
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
   }
 
@@ -245,6 +275,24 @@ export class ProductionRuntime {
         latest: eventLog.latest(10),
       },
       metrics: this.composition.services.llmMetrics.snapshot(),
+    });
+  }
+
+  /**
+   * Sprint 20 coordination status endpoint. Exposes coordinator health,
+   * active/passed counts, and event-log metrics. Never exposes agent prompts,
+   * results, or secrets.
+   */
+  private async handleCoordinationStatus(res: ServerResponse): Promise<void> {
+    const coordination = this.composition.services.coordination;
+    const eventLog = this.composition.services.coordinationEventLog;
+
+    return this.sendJson(res, 200, {
+      ...coordination.status(),
+      events: {
+        total: eventLog.count(),
+        latest: eventLog.latest(10),
+      },
     });
   }
 
