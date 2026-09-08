@@ -90,6 +90,15 @@ import {
   createClientTeamAgentDefinitions,
 } from '../agents/client-ai-team/index.js';
 import {
+  createFreelancerTeamAgents,
+  createFreelancerTeamAgentDefinitions,
+  FreelancerAIService,
+  FreelancerContextBuilder,
+  FreelancerTeamRouter,
+  FreelancerToolClient,
+  FreelancerWorkflowRegistry,
+} from '../agents/freelancer-ai-team/index.js';
+import {
   AgentSelector,
   CoordinationCoordinator,
   CoordinationEventLog,
@@ -177,6 +186,8 @@ export interface ProductionComposition {
     readonly coordinationMetrics: CoordinationMetrics;
     /** Sprint 21 client AI team service (Client AI). */
     readonly clientAi: ClientAIService;
+    /** Sprint 22 freelancer AI team service (Freelancer AI). */
+    readonly freelancerAi: FreelancerAIService;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -191,6 +202,8 @@ export interface ProductionComposition {
     readonly probeToolStorage: () => Promise<{ healthy: boolean }>;
     /** Sprint 21 client AI team readiness probe. */
     readonly probeClientTeam: () => Promise<{ healthy: boolean }>;
+    /** Sprint 22 freelancer AI team readiness probe. */
+    readonly probeFreelancerTeam: () => Promise<{ healthy: boolean }>;
   };
 }
 
@@ -374,6 +387,10 @@ export async function createProductionComposition(
   // Sprint 21 client AI team runtime agents (AG-102..AG-105).
   for (const clientAgent of createClientTeamAgents()) {
     registry.register(clientAgent);
+  }
+  // Sprint 22 freelancer AI team runtime agents (AG-201/AG-202/AG-206/AG-207).
+  for (const freelancerAgent of createFreelancerTeamAgents()) {
+    registry.register(freelancerAgent);
   }
 
   const requestActors = new RequestActorRegistry();
@@ -572,6 +589,12 @@ export async function createProductionComposition(
   for (const clientDefinition of createClientTeamAgentDefinitions({ toolsEnabled })) {
     platformRegistry.registerAgent(clientDefinition, { activate: true });
   }
+  // Sprint 22 freelancer platform mirrors (AG-201/AG-202/AG-206/AG-207).
+  // Deterministic-only v1: the definitions ship an empty tool allowlist, so
+  // agentic tool access fails closed until a tool is explicitly enabled.
+  for (const freelancerDefinition of createFreelancerTeamAgentDefinitions()) {
+    platformRegistry.registerAgent(freelancerDefinition, { activate: true });
+  }
 
   const platformGateway = new AgentPlatformGateway({
     registry: platformRegistry,
@@ -633,6 +656,34 @@ export async function createProductionComposition(
     executorRegistry,
     gateway: platformGateway,
     toolClient: clientToolClient,
+    agenticLoop,
+    logger,
+  });
+
+  // ---- Sprint 22 freelancer AI team (deterministic-first service) ----------
+  // Mirrors the client team: bounded AG-002/AG-003 context under the
+  // FREELANCER actor groups, AG-001 intent routing, platform-gated execution,
+  // a coordination pipeline for proposal generation, and AG-004 tool access
+  // that fails closed (freelancer agents ship with an empty allowlist).
+  const freelancerContextBuilder = new FreelancerContextBuilder({
+    memory: contract,
+    knowledge: knowledgeManager,
+    logger,
+  });
+  const freelancerRouter = new FreelancerTeamRouter({ selector: coordinationSelector });
+  const freelancerWorkflows = new FreelancerWorkflowRegistry({ selector: coordinationSelector });
+  const freelancerToolClient = new FreelancerToolClient({
+    gateway: platformGateway,
+    toolManager,
+  });
+  const freelancerAi = new FreelancerAIService({
+    router: freelancerRouter,
+    workflows: freelancerWorkflows,
+    contextBuilder: freelancerContextBuilder,
+    coordination,
+    executorRegistry,
+    gateway: platformGateway,
+    toolClient: freelancerToolClient,
     agenticLoop,
     logger,
   });
@@ -714,6 +765,7 @@ export async function createProductionComposition(
       coordinationEventLog,
       coordinationMetrics,
       clientAi,
+      freelancerAi,
       requestActors,
     },
     storage: {
@@ -729,6 +781,7 @@ export async function createProductionComposition(
       probeKnowledgeStorage,
       probeToolStorage,
       probeClientTeam: async () => ({ healthy: clientAi.status().healthy }),
+      probeFreelancerTeam: async () => ({ healthy: freelancerAi.status().healthy }),
     },
   };
 }

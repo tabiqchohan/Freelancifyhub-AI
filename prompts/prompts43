@@ -1,0 +1,1269 @@
+# SPRINT 22 — FREELANCER AI TEAM v1
+
+## Complete Implementation Prompt for OpenCode
+
+You are working inside the existing `freelancify-ai` repository.
+
+Repository:
+`D:\Quarter04\freelancer_app\freelancify-ai`
+
+Your task is to implement **Sprint 22 — Freelancer AI Team v1** as the next production-grade module in the existing Freelancify AI architecture.
+
+IMPORTANT:
+
+* Do NOT redesign the architecture.
+* Do NOT create duplicate infrastructure.
+* Do NOT replace existing AG-001/AG-002/AG-003/AG-004 infrastructure.
+* Reuse existing Agent Platform, lifecycle, routing, execution, coordination, LLM reasoning, agentic tool calling, memory, knowledge, security, events, metrics, configuration, runtime and testing patterns.
+* Follow the same quality level and conventions established by Sprint 21 Client AI Team.
+* Work directly in the repository and inspect existing implementations before coding.
+* This must be a complete implementation, not a scaffold or placeholder.
+
+---
+
+# 1. OBJECTIVE
+
+Implement the **Freelancer AI Team v1**.
+
+The Freelancer AI Team is responsible for AI-assisted workflows for freelancers on Freelancify.
+
+The implementation must be:
+
+* deterministic-first
+* production-oriented
+* bounded
+* secure
+* fail-closed
+* lifecycle-aware
+* platform-managed
+* compatible with AG-001
+* compatible with AG-002
+* compatible with AG-003
+* compatible with AG-004
+* compatible with the LLM layer
+* compatible with agentic tool calling
+* compatible with Multi-Agent Coordination
+* fully tested
+* observable
+* runtime-integrated
+* independently health-checkable
+
+Do not make the Freelancer AI Team a second orchestration system.
+
+AG-001 remains the top-level orchestrator.
+
+---
+
+# 2. FIRST: INSPECT THE EXISTING REPOSITORY
+
+Before making changes, inspect:
+
+* `src/agents/client-ai-team/`
+* `src/agents/agent-platform/`
+* `src/agents/ag-001-master-orchestrator/`
+* `src/agents/ag-002-memory-manager/`
+* `src/agents/ag-003-knowledge-manager/`
+* `src/agents/ag-004-tool-manager/`
+* `src/llm/`
+* composition root
+* runtime
+* existing schemas/configuration
+* existing integration tests
+* Sprint 21 documentation
+* existing agent catalog/specification documents
+
+Especially study the complete Sprint 21 implementation and use it as the structural reference for Sprint 22.
+
+Do not blindly copy files.
+
+Identify which pieces are reusable infrastructure and which pieces are Client-Team-specific.
+
+---
+
+# 3. TEAM AGENTS
+
+Implement the Freelancer AI Team using the next appropriate Freelancer AI agent IDs from the existing agent catalog/specification.
+
+Before assigning IDs:
+
+1. inspect `docs/agent-catalog-v1.md`
+2. inspect existing registered agent IDs
+3. inspect Sprint 21 agent IDs
+4. select the correct Freelancer Team IDs from the architecture
+5. never create conflicting IDs
+6. preserve the catalog's naming conventions
+
+The team should cover the core freelancer workflows defined by the existing product architecture.
+
+At minimum implement agents for:
+
+### Freelancer Profile / Skills
+
+Responsible for:
+
+* freelancer profile assistance
+* skill extraction/normalization
+* profile completeness guidance
+* skill matching assistance
+* profile quality analysis
+
+### Proposal / Bid Assistant
+
+Responsible for:
+
+* proposal drafting assistance
+* proposal improvement
+* requirement-to-proposal alignment
+* bid quality analysis
+* concise personalized proposal suggestions
+
+### Project Matching
+
+Responsible for:
+
+* matching freelancer skills to project requirements
+* compatibility scoring
+* explaining match reasons
+* identifying missing skills
+* identifying strong-fit opportunities
+
+### Freelancer Productivity / Insights
+
+Responsible for:
+
+* freelancer performance insights
+* task/project recommendations
+* workflow suggestions
+* earnings/productivity analysis when relevant data exists
+* actionable improvement suggestions
+
+Use the exact architecture-defined agent identities where available instead of inventing new conceptual names.
+
+---
+
+# 4. AGENT CONTRACT
+
+Every Freelancer Team agent must use the existing Agent Platform contract.
+
+Each agent definition must include:
+
+* identity
+* display name
+* description
+* team
+* capabilities
+* supported tools
+* execution mode
+* lifecycle metadata
+* limits
+* timeout
+* retry policy
+* security classification
+* observability metadata
+
+Use strict existing Zod schemas.
+
+Do not weaken validation.
+
+All agents must be compatible with:
+
+* READY
+* RUNNING
+* DRAINING
+* PAUSED
+* DISABLED
+* FAILED
+* TERMINATED
+
+The Agent Platform remains authoritative for lifecycle and execution admission.
+
+---
+
+# 5. DETERMINISTIC-FIRST DESIGN
+
+The Freelancer AI Team must work with LLM disabled.
+
+This is mandatory.
+
+Examples:
+
+Profile/skill normalization:
+
+* deterministic
+
+Basic completeness checks:
+
+* deterministic
+
+Skill/project matching:
+
+* deterministic where structured data exists
+
+Compatibility scoring:
+
+* deterministic
+
+Basic proposal structure validation:
+
+* deterministic
+
+Only use LLM reasoning where it materially improves the task.
+
+LLM must NEVER become a hidden dependency.
+
+When LLM is unavailable:
+
+* deterministic capabilities continue
+* AI-enhanced capability returns the existing standardized reasoning-unavailable classification
+* no fake AI result
+* no fabricated data
+
+Reuse the existing Sprint 17/18 LLM failure semantics.
+
+---
+
+# 6. FREELANCER CONTEXT
+
+Create a bounded Freelancer Team context builder using existing context architecture.
+
+Context may include:
+
+* freelancer profile
+* freelancer skills
+* experience
+* portfolio metadata
+* proposal context
+* project requirements
+* relevant memory
+* relevant knowledge
+* prior workflow output
+* tool results
+
+Rules:
+
+* bounded context
+* deterministic prioritization
+* no unlimited history
+* no uncontrolled prompt growth
+* secrets redacted
+* untrusted content isolated
+* duplicate content removed
+* context budget enforced
+
+Reuse the existing context utilities whenever possible.
+
+Do not create a second generic context framework.
+
+---
+
+# 7. MEMORY INTEGRATION
+
+Freelancer Team must access memory only through the existing AG-002 boundary.
+
+Potential memory examples:
+
+* freelancer preferences
+* proposal style preferences
+* recurring skills
+* prior workflow context
+* relevant historical interactions
+
+Requirements:
+
+* correct scope
+* authorization
+* lifecycle checks
+* deterministic retrieval
+* bounded results
+* deduplication
+* secret redaction
+* no direct database access
+
+The Freelancer Team must NOT access Neon/Postgres directly for memory.
+
+Use existing AG-002 interfaces/adapters.
+
+---
+
+# 8. KNOWLEDGE INTEGRATION
+
+Use AG-003 only through its existing public boundary.
+
+Potential knowledge:
+
+* platform guidance
+* proposal best practices
+* freelancer marketplace rules
+* skill taxonomy
+* project-category information
+* reusable domain knowledge
+
+Do not implement a duplicate knowledge store.
+
+Do not implement semantic/vector infrastructure in Sprint 22 unless it already exists and is explicitly required by the existing architecture.
+
+Respect the current AG-003 foundation.
+
+---
+
+# 9. TOOL INTEGRATION
+
+All tool usage must go through AG-004.
+
+Never call tools directly.
+
+Use existing tool registry and authorization.
+
+Possible existing tools:
+
+* calculator
+* structured utilities
+* approved marketplace utilities
+
+Only use tools actually registered in the existing Tool Registry.
+
+Never invent tool availability.
+
+Tool access must be allowlisted per agent.
+
+If an agent has no need for a tool, its allowed tool list must remain empty.
+
+Tool calls must remain bounded.
+
+Respect:
+
+* max tool calls
+* max turns
+* timeout
+* cancellation
+* authorization
+* result size limits
+
+Reuse Sprint 18 agentic tool-calling loop.
+
+---
+
+# 10. PROPOSAL ASSISTANT
+
+Implement proposal assistance carefully.
+
+Inputs may include:
+
+* project title
+* project description
+* required skills
+* budget
+* timeline
+* freelancer skills
+* freelancer experience
+* relevant portfolio metadata
+
+The system may produce:
+
+* proposal draft
+* proposal outline
+* improvement suggestions
+* missing requirement warnings
+* alignment score/reasons
+
+Do NOT fabricate:
+
+* freelancer experience
+* portfolio items
+* client information
+* project facts
+* guarantees
+* earnings
+* credentials
+
+Clearly distinguish:
+
+* provided facts
+* deterministic analysis
+* AI-generated suggestions
+
+AI-generated content must not be represented as verified facts.
+
+---
+
+# 11. PROJECT MATCHING
+
+Implement deterministic project-to-freelancer matching where structured data is available.
+
+Consider:
+
+* skill overlap
+* required vs available skills
+* skill strength where represented
+* experience metadata
+* project category
+* explicit requirements
+
+Return explainable match information.
+
+For example conceptually:
+
+* overall score
+* matched skills
+* missing skills
+* strong matches
+* weak matches
+* reasons
+
+Do not claim a match is guaranteed.
+
+Do not use opaque scoring when the existing architecture expects explainability.
+
+Keep scoring deterministic and testable.
+
+---
+
+# 12. PROFILE / SKILL ASSISTANCE
+
+Implement:
+
+* profile completeness analysis
+* skill normalization
+* duplicate skill detection
+* missing-profile-field detection
+* structured improvement suggestions
+
+Do not automatically mutate user data unless the existing architecture explicitly authorizes mutation.
+
+Prefer recommendation/output first.
+
+Any mutation-capable operation must use the existing authorization boundaries.
+
+---
+
+# 13. PRODUCTIVITY / INSIGHTS
+
+Implement bounded freelancer insights.
+
+Possible signals:
+
+* project activity
+* proposal activity
+* project status
+* structured performance information
+
+Do not invent metrics when source data does not exist.
+
+If insufficient data exists, return:
+
+* insufficient-data classification
+* available evidence
+* safe recommendation
+
+Never fabricate earnings, success rates, conversion rates, or performance statistics.
+
+---
+
+# 14. WORKFLOWS
+
+Create Freelancer Team workflows using existing workflow patterns.
+
+At minimum support:
+
+### Freelancer Profile Workflow
+
+Input:
+freelancer profile
+
+Flow:
+
+1. validate
+2. build bounded context
+3. analyze completeness/skills
+4. retrieve relevant memory/knowledge if useful
+5. optionally invoke reasoning
+6. aggregate
+7. return structured result
+
+### Proposal Workflow
+
+Input:
+freelancer + project
+
+Flow:
+
+1. validate
+2. normalize requirements
+3. analyze skill alignment
+4. retrieve relevant context
+5. optionally use approved knowledge
+6. optionally invoke LLM reasoning
+7. validate generated output
+8. return proposal assistance
+
+### Project Match Workflow
+
+Input:
+freelancer + project/project requirements
+
+Flow:
+
+1. validate
+2. deterministic matching
+3. calculate explainable compatibility
+4. optionally enrich with knowledge/reasoning
+5. aggregate result
+
+### Freelancer Insight Workflow
+
+Input:
+available freelancer/project activity data
+
+Flow:
+
+1. validate
+2. analyze structured signals
+3. detect insufficient data
+4. optionally use reasoning
+5. produce bounded recommendations
+
+---
+
+# 15. AG-001 INTEGRATION
+
+Freelancer AI Team must integrate through AG-001.
+
+Expected flow:
+
+request
+→ AG-001 intent detection
+→ context building
+→ routing
+→ Freelancer Team agent
+→ execution
+→ optional memory/knowledge/tool access
+→ optional LLM reasoning
+→ aggregation
+→ final response
+
+Do not create:
+
+* FreelancerMasterOrchestrator
+* FreelancerRouter that bypasses AG-001
+* second execution engine
+* second lifecycle system
+* second coordination engine
+
+The team-specific router may exist only as a bounded team-level mapping/dispatch helper behind the existing architecture.
+
+AG-001 remains authoritative.
+
+---
+
+# 16. AGENT PLATFORM INTEGRATION
+
+Register all Freelancer Team agents with the existing Agent Platform.
+
+Requirements:
+
+* platform mirror
+* lifecycle management
+* execution gate
+* lease accounting
+* concurrency limits
+* tool authorization
+* metrics
+* event logging
+
+Use the exact same pattern as Sprint 21.
+
+Do not bypass the platform gateway.
+
+Test paused-agent behavior.
+
+Test disabled-agent behavior.
+
+Test concurrent execution behavior.
+
+Test lease cleanup on success/failure/cancellation/timeout.
+
+---
+
+# 17. MULTI-AGENT COORDINATION
+
+Reuse Sprint 20 coordination infrastructure.
+
+Do not create a new coordination implementation.
+
+Use coordination only where a Freelancer workflow genuinely benefits from multiple agents.
+
+Examples:
+
+Proposal workflow:
+
+Profile/Skill Agent
+→ Project Match Agent
+→ Proposal Agent
+→ optional Insight/Quality Agent
+
+Use existing:
+
+* dependency graph
+* bounded concurrency
+* cancellation
+* deadline
+* retries
+* failure policies
+* aggregation strategies
+
+Ensure no double execution claim.
+
+Agents must still execute through the existing runtime executor and Agent Platform gate.
+
+---
+
+# 18. SECURITY
+
+Follow all existing security architecture.
+
+Mandatory:
+
+* input validation
+* output validation
+* authorization
+* secret redaction
+* prompt-injection defense
+* untrusted-content boundaries
+* connection-string protection
+* bounded strings
+* bounded arrays
+* bounded object depth where existing validators support it
+* no secret leakage into events
+* no secret leakage into metrics
+* no secret leakage into LLM prompts
+
+Treat:
+
+* project descriptions
+* client-provided text
+* freelancer-written text
+* portfolio descriptions
+* external knowledge
+* tool results
+
+as potentially untrusted.
+
+Reuse existing security utilities.
+
+Do not invent weaker security helpers.
+
+---
+
+# 19. PROMPT-INJECTION DEFENSE
+
+Any untrusted content sent to LLM reasoning must be encoded/delimited using the existing security mechanism.
+
+Neutralize boundary markers.
+
+Clearly distinguish:
+
+SYSTEM/CONTROL DATA
+
+from
+
+UNTRUSTED USER/PROJECT CONTENT.
+
+The model must never be instructed to treat project text as system instructions.
+
+Tool results must also be treated as untrusted data.
+
+---
+
+# 20. LLM REASONING
+
+Use the existing:
+
+`AIReasoningService`
+
+and existing LLM provider abstraction.
+
+Do not import OpenAI/Anthropic/Gemini SDKs directly into Freelancer Team.
+
+No provider-specific logic inside agents.
+
+Reasoning must support:
+
+* cancellation
+* timeout
+* usage tracking
+* correlation IDs
+* normalized errors
+* bounded messages
+* bounded context
+
+LLM must be capability-driven.
+
+---
+
+# 21. OUTPUT CONTRACTS
+
+Define strict schemas for:
+
+### ProfileAnalysisResult
+
+Include only architecture-approved fields.
+
+### SkillAnalysisResult
+
+Include:
+
+* normalized skills
+* duplicates
+* missing/weak areas where supported
+* evidence/reasons
+
+### ProjectMatchResult
+
+Include:
+
+* score
+* matched requirements
+* missing requirements
+* reasons
+* confidence/quality metadata where already supported
+
+### ProposalAssistResult
+
+Include:
+
+* generated draft or outline
+* suggestions
+* alignment observations
+* warnings
+* generated-vs-factual distinction
+
+### FreelancerInsightResult
+
+Include:
+
+* observed signals
+* insights
+* recommendations
+* insufficient-data state where applicable
+
+All outputs must be bounded.
+
+Use existing schemas and naming conventions.
+
+---
+
+# 22. ERROR HANDLING
+
+Use existing project error taxonomy.
+
+Support:
+
+* invalid input
+* unauthorized
+* forbidden
+* agent not ready
+* agent disabled
+* timeout
+* cancellation
+* tool failure
+* memory failure
+* knowledge failure
+* reasoning unavailable
+* reasoning failed
+* coordination partial failure
+* insufficient data
+
+Never expose raw stack traces to users.
+
+Never silently convert failures into successful-looking output.
+
+---
+
+# 23. OBSERVABILITY
+
+Create Freelancer Team-specific:
+
+* events
+* metrics
+
+following Sprint 21 conventions.
+
+Track safe metadata such as:
+
+* workflow
+* agent ID
+* execution ID
+* correlation ID
+* outcome
+* latency
+* bounded counts
+* failure classification
+
+Never record:
+
+* passwords
+* tokens
+* API keys
+* connection strings
+* raw sensitive user data
+
+Reuse shared observability infrastructure where available.
+
+---
+
+# 24. RUNTIME API
+
+Follow Sprint 21 runtime integration pattern.
+
+Add:
+
+`GET /api/freelancer-ai/status`
+
+Status should expose:
+
+* healthy state
+* registered agents
+* lifecycle snapshot
+* supported workflows
+* safe metrics summary
+
+Add Freelancer Team health information to:
+
+`/healthz`
+
+Do not break existing health responses.
+
+Existing:
+
+* memory
+* knowledge
+* tools
+* llm
+* platform
+* coordination
+* clientTeam
+
+must remain intact.
+
+---
+
+# 25. COMPOSITION ROOT
+
+Update the existing composition root.
+
+Register:
+
+* Freelancer Team agents
+* platform mirrors
+* router/service
+* workflows
+* events
+* metrics
+* status service
+
+Do not instantiate infrastructure multiple times.
+
+Respect dependency injection.
+
+Production composition must use the same shared dependencies.
+
+---
+
+# 26. CONFIGURATION
+
+Add only Freelancer-specific configuration knobs if genuinely required.
+
+Follow existing environment/config schema conventions.
+
+Defaults must be safe.
+
+Avoid introducing unnecessary environment variables.
+
+Do not break existing configuration.
+
+All configuration validation must fail closed.
+
+Document new configuration.
+
+---
+
+# 27. TESTING
+
+Create comprehensive tests.
+
+At minimum:
+
+## Unit tests
+
+Test:
+
+* schemas
+* validation
+* agent definitions
+* deterministic profile analysis
+* skill normalization
+* matching
+* proposal validation
+* insight logic
+* router
+* context builder
+* workflows
+* security
+* error mapping
+* metrics
+* events
+
+## Integration tests
+
+Test:
+
+* AG-001 → Freelancer Team
+* Agent Platform → Freelancer Team
+* AG-002 memory
+* AG-003 knowledge
+* AG-004 tools
+* LLM disabled
+* LLM enabled with mock provider
+* agentic tool path where applicable
+* coordination path
+* runtime endpoints
+
+## Failure tests
+
+Test:
+
+* invalid input
+* unauthorized access
+* paused agent
+* disabled agent
+* cancellation
+* timeout
+* tool failure
+* memory failure
+* knowledge failure
+* reasoning unavailable
+* reasoning failure
+* partial coordination failure
+* oversized context
+* prompt injection
+* secret leakage prevention
+
+## Concurrency tests
+
+Test multiple Freelancer workflows running simultaneously.
+
+Ensure no shared mutable state corruption.
+
+## Deterministic-first tests
+
+With LLM disabled:
+
+* core workflows must succeed where structured data is sufficient
+* zero unnecessary LLM calls
+
+---
+
+# 28. TEST QUALITY
+
+Do not weaken tests just to make them pass.
+
+Do not:
+
+* increase timeouts unnecessarily
+* skip tests
+* use `.only`
+* use `.skip`
+* suppress TypeScript errors
+* disable ESLint
+* disable security tests
+
+If a test exposes a real architectural bug, fix the implementation.
+
+If a Neon integration test genuinely needs extra time, use the established repository timeout convention only where necessary.
+
+---
+
+# 29. DOCUMENTATION
+
+Create:
+
+`docs/sprint22-freelancer-ai-team-v1.md`
+
+Document:
+
+1. Sprint objective
+2. Architecture
+3. Freelancer Team agents
+4. Agent capabilities
+5. Lifecycle integration
+6. Routing
+7. Workflows
+8. Memory integration
+9. Knowledge integration
+10. Tool integration
+11. LLM integration
+12. Coordination integration
+13. Security
+14. Observability
+15. Runtime API
+16. Configuration
+17. Testing
+18. Verification results
+19. Known limitations
+20. Deferred work
+
+Clearly distinguish implemented vs deferred functionality.
+
+---
+
+# 30. CODE QUALITY
+
+Follow repository standards.
+
+Required:
+
+* TypeScript strictness
+* no `any` unless genuinely unavoidable and justified
+* type-only imports where required
+* existing naming conventions
+* existing folder conventions
+* existing error conventions
+* existing schema conventions
+* existing test conventions
+
+Run formatting on changed files.
+
+Do not reformat unrelated parts of the repository.
+
+---
+
+# 31. NO DUPLICATE INFRASTRUCTURE
+
+This is critical.
+
+Do NOT create new versions of:
+
+* lifecycle manager
+* agent registry
+* execution engine
+* coordination engine
+* memory repository
+* knowledge repository
+* tool registry
+* LLM abstraction
+* context budget manager
+* generic retry engine
+* generic timeout engine
+* generic security framework
+* generic event logger
+* generic metrics system
+
+If functionality already exists, integrate with it.
+
+---
+
+# 32. EXPECTED DIRECTORY
+
+Use a structure consistent with Sprint 21, approximately:
+
+`src/agents/freelancer-ai-team/`
+
+Possible modules:
+
+* `types.ts`
+* `constants.ts`
+* `errors.ts`
+* `schemas.ts`
+* `security.ts`
+* `agents/`
+* `context/`
+* `router.ts`
+* `workflows/`
+* `tooling/`
+* `events.ts`
+* `metrics.ts`
+* `service.ts`
+* `index.ts`
+
+Adapt to actual repository conventions after inspection.
+
+Do not force this exact structure if Sprint 21 uses a better established pattern.
+
+---
+
+# 33. ACCEPTANCE CRITERIA
+
+Sprint 22 is complete only when all are true:
+
+* Freelancer AI Team implemented
+* correct catalog agent IDs used
+* all agents registered
+* lifecycle integrated
+* AG-001 routing integrated
+* AG-002 integration works
+* AG-003 integration works
+* AG-004 integration works
+* LLM integration works
+* agentic loop works where applicable
+* coordination works where applicable
+* deterministic-first behavior verified
+* security verified
+* observability verified
+* runtime status endpoint works
+* `/healthz` includes Freelancer Team
+* all schemas strict
+* all outputs bounded
+* cancellation works
+* timeout works
+* paused-agent rejection works
+* disabled-agent rejection works
+* concurrency works
+* no direct DB access from team
+* no provider-specific LLM SDK imports
+* no architecture bypass
+* documentation complete
+
+---
+
+# 34. REQUIRED VERIFICATION GATES
+
+Run the repository's actual commands.
+
+At minimum:
+
+1. TypeScript typecheck
+2. ESLint
+3. Prettier check
+4. full Vitest suite
+5. production build
+6. runtime smoke test
+7. health endpoint
+8. Freelancer status endpoint
+9. deterministic LLM-disabled smoke test
+10. relevant Neon integration tests using existing production configuration where appropriate
+
+Do not claim success unless commands actually pass.
+
+Record actual test counts.
+
+---
+
+# 35. RUNTIME SMOKE TEST
+
+Verify:
+
+`/healthz`
+
+contains a healthy Freelancer Team section.
+
+Verify:
+
+`GET /api/freelancer-ai/status`
+
+returns healthy status.
+
+Verify at least one Freelancer workflow through the real runtime/executor path.
+
+Verify lifecycle gate is active.
+
+Verify paused-agent rejection.
+
+Verify LLM-disabled behavior.
+
+Verify an appropriate tool workflow if applicable.
+
+---
+
+# 36. FINAL REPORT
+
+At the end, provide a concise implementation report containing:
+
+### Implementation
+
+* files/modules added
+* files modified
+* agents implemented
+* workflows implemented
+* integrations
+
+### Verification
+
+* typecheck
+* ESLint
+* Prettier
+* tests
+* build
+* runtime smoke
+* health
+* status endpoint
+
+### Test Counts
+
+Provide actual:
+
+* total tests
+* Freelancer Team unit tests
+* integration tests
+* any Neon tests
+
+### Security
+
+List security guarantees actually verified.
+
+### Deferred
+
+List anything intentionally deferred.
+
+### Git
+
+Do NOT commit or push automatically unless explicitly instructed.
+
+If everything passes, state:
+
+`SPRINT 22 IMPLEMENTATION COMPLETE`
+
+If something fails, clearly identify the exact failure and do not falsely report completion.
+
+---
+
+# 37. IMPORTANT ENGINEERING PRINCIPLE
+
+The Freelancer AI Team is a domain team.
+
+It is NOT the platform.
+
+It is NOT the orchestrator.
+
+It is NOT the memory system.
+
+It is NOT the knowledge system.
+
+It is NOT the tool registry.
+
+It is NOT the LLM provider.
+
+It is NOT the coordination engine.
+
+Those systems already exist.
+
+Freelancer AI Team must compose those existing capabilities into safe freelancer-focused workflows.
+
+Maintain the architecture:
+
+AG-001
+↓
+Agent Platform
+↓
+Freelancer AI Team
+↓
+domain agents
+↓
+existing Memory / Knowledge / Tools / Reasoning / Coordination
+↓
+bounded result
+↓
+AG-001 response aggregation
+
+Do not break this boundary.
+
+Start by inspecting Sprint 21 and the agent catalog, then implement the complete Sprint 22 solution.

@@ -52,6 +52,8 @@ export interface HealthPayload {
   readonly coordination: CoordinationHealthSnapshot;
   /** Sprint 21 client AI team status (safe aggregate; never secrets). */
   readonly clientTeam: ClientTeamHealthSnapshot;
+  /** Sprint 22 freelancer AI team status (safe aggregate; never secrets). */
+  readonly freelancerTeam: FreelancerTeamHealthSnapshot;
 }
 
 /** Safe coordination health snapshot for the runtime health block. */
@@ -64,6 +66,16 @@ export interface CoordinationHealthSnapshot {
 
 /** Safe client AI team snapshot for the runtime health block. */
 export interface ClientTeamHealthSnapshot {
+  readonly healthy: boolean;
+  readonly enabled: boolean;
+  readonly activeAgents: number;
+  readonly establishedAgents: number;
+  readonly workflows: readonly string[];
+  readonly eventCount: number;
+}
+
+/** Safe freelancer AI team snapshot for the runtime health block. */
+export interface FreelancerTeamHealthSnapshot {
   readonly healthy: boolean;
   readonly enabled: boolean;
   readonly activeAgents: number;
@@ -86,6 +98,7 @@ export async function defaultHealth(
   platformInfo?: () => AgentPlatformStatusSnapshot,
   coordinationInfo?: () => CoordinationHealthSnapshot,
   clientTeamInfo?: () => ClientTeamHealthSnapshot,
+  freelancerTeamInfo?: () => FreelancerTeamHealthSnapshot,
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
   const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
@@ -112,11 +125,24 @@ export async function defaultHealth(
     },
     coordination: coordinationInfo?.() ?? defaultCoordinationHealth(),
     clientTeam: clientTeamInfo?.() ?? defaultClientTeamHealth(),
+    freelancerTeam: freelancerTeamInfo?.() ?? defaultFreelancerTeamHealth(),
   };
 }
 
 /** Default client AI team snapshot when the layer is absent. */
 export function defaultClientTeamHealth(): ClientTeamHealthSnapshot {
+  return {
+    healthy: false,
+    enabled: false,
+    activeAgents: 0,
+    establishedAgents: 0,
+    workflows: [],
+    eventCount: 0,
+  };
+}
+
+/** Default freelancer AI team snapshot when the layer is absent. */
+export function defaultFreelancerTeamHealth(): FreelancerTeamHealthSnapshot {
   return {
     healthy: false,
     enabled: false,
@@ -226,6 +252,21 @@ export class ProductionRuntime {
               eventCount: status.eventCount,
             };
           },
+          () => {
+            const status = options.composition.services.freelancerAi.status();
+            const platformRegistry = options.composition.services.platformRegistry;
+            const established = ['AG-201', 'AG-202', 'AG-206', 'AG-207'].filter(
+              (agentId) => platformRegistry.getAgent(agentId) !== undefined,
+            ).length;
+            return {
+              healthy: status.healthy,
+              enabled: status.enabled,
+              activeAgents: status.agents.active,
+              establishedAgents: established,
+              workflows: status.workflows,
+              eventCount: status.eventCount,
+            };
+          },
         ));
   }
 
@@ -295,6 +336,10 @@ export class ProductionRuntime {
       return this.handleClientAiStatus(res);
     }
 
+    if (url.pathname === '/api/freelancer-ai/status') {
+      return this.handleFreelancerAiStatus(res);
+    }
+
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
   }
 
@@ -353,6 +398,27 @@ export class ProductionRuntime {
     return this.sendJson(res, 200, {
       name: clientAi.name,
       version: clientAi.version,
+      healthy: status.healthy,
+      enabled: status.enabled,
+      agents: status.agents,
+      workflows: status.workflows,
+      metrics: status.metrics,
+      events: { total: status.eventCount },
+    });
+  }
+
+  /**
+   * Sprint 22 freelancer AI team status endpoint. Exposes service health,
+   * team agents/limits, workflows, and metrics. Never exposes prompts, briefs,
+   * results, or secrets.
+   */
+  private async handleFreelancerAiStatus(res: ServerResponse): Promise<void> {
+    const freelancerAi = this.composition.services.freelancerAi;
+    const status = freelancerAi.status();
+
+    return this.sendJson(res, 200, {
+      name: freelancerAi.name,
+      version: freelancerAi.version,
       healthy: status.healthy,
       enabled: status.enabled,
       agents: status.agents,
