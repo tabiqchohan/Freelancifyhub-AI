@@ -77,10 +77,18 @@ import {
   AgentPlatformMetrics,
   AgentPlatformEventLog,
   AgentExecutionMode,
-  DEFAULT_BUDGET_ESTIMATOR_AGENT,
   withPlatformAwareness,
 } from '../agents/agent-platform/index.js';
 import type { AgentDefinition } from '../agents/agent-platform/index.js';
+import {
+  ClientAIService,
+  ClientContextBuilder,
+  ClientTeamRouter,
+  ClientToolClient,
+  ClientWorkflowRegistry,
+  createClientTeamAgents,
+  createClientTeamAgentDefinitions,
+} from '../agents/client-ai-team/index.js';
 import {
   AgentSelector,
   CoordinationCoordinator,
@@ -167,6 +175,8 @@ export interface ProductionComposition {
     readonly coordinationEventLog: CoordinationEventLog;
     /** Sprint 20 coordination metrics. */
     readonly coordinationMetrics: CoordinationMetrics;
+    /** Sprint 21 client AI team service (Client AI). */
+    readonly clientAi: ClientAIService;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -179,6 +189,8 @@ export interface ProductionComposition {
     readonly probeStorage: () => Promise<{ healthy: boolean }>;
     readonly probeKnowledgeStorage: () => Promise<{ healthy: boolean }>;
     readonly probeToolStorage: () => Promise<{ healthy: boolean }>;
+    /** Sprint 21 client AI team readiness probe. */
+    readonly probeClientTeam: () => Promise<{ healthy: boolean }>;
   };
 }
 
@@ -359,6 +371,10 @@ export async function createProductionComposition(
   // ---- runtime agent registry + executor ----------------------------------
   const registry = new AgentRegistry();
   registry.register(createRuntimeAgent({ logger }));
+  // Sprint 21 client AI team runtime agents (AG-102..AG-105).
+  for (const clientAgent of createClientTeamAgents()) {
+    registry.register(clientAgent);
+  }
 
   const requestActors = new RequestActorRegistry();
 
@@ -550,7 +566,12 @@ export async function createProductionComposition(
   platformRegistry.registerAgent(agentDefinitionFromRuntimeAgent(runtimeAgent101), {
     activate: true,
   });
-  platformRegistry.registerAgent(DEFAULT_BUDGET_ESTIMATOR_AGENT);
+  // Sprint 21 client platform mirrors (AG-102..AG-105). Definitions own their
+  // dependencies (AG-101 forward references) since the runtime mirror builder
+  // cannot express them. Tool access stays fail-closed unless tools are enabled.
+  for (const clientDefinition of createClientTeamAgentDefinitions({ toolsEnabled })) {
+    platformRegistry.registerAgent(clientDefinition, { activate: true });
+  }
 
   const platformGateway = new AgentPlatformGateway({
     registry: platformRegistry,
@@ -589,6 +610,31 @@ export async function createProductionComposition(
     invocation: coordinationInvocation,
     eventLog: coordinationEventLog,
     metrics: coordinationMetrics,
+  });
+
+  // ---- Sprint 21 client AI team (deterministic-first service) --------------
+  // Builds bounded AG-002/AG-003 context, routes through AG-001 intent, drives
+  // single agents through the platform-gated executor, and runs coordination
+  // workflows for project creation. Tools go strictly through the platform
+  // allowlist + AG-004; agentic mode is only available when the loop is on.
+  const clientContextBuilder = new ClientContextBuilder({
+    memory: contract,
+    knowledge: knowledgeManager,
+    logger,
+  });
+  const clientRouter = new ClientTeamRouter({ selector: coordinationSelector });
+  const clientWorkflows = new ClientWorkflowRegistry({ selector: coordinationSelector });
+  const clientToolClient = new ClientToolClient({ gateway: platformGateway, toolManager });
+  const clientAi = new ClientAIService({
+    router: clientRouter,
+    workflows: clientWorkflows,
+    contextBuilder: clientContextBuilder,
+    coordination,
+    executorRegistry,
+    gateway: platformGateway,
+    toolClient: clientToolClient,
+    agenticLoop,
+    logger,
   });
 
   const executionEngine = new ExecutionEngine({
@@ -667,6 +713,7 @@ export async function createProductionComposition(
       coordinationPlanner,
       coordinationEventLog,
       coordinationMetrics,
+      clientAi,
       requestActors,
     },
     storage: {
@@ -681,6 +728,7 @@ export async function createProductionComposition(
       probeStorage,
       probeKnowledgeStorage,
       probeToolStorage,
+      probeClientTeam: async () => ({ healthy: clientAi.status().healthy }),
     },
   };
 }

@@ -1,0 +1,1197 @@
+You are working inside the existing `freelancify-ai` TypeScript/Node.js codebase.
+
+# SPRINT 20 — MULTI-AGENT COORDINATION & COLLABORATION
+
+## Mission
+
+Implement a production-grade, generic **Multi-Agent Coordination & Collaboration layer** on top of the existing architecture.
+
+The architecture must become:
+
+User Request
+→ AG-001 Master Orchestrator
+→ Intent / Context / Routing
+→ Agent Selection
+→ Coordination Plan
+→ Agent A / Agent B / Agent C
+→ Shared Coordination State
+→ Result Collection
+→ Conflict / Dependency Resolution
+→ AG-001 Aggregation
+→ Final Response
+
+Sprint 20 must build reusable infrastructure only.
+
+DO NOT implement business-specific Client AI, Freelancer AI, Marketplace AI, Marketing AI, or Admin AI agents in this sprint.
+
+The goal is to make the platform capable of safely coordinating multiple generic agents later.
+
+---
+
+# 1. FIRST — INSPECT THE EXISTING CODEBASE
+
+Before changing code:
+
+1. Inspect the repository structure.
+2. Read the existing AG-001 implementation.
+3. Read the existing AG-002 Memory Manager.
+4. Read the existing AG-003 Knowledge Manager.
+5. Read the existing AG-004 Tool Manager.
+6. Read the existing LLM/reasoning layer.
+7. Read Sprint 18 agentic tool-calling implementation.
+8. Read Sprint 19 Agent Platform / capability / lifecycle implementation.
+9. Read existing composition root/runtime wiring.
+10. Read existing tests and test conventions.
+11. Read:
+
+* `docs/freelancify-ai-blueprint-v1.0.md`
+* `docs/product-requirements-v1.md`
+* `docs/agent-catalog-v1.md`
+* `docs/master-orchestrator-specification-v1.md`
+* `docs/shared-memory-architecture-v1.md`
+* `docs/tool-registry-architecture-v1.md`
+* `docs/knowledge-base-architecture-v1.md`
+* `docs/agent-development-kit-v1.md`
+* `docs/architecture-review-v1.md`
+* Sprint 17 documentation
+* Sprint 18 documentation
+* Sprint 19 documentation
+
+Do not blindly recreate abstractions that already exist.
+
+Reuse existing contracts, utilities, error handling, security primitives, lifecycle controls, correlation IDs, metrics, event patterns, and dependency injection conventions.
+
+Preserve backward compatibility.
+
+---
+
+# 2. ARCHITECTURAL PRINCIPLE
+
+Multi-agent coordination must sit ABOVE the existing agent platform.
+
+Target layering:
+
+AG-001
+↓
+Coordination Layer
+↓
+Agent Platform Gateway
+↓
+Individual Agents
+↓
+AG-002 / AG-003 / AG-004 / LLM as permitted
+
+The coordination layer must NOT bypass:
+
+* AG-001
+* Agent Platform Gateway
+* lifecycle controls
+* authorization
+* AG-004 Tool Manager
+* AG-002 Memory Manager
+* AG-003 Knowledge Manager
+* LLM abstraction
+
+No direct database access from coordination logic.
+
+No direct provider SDK usage.
+
+No hidden global state.
+
+No agent-to-agent direct uncontrolled calls.
+
+---
+
+# 3. CREATE GENERIC COORDINATION MODULE
+
+Create a clean module such as:
+
+`src/agents/agent-platform/coordination/`
+
+Use the existing repository naming conventions.
+
+Expected responsibilities may include:
+
+* coordination types
+* schemas
+* coordination planner
+* agent selection
+* task decomposition
+* dependency graph
+* execution coordinator
+* agent invocation adapter
+* shared coordination state
+* result collector
+* result merger
+* conflict resolver
+* failure handling
+* cancellation
+* timeout
+* concurrency limits
+* collaboration policies
+* events
+* metrics
+* errors
+* security
+* tests
+
+Do not create unnecessary files merely to satisfy a list.
+
+Use the existing architecture style.
+
+---
+
+# 4. CORE CONCEPTS
+
+Implement explicit typed contracts for:
+
+## Coordination Request
+
+Must represent:
+
+* correlation ID
+* parent execution ID
+* requester
+* objective
+* context reference
+* participating agents
+* coordination mode
+* limits
+* deadline
+* cancellation signal
+* metadata
+
+---
+
+## Agent Task
+
+Each task should have:
+
+* task ID
+* coordination ID
+* agent ID
+* objective
+* input
+* dependencies
+* priority
+* timeout
+* retry policy
+* status
+* createdAt
+* startedAt
+* completedAt
+
+Statuses should be deterministic and validated.
+
+For example:
+
+PENDING
+READY
+RUNNING
+COMPLETED
+FAILED
+CANCELLED
+SKIPPED
+TIMED_OUT
+
+Do not introduce duplicate lifecycle semantics where Sprint 19 already provides them.
+
+---
+
+# 5. COORDINATION MODES
+
+Support generic coordination modes:
+
+### SINGLE
+
+One agent.
+
+### SEQUENTIAL
+
+Agent B waits for Agent A.
+
+Example:
+
+A → B → C
+
+### PARALLEL
+
+Independent agents execute concurrently.
+
+Example:
+
+A
+B
+C
+
+↓
+
+Aggregator
+
+### PIPELINE
+
+Output from one agent becomes controlled input to another.
+
+Example:
+
+A → B → C
+
+### DEBATE / REVIEW
+
+Multiple agents independently produce results and a reviewer/aggregator evaluates them.
+
+### HYBRID
+
+Combination of sequential, parallel and dependent tasks.
+
+Use the minimum necessary abstraction while supporting these modes.
+
+---
+
+# 6. DEPENDENCY GRAPH
+
+Implement a deterministic dependency graph.
+
+Requirements:
+
+* directed graph
+* task dependencies
+* cycle detection
+* topological ordering
+* ready-task calculation
+* blocked-task detection
+* dependency failure propagation
+* deterministic ordering
+
+Invalid graphs must fail before execution.
+
+Examples:
+
+A → B → C
+
+A and B → C
+
+A → C
+B → C
+
+Reject:
+
+A → B → C → A
+
+Never execute cyclic plans.
+
+---
+
+# 7. TASK DECOMPOSITION
+
+Create a generic task decomposition contract.
+
+The coordinator must be able to receive a pre-built plan from AG-001.
+
+Do NOT make LLM decomposition mandatory.
+
+The system must work deterministically without an LLM.
+
+If LLM-assisted decomposition is supported, it must:
+
+* use the existing LLM abstraction
+* use AIReasoningService
+* respect token/context budgets
+* validate structured output
+* fail closed
+* never execute arbitrary model instructions
+* never bypass authorization
+
+Deterministic plans must remain fully supported.
+
+---
+
+# 8. AGENT SELECTION
+
+Use Sprint 19 capability and lifecycle information.
+
+Agent selection must consider:
+
+* agent ID
+* lifecycle state
+* execution mode
+* capabilities
+* allowed tools
+* availability
+* concurrency limits
+* task requirements
+* authorization
+* coordination policy
+
+Do not route tasks to:
+
+* DISABLED agents
+* TERMINATED agents
+* FAILED agents
+* PAUSED agents
+* DRAINING agents when new execution is not allowed
+
+Use the existing AgentPlatformGateway wherever possible.
+
+Do not duplicate lifecycle rules.
+
+---
+
+# 9. AGENT INVOCATION
+
+All managed agent executions must pass through the existing Agent Platform execution boundary.
+
+Conceptually:
+
+Coordinator
+→ AgentPlatformGateway.beginExecution()
+→ Agent
+→ AgentPlatformGateway.endExecution()
+
+Ensure `endExecution()` happens in `finally`.
+
+Never allow a failed agent to leave an execution lease/concurrency slot open.
+
+Unmanaged legacy agents must continue to work exactly as Sprint 19 designed.
+
+---
+
+# 10. AGENT-TO-AGENT COMMUNICATION
+
+Do NOT allow unrestricted direct agent-to-agent communication.
+
+Introduce controlled coordination messages.
+
+A message should include:
+
+* message ID
+* coordination ID
+* sender agent
+* recipient agent
+* message type
+* payload
+* timestamp
+* correlation metadata
+* schema/version
+
+Messages must be:
+
+* bounded
+* validated
+* authorized
+* sanitized
+* observable
+
+The coordinator remains the authority.
+
+Agents should not secretly invoke other agents.
+
+---
+
+# 11. SHARED COORDINATION STATE
+
+Create a coordination state abstraction.
+
+It should track:
+
+* coordination ID
+* plan
+* tasks
+* dependencies
+* task status
+* outputs
+* errors
+* timestamps
+* current phase
+* cancellation
+* deadline
+* aggregate status
+
+Do NOT automatically persist this to the database in Sprint 20 unless an existing persistence abstraction makes this natural and backward-compatible.
+
+An in-memory implementation is acceptable as the initial implementation.
+
+Keep the interface extensible for future durable persistence.
+
+---
+
+# 12. RESULT CONTRACT
+
+Every coordinated task must return a structured result.
+
+Include:
+
+* task ID
+* agent ID
+* status
+* output
+* errors
+* timing
+* token usage if available
+* tool usage if available
+* correlation ID
+* metadata
+
+Never pass arbitrary unvalidated objects between agents.
+
+Use strict schemas.
+
+---
+
+# 13. RESULT AGGREGATION
+
+Implement a generic aggregation layer.
+
+It must support:
+
+### Collect
+
+Return all successful task outputs.
+
+### Merge
+
+Combine outputs into one structured result.
+
+### Best Result
+
+Select the highest-priority/quality result according to an explicit deterministic strategy.
+
+### Consensus
+
+Compare multiple results and determine whether they agree.
+
+### Review
+
+Pass controlled results to a designated reviewer/aggregator agent.
+
+Do not pretend to have semantic quality scoring unless an explicit implementation exists.
+
+If quality scoring is not available, use deterministic policies.
+
+---
+
+# 14. CONFLICT RESOLUTION
+
+Implement explicit conflict handling.
+
+Possible conflict types:
+
+* contradictory outputs
+* incompatible statuses
+* duplicate results
+* missing dependency output
+* partial execution
+* agent disagreement
+
+Do NOT silently pick one result.
+
+Represent conflict explicitly.
+
+Provide deterministic strategies such as:
+
+* PRIORITY
+* FIRST_SUCCESS
+* ALL_RESULTS
+* REVIEW_REQUIRED
+* FAIL_ON_CONFLICT
+
+Keep the policy configurable.
+
+---
+
+# 15. FAILURE HANDLING
+
+Handle:
+
+* agent unavailable
+* lifecycle rejection
+* timeout
+* cancellation
+* execution failure
+* dependency failure
+* malformed result
+* authorization failure
+* tool failure
+* reasoning failure
+* coordination failure
+
+Use existing error conventions.
+
+Do not leak secrets or internal stack traces to external callers.
+
+A single task failure must not automatically destroy an entire coordination unless the plan/policy requires it.
+
+Support policies such as:
+
+* FAIL_FAST
+* CONTINUE_INDEPENDENT
+* SKIP_DEPENDENTS
+* REQUIRE_ALL
+* BEST_EFFORT
+
+---
+
+# 16. RETRIES
+
+Support bounded retries for coordination tasks.
+
+Requirements:
+
+* maximum retry count
+* bounded exponential backoff
+* cancellation aware
+* deadline aware
+* retry only retryable errors
+* no retry on authorization failures
+* no retry on malformed plans
+* no retry on invalid tool authorization
+* no infinite loops
+
+Reuse existing retry infrastructure if available.
+
+---
+
+# 17. TIMEOUTS AND DEADLINES
+
+Coordination must support:
+
+* global timeout
+* per-task timeout
+* deadline propagation
+* cancellation propagation
+
+If the global coordination is cancelled:
+
+* pending tasks must not start
+* running tasks receive cancellation
+* dependent tasks are cancelled/skipped
+* resources are released
+* final state is deterministic
+
+Use AbortSignal consistently.
+
+---
+
+# 18. CONCURRENCY LIMITS
+
+Prevent unbounded parallelism.
+
+Support:
+
+* max concurrent tasks
+* max tasks per agent
+* global coordination limit
+* bounded queue
+
+Respect Sprint 19 agent concurrency limits.
+
+Do not create an alternate concurrency system that conflicts with the Agent Platform.
+
+---
+
+# 19. TOOL AUTHORIZATION
+
+Coordination must NOT expand an agent's tool permissions.
+
+If Agent A has:
+
+allowedTools = ["calculator"]
+
+then coordination cannot make it call:
+
+* database
+* web
+* shell
+* another unauthorized tool
+
+Tool authorization remains enforced by AG-004 + Sprint 18 agentic allowlist.
+
+---
+
+# 20. SECURITY / PROMPT-INJECTION DEFENSE
+
+Treat every agent result and inter-agent message as potentially untrusted.
+
+Never interpret agent output as privileged system instructions.
+
+Use the same security principles already implemented in Sprint 17/18:
+
+* bounded input
+* schema validation
+* delimiter/boundary handling
+* secret redaction
+* connection-string protection
+* output size limits
+* metadata allowlisting
+* no credential forwarding
+* no arbitrary code execution
+* no hidden tool expansion
+
+Agent output must remain data.
+
+---
+
+# 21. MEMORY INTEGRATION
+
+Coordination may use AG-002 only through its public boundary.
+
+Potential uses:
+
+* retrieve relevant shared context
+* store coordination summary
+* preserve task results when explicitly configured
+
+Do NOT automatically write every intermediate result into memory.
+
+Avoid memory pollution.
+
+Respect:
+
+* scopes
+* permissions
+* lifecycle
+* retention
+* redaction
+* budgets
+
+---
+
+# 22. KNOWLEDGE INTEGRATION
+
+Coordination may use AG-003 only through its public boundary.
+
+Knowledge retrieval must remain controlled.
+
+Do not let one agent directly access another agent's private knowledge context.
+
+Use existing knowledge authorization and namespace/group boundaries.
+
+---
+
+# 23. AG-001 INTEGRATION
+
+Integrate the coordinator with AG-001.
+
+Target flow:
+
+request
+→ AG-001 validation
+→ intent detection
+→ context building
+→ routing
+→ coordination decision
+→ coordination plan
+→ coordinator
+→ agent execution
+→ result aggregation
+→ AG-001 response aggregation
+
+AG-001 remains the top-level orchestrator.
+
+Do not replace AG-001 with the new coordinator.
+
+The coordinator is a subsystem of AG-001.
+
+---
+
+# 24. BACKWARD COMPATIBILITY
+
+Existing single-agent behavior must remain unchanged.
+
+Existing execution path:
+
+AG-001
+→ one agent
+→ result
+
+must continue working.
+
+Multi-agent coordination should activate only when the execution plan requires it.
+
+Existing Sprint 18 agentic tool calling must continue working.
+
+Existing Sprint 19 lifecycle controls must continue working.
+
+Existing AG-002/003/004 integrations must remain green.
+
+---
+
+# 25. DETERMINISTIC-FIRST DESIGN
+
+The system must work with:
+
+* LLM disabled
+* mock LLM
+* HTTP LLM
+* no external provider
+
+Coordination infrastructure itself must not depend on an LLM.
+
+This is critical.
+
+---
+
+# 26. OBSERVABILITY
+
+Add coordination events.
+
+Examples:
+
+* COORDINATION_CREATED
+* COORDINATION_STARTED
+* TASK_CREATED
+* TASK_READY
+* TASK_STARTED
+* TASK_COMPLETED
+* TASK_FAILED
+* TASK_CANCELLED
+* TASK_TIMED_OUT
+* TASK_RETRYING
+* AGENT_SELECTED
+* AGENT_REJECTED
+* RESULT_RECEIVED
+* CONFLICT_DETECTED
+* COORDINATION_CANCELLED
+* COORDINATION_COMPLETED
+* COORDINATION_FAILED
+
+Do not log:
+
+* API keys
+* passwords
+* JWTs
+* database URLs
+* secrets
+* raw sensitive payloads
+
+Use safe metadata only.
+
+---
+
+# 27. METRICS
+
+Track useful in-memory metrics consistent with the existing architecture:
+
+* total coordinations
+* successful coordinations
+* failed coordinations
+* cancelled coordinations
+* task count
+* task success/failure
+* retries
+* task latency
+* coordination latency
+* active coordinations
+* conflict count
+* agent rejection count
+* timeout count
+
+Keep metric interfaces extensible for future persistence.
+
+---
+
+# 28. HEALTH / READINESS
+
+Extend the existing health response with a coordination/platform section.
+
+Example conceptual shape:
+
+coordination:
+enabled: true
+active: 0
+limits:
+maxConcurrent: ...
+metrics:
+...
+
+Do not break existing `/healthz` or `/health` response contracts.
+
+---
+
+# 29. RUNTIME API
+
+If the existing runtime architecture supports it, expose a minimal safe coordination status surface.
+
+For example:
+
+`GET /api/agents/coordination/status`
+
+or an equivalent existing convention.
+
+Do not expose internal task payloads or secrets.
+
+Do not create unnecessary public APIs.
+
+---
+
+# 30. TYPE SAFETY
+
+Strict TypeScript.
+
+Requirements:
+
+* no `any`
+* no unsafe casts unless justified
+* use `unknown` + validation
+* strict Zod schemas
+* immutable contracts where appropriate
+* type-only imports
+* preserve existing compiler settings
+
+---
+
+# 31. TESTING — MANDATORY
+
+Create extensive tests.
+
+At minimum cover:
+
+## Unit tests
+
+* coordination request validation
+* task validation
+* plan validation
+* dependency graph
+* cycle detection
+* topological sorting
+* ready task calculation
+* sequential execution
+* parallel execution
+* pipeline execution
+* hybrid execution
+* task state transitions
+* result validation
+* aggregation
+* conflict detection
+* conflict policies
+* failure policies
+* retry behavior
+* timeout
+* cancellation
+* deadline propagation
+* concurrency limits
+* agent lifecycle rejection
+* authorization
+* message validation
+* payload limits
+* security redaction
+* deterministic ordering
+* idempotency where applicable
+
+## Integration tests
+
+Test:
+
+1. AG-001 → coordinator → one agent
+2. AG-001 → coordinator → parallel agents
+3. AG-001 → coordinator → dependent agents
+4. coordinator → Agent Platform Gateway
+5. lifecycle pause → coordination rejection
+6. lifecycle drain → new work rejection
+7. AG-004 tool allowlist remains enforced
+8. Sprint 18 agentic loop remains functional
+9. AG-002 remains functional
+10. AG-003 remains functional
+11. LLM disabled
+12. mock LLM
+13. cancellation
+14. timeout
+15. partial failure
+16. conflict
+17. retry
+18. concurrency limit
+
+## Regression
+
+All existing tests must remain green.
+
+Do not delete or weaken existing tests merely to make the suite pass.
+
+---
+
+# 32. TEST PERFORMANCE
+
+The repository already contains Neon integration tests.
+
+Do not make tests flaky.
+
+For real external DB tests:
+
+* use explicit per-test timeouts where needed
+* avoid unnecessary DB calls
+* do not change unrelated tests
+* do not weaken assertions
+
+The full test suite must be reliable under parallel execution.
+
+---
+
+# 33. DOCUMENTATION
+
+Create:
+
+`docs/sprint20-multi-agent-coordination-v1.md`
+
+Document:
+
+1. Sprint objective
+2. Architecture
+3. Coordination responsibilities
+4. Task model
+5. Coordination modes
+6. Dependency graph
+7. Agent selection
+8. Agent Platform integration
+9. Execution lifecycle
+10. Result aggregation
+11. Conflict handling
+12. Failure policies
+13. Retry policy
+14. Timeout/cancellation
+15. Concurrency
+16. Security
+17. AG-002 integration
+18. AG-003 integration
+19. AG-004 integration
+20. AG-001 integration
+21. Events
+22. Metrics
+23. Health
+24. API
+25. Testing
+26. Backward compatibility
+27. Deferred work
+28. Future business-agent integration
+
+Clearly state that Sprint 20 does NOT implement the five business AI teams.
+
+---
+
+# 34. UPDATE ARCHITECTURE DOCUMENTATION
+
+If appropriate, update existing architecture documentation to mark:
+
+Agent Capability Framework → COMPLETE
+Agent Lifecycle → COMPLETE
+Multi-Agent Coordination → COMPLETE
+
+Do not rewrite historical documents unnecessarily.
+
+Prefer an additive update if the project convention supports it.
+
+---
+
+# 35. DO NOT IMPLEMENT YET
+
+Explicitly DO NOT implement:
+
+* Client AI Team
+* Freelancer AI Team
+* Marketplace AI Team
+* Marketing AI Team
+* Admin AI Team
+* advanced semantic/vector RAG
+* recommendations
+* personalization
+* streaming
+* multi-provider failover
+* persistent AI observability
+* advanced evaluation
+* business-specific agent prompts
+* payment/business workflows
+
+Those belong to future sprints.
+
+---
+
+# 36. QUALITY BAR
+
+The implementation must be production-oriented.
+
+Priorities:
+
+1. Correctness
+2. Security
+3. Determinism
+4. Type safety
+5. Backward compatibility
+6. Cancellation correctness
+7. Lifecycle correctness
+8. Test coverage
+9. Observability
+10. Maintainability
+
+Avoid overengineering.
+
+Do not create speculative abstractions without a concrete current use.
+
+---
+
+# 37. VERIFICATION GATES
+
+Before declaring Sprint 20 complete, run:
+
+### TypeScript
+
+`npm run typecheck`
+
+Must pass with 0 errors.
+
+### ESLint
+
+`npm run lint`
+
+Must pass with 0 errors.
+
+### Build
+
+`npm run build`
+
+Must pass.
+
+### Tests
+
+Run the complete test suite.
+
+Report:
+
+* total test files
+* total tests
+* passed
+* failed
+* skipped
+* duration
+
+### Runtime
+
+Start the application using the existing project command.
+
+Verify:
+
+* `/healthz`
+* `/health`
+* existing runtime request
+* single-agent execution
+* multi-agent execution
+* cancellation/timeout behavior where practical
+
+### Existing systems
+
+Verify:
+
+* AG-001
+* AG-002
+* AG-003
+* AG-004
+* LLM layer
+* Sprint 18 agentic loop
+* Sprint 19 Agent Platform
+
+remain operational.
+
+---
+
+# 38. FINAL REPORT
+
+At the end, provide a concise but complete report containing:
+
+## Implementation
+
+* files created
+* files modified
+* architecture added
+* integrations
+
+## Tests
+
+* test count
+* pass/fail
+* important scenarios
+
+## Verification
+
+* typecheck
+* lint
+* build
+* runtime
+* health
+
+## Security
+
+* authorization
+* lifecycle enforcement
+* payload limits
+* cancellation
+* secret protection
+* prompt-injection handling
+
+## Architecture
+
+Show:
+
+User
+↓
+AG-001
+↓
+Coordination
+↓
+Agent Platform
+↓
+Agents
+↓
+AG-002 / AG-003 / AG-004 / LLM
+↓
+Results
+↓
+Aggregation
+↓
+AG-001
+↓
+Response
+
+## Deferred
+
+Clearly list what is intentionally NOT implemented.
+
+---
+
+# IMPORTANT EXECUTION RULES
+
+1. Do not ask me unnecessary questions.
+2. Inspect existing code before implementing.
+3. Reuse existing abstractions.
+4. Do not duplicate lifecycle logic.
+5. Do not bypass Agent Platform Gateway.
+6. Do not bypass AG-004.
+7. Do not bypass AG-002.
+8. Do not bypass AG-003.
+9. Do not bypass AG-001.
+10. Do not make LLM mandatory.
+11. Do not break deterministic execution.
+12. Do not implement business AI teams.
+13. Do not weaken existing tests.
+14. Do not remove existing functionality.
+15. Keep all limits bounded.
+16. Make cancellation and timeout behavior correct.
+17. Treat agent outputs as untrusted data.
+18. Never leak secrets.
+19. Keep APIs backward compatible.
+20. Finish the implementation fully rather than leaving TODO placeholders.
+
+START NOW.
+
+Inspect the repository first, understand Sprint 19's implementation, then implement Sprint 20 end-to-end.
+
+Do not stop after analysis.
+
+Continue until:
+
+* implementation is complete
+* tests are written
+* typecheck passes
+* lint passes
+* build passes
+* full test suite passes
+* runtime smoke tests pass
+* documentation is complete
+* final implementation report is produced.

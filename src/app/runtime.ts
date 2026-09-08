@@ -50,6 +50,8 @@ export interface HealthPayload {
   readonly platform: AgentPlatformStatusSnapshot;
   /** Sprint 20 multi-agent coordination status (safe aggregate; never secrets). */
   readonly coordination: CoordinationHealthSnapshot;
+  /** Sprint 21 client AI team status (safe aggregate; never secrets). */
+  readonly clientTeam: ClientTeamHealthSnapshot;
 }
 
 /** Safe coordination health snapshot for the runtime health block. */
@@ -57,6 +59,16 @@ export interface CoordinationHealthSnapshot {
   readonly healthy: boolean;
   readonly activeCoordinations: number;
   readonly activeTaskCount: number;
+  readonly eventCount: number;
+}
+
+/** Safe client AI team snapshot for the runtime health block. */
+export interface ClientTeamHealthSnapshot {
+  readonly healthy: boolean;
+  readonly enabled: boolean;
+  readonly activeAgents: number;
+  readonly establishedAgents: number;
+  readonly workflows: readonly string[];
   readonly eventCount: number;
 }
 
@@ -73,6 +85,7 @@ export async function defaultHealth(
   llmInfo?: () => { enabled: boolean; configured: boolean; provider: string; model: string },
   platformInfo?: () => AgentPlatformStatusSnapshot,
   coordinationInfo?: () => CoordinationHealthSnapshot,
+  clientTeamInfo?: () => ClientTeamHealthSnapshot,
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
   const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
@@ -98,6 +111,19 @@ export async function defaultHealth(
       healthy: false,
     },
     coordination: coordinationInfo?.() ?? defaultCoordinationHealth(),
+    clientTeam: clientTeamInfo?.() ?? defaultClientTeamHealth(),
+  };
+}
+
+/** Default client AI team snapshot when the layer is absent. */
+export function defaultClientTeamHealth(): ClientTeamHealthSnapshot {
+  return {
+    healthy: false,
+    enabled: false,
+    activeAgents: 0,
+    establishedAgents: 0,
+    workflows: [],
+    eventCount: 0,
   };
 }
 
@@ -185,6 +211,21 @@ export class ProductionRuntime {
               eventCount: status.eventCount,
             };
           },
+          () => {
+            const status = options.composition.services.clientAi.status();
+            const clientRegistry = options.composition.services.platformRegistry;
+            const established = ['AG-102', 'AG-103', 'AG-104', 'AG-105', 'AG-101'].filter(
+              (agentId) => clientRegistry.getAgent(agentId) !== undefined,
+            ).length;
+            return {
+              healthy: status.healthy,
+              enabled: status.enabled,
+              activeAgents: status.agents.active,
+              establishedAgents: established,
+              workflows: status.workflows,
+              eventCount: status.eventCount,
+            };
+          },
         ));
   }
 
@@ -250,6 +291,10 @@ export class ProductionRuntime {
       return this.handleCoordinationStatus(res);
     }
 
+    if (url.pathname === '/api/client-ai/status') {
+      return this.handleClientAiStatus(res);
+    }
+
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
   }
 
@@ -293,6 +338,27 @@ export class ProductionRuntime {
         total: eventLog.count(),
         latest: eventLog.latest(10),
       },
+    });
+  }
+
+  /**
+   * Sprint 21 client AI team status endpoint. Exposes service health, team
+   * agents/limits, workflows, and metrics. Never exposes prompts, briefs,
+   * results, or secrets.
+   */
+  private async handleClientAiStatus(res: ServerResponse): Promise<void> {
+    const clientAi = this.composition.services.clientAi;
+    const status = clientAi.status();
+
+    return this.sendJson(res, 200, {
+      name: clientAi.name,
+      version: clientAi.version,
+      healthy: status.healthy,
+      enabled: status.enabled,
+      agents: status.agents,
+      workflows: status.workflows,
+      metrics: status.metrics,
+      events: { total: status.eventCount },
     });
   }
 

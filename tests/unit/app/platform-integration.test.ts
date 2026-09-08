@@ -12,7 +12,7 @@ function inMemoryEnv(overrides: Record<string, string> = {}): ReturnType<typeof 
 }
 
 describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
-  it('registers AG-101 (mirror, activated) and AG-102 (definition-only)', async () => {
+  it('registers AG-101 mirror + client team AG-102..AG-105 (activated)', async () => {
     const composition = await createProductionComposition({ env: inMemoryEnv() });
     try {
       const registry = composition.services.platformRegistry;
@@ -20,14 +20,20 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
       expect(
         registry.getAgent('AG-102')?.capabilities.some((c) => c.id === 'budget.estimate'),
       ).toBe(true);
+      expect(registry.getAgent('AG-105')?.capabilities.some((c) => c.id === 'project.score')).toBe(
+        true,
+      );
       expect(registry.lifecycleStateOf('AG-101')?.toString()).toBe('READY');
-      expect(registry.snapshot().registered).toBe(2);
-      expect(registry.snapshot().ready).toBe(1);
+      expect(registry.lifecycleStateOf('AG-102')?.toString()).toBe('READY');
+      expect(registry.snapshot().registered).toBe(5);
+      expect(registry.snapshot().ready).toBe(5);
       expect(composition.services.platformGateway.isPlatformManaged('AG-101')).toBe(true);
       expect(composition.services.platformGateway.isPlatformManaged('AG-001')).toBe(false);
       expect(composition.services.platformGateway.isToolAllowed('AG-101', 'calculator')).toBe(
         false,
       );
+      // AG-102's mirror allowlists the calculator when tools are enabled.
+      expect(composition.services.platformGateway.isToolAllowed('AG-102', 'calculator')).toBe(true);
     } finally {
       await composition.storage.close();
     }
@@ -44,11 +50,21 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
     try {
       const health = (await (await fetch(`http://127.0.0.1:${port}/healthz`)).json()) as {
         platform: { registered: number; ready: number; running: number; healthy: boolean };
+        clientTeam: {
+          healthy: boolean;
+          enabled: boolean;
+          activeAgents: number;
+          establishedAgents: number;
+        };
       };
-      expect(health.platform.registered).toBe(2);
-      expect(health.platform.ready).toBe(1);
+      expect(health.platform.registered).toBe(5);
+      expect(health.platform.ready).toBe(5);
       expect(health.platform.running).toBe(0);
       expect(health.platform.healthy).toBe(true);
+      expect(health.clientTeam.healthy).toBe(true);
+      expect(health.clientTeam.enabled).toBe(true);
+      expect(health.clientTeam.activeAgents).toBe(5);
+      expect(health.clientTeam.establishedAgents).toBe(5);
       expect(JSON.stringify(health)).not.toMatch(/postgres|neon|database_url/i);
     } finally {
       await runtime.shutdown();
