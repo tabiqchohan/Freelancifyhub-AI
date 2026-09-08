@@ -1,0 +1,1476 @@
+# SPRINT 23 — MARKETPLACE AI TEAM v1
+
+## Complete OpenCode Implementation Prompt
+
+You are working inside the existing `freelancify-ai` repository.
+
+Repository:
+
+`D:\Quarter04\freelancer_app\freelancify-ai`
+
+Your task is to implement:
+
+**Sprint 23 — Marketplace AI Team v1**
+
+This sprint adds the Marketplace AI Team on top of the existing production architecture.
+
+---
+
+# 1. CRITICAL INSTRUCTION
+
+Before writing code, inspect the existing repository thoroughly.
+
+Especially inspect:
+
+* `src/agents/client-ai-team/`
+* `src/agents/freelancer-ai-team/`
+* `src/agents/agent-platform/`
+* `src/agents/ag-001-master-orchestrator/`
+* `src/agents/ag-002-memory-manager/`
+* `src/agents/ag-003-knowledge-manager/`
+* `src/agents/ag-004-tool-manager/`
+* `src/llm/`
+* composition root
+* runtime
+* coordination implementation
+* agent catalog
+* Sprint 21 documentation
+* Sprint 22 documentation
+* existing integration tests
+* existing configuration
+* existing health/status implementation
+
+Use Sprint 21 and Sprint 22 as architectural references.
+
+Do not blindly duplicate them.
+
+Reuse shared infrastructure wherever possible.
+
+---
+
+# 2. ARCHITECTURAL PRINCIPLE
+
+The Marketplace AI Team is a **domain team**.
+
+It must NOT become another platform/orchestrator.
+
+Existing architecture remains authoritative:
+
+```text
+AG-001 Master Orchestrator
+        ↓
+Agent Platform
+        ↓
+Marketplace AI Team
+        ↓
+Marketplace Agents
+        ↓
+Memory / Knowledge / Tools / LLM / Coordination
+        ↓
+bounded result
+        ↓
+AG-001 response aggregation
+```
+
+Do not create:
+
+* another master orchestrator
+* another execution engine
+* another lifecycle system
+* another agent registry
+* another coordination engine
+* another memory system
+* another knowledge system
+* another tool registry
+* another LLM abstraction
+
+---
+
+# 3. MARKETPLACE TEAM PURPOSE
+
+The Marketplace AI Team provides intelligence for the Freelancify marketplace itself.
+
+Its responsibilities include:
+
+* project discovery intelligence
+* marketplace matching
+* project quality analysis
+* pricing/budget intelligence
+* marketplace trend/insight analysis
+* opportunity analysis
+* marketplace-level recommendations
+
+It should serve both:
+
+* freelancer-side marketplace discovery
+* client-side marketplace/project intelligence
+
+while remaining separate from the Client AI Team and Freelancer AI Team.
+
+---
+
+# 4. AGENT IDS
+
+Before implementation:
+
+1. inspect `docs/agent-catalog-v1.md`
+2. inspect currently registered agents
+3. inspect AG-201 through AG-207
+4. identify the architecture-defined Marketplace AI Team IDs
+5. do NOT invent conflicting IDs
+6. use the exact catalog identities whenever available
+
+Do not assume IDs without checking the catalog.
+
+The implementation should use the appropriate Marketplace agents from the existing architecture.
+
+Likely functional areas include:
+
+* Marketplace Search / Discovery
+* Marketplace Matching
+* Project Quality / Analysis
+* Pricing / Budget Intelligence
+* Marketplace Insights
+
+But the repository's existing agent catalog is authoritative.
+
+---
+
+# 5. AGENT CONTRACT
+
+Every Marketplace agent must use the existing Agent Platform contract.
+
+Each definition must include:
+
+* ID
+* name
+* description
+* team
+* capabilities
+* allowed tools
+* execution mode
+* limits
+* timeout
+* lifecycle metadata
+* security metadata
+* observability metadata
+
+Use the existing strict Zod schemas.
+
+Do not weaken validation.
+
+---
+
+# 6. DETERMINISTIC-FIRST
+
+Marketplace AI must work with LLM disabled wherever structured data is sufficient.
+
+Examples:
+
+* skill overlap
+* project requirement extraction
+* budget range validation
+* project completeness
+* project quality checks
+* deterministic compatibility scoring
+* structured opportunity ranking
+
+LLM may enhance:
+
+* natural-language explanations
+* nuanced project-quality feedback
+* proposal/project interpretation
+* marketplace insight narratives
+
+But LLM is never mandatory for core structured operations.
+
+With LLM disabled:
+
+* deterministic functionality continues
+* unavailable reasoning is explicitly classified
+* no fake AI result
+* no fabricated marketplace facts
+
+---
+
+# 7. MARKETPLACE DATA MODEL
+
+Inspect the existing application/product contracts before defining new fields.
+
+Use existing representations wherever available.
+
+Potential inputs:
+
+### Project
+
+* project ID
+* title
+* description
+* required skills
+* category
+* budget
+* timeline
+* status
+* client-provided requirements
+
+### Freelancer
+
+* freelancer ID
+* skills
+* experience
+* portfolio metadata
+* category
+* availability where supported
+
+### Marketplace
+
+* projects
+* categories
+* structured project metadata
+* matching information
+* activity information
+* historical data where actually available
+
+Do not invent fields merely because they would be useful.
+
+If a data source does not exist, represent it as unavailable/insufficient rather than fabricating it.
+
+---
+
+# 8. PROJECT DISCOVERY AGENT
+
+Implement marketplace project discovery using the existing available data.
+
+Possible capabilities:
+
+* filter projects by relevant skills
+* rank projects by compatibility
+* identify strong-fit opportunities
+* explain why a project matches
+* identify missing requirements
+
+Use deterministic ranking when structured data exists.
+
+Do not claim access to projects that are not actually provided to the agent.
+
+Do not create fake marketplace inventory.
+
+---
+
+# 9. MARKETPLACE MATCHING
+
+Implement reusable marketplace matching logic.
+
+Matching may consider:
+
+* required skills
+* freelancer skills
+* category
+* experience metadata
+* project constraints
+* explicit requirements
+
+Return explainable results.
+
+Example conceptual result:
+
+```text
+score
+matchedSkills
+missingSkills
+requirementCoverage
+reasons
+warnings
+```
+
+Do not make score appear mathematically authoritative unless the underlying scoring model is actually defined.
+
+Document the scoring methodology.
+
+Keep it deterministic and testable.
+
+---
+
+# 10. PROJECT QUALITY ANALYSIS
+
+Implement project-quality analysis.
+
+Potential checks:
+
+* missing project title
+* insufficient description
+* missing skills
+* unclear deliverables
+* missing timeline
+* unclear budget
+* contradictory requirements
+* overly broad requirements
+* potentially ambiguous scope
+
+Separate:
+
+### Deterministic findings
+
+from
+
+### AI-generated suggestions
+
+Never claim a project is objectively "bad" without evidence.
+
+Use neutral classifications such as:
+
+* complete
+* incomplete
+* ambiguous
+* needs clarification
+* insufficient data
+
+---
+
+# 11. PRICING / BUDGET INTELLIGENCE
+
+Implement bounded pricing/budget analysis using only available data.
+
+Potential functionality:
+
+* validate budget structure
+* detect obviously incomplete budget information
+* compare project requirements against budget when a deterministic rule exists
+* identify potential budget ambiguity
+* provide non-binding pricing guidance
+
+IMPORTANT:
+
+Do not fabricate market prices.
+
+Do not claim "the market rate is X" unless actual marketplace data exists.
+
+If historical marketplace data does not exist:
+
+return an explicit insufficient-data result.
+
+Do not invent market statistics.
+
+Any estimate must be clearly labeled:
+
+`isEstimate: true`
+
+Use the same estimate semantics established by Sprint 21/22.
+
+---
+
+# 12. MARKETPLACE INSIGHTS
+
+Implement marketplace insights using actual available structured data.
+
+Potential signals:
+
+* project counts
+* category counts
+* skill demand
+* project status distribution
+* budget distribution
+* activity metrics
+
+Only calculate metrics from data actually provided.
+
+If insufficient data exists:
+
+return:
+
+* insufficientData
+* availableSignals
+* safe recommendations
+
+Never fabricate:
+
+* demand percentages
+* growth rates
+* conversion rates
+* average budgets
+* competition levels
+* market trends
+
+---
+
+# 13. OPPORTUNITY ANALYSIS
+
+Implement an opportunity-analysis capability where supported.
+
+For a freelancer/project pair:
+
+identify:
+
+* strengths
+* missing requirements
+* opportunity quality
+* potential concerns
+* recommended next action
+
+Do not guarantee that an opportunity will result in winning a project.
+
+Use bounded deterministic reasoning.
+
+---
+
+# 14. WORKFLOWS
+
+Implement Marketplace Team workflows using the existing workflow architecture.
+
+At minimum:
+
+## Marketplace Discovery Workflow
+
+```text
+validate input
+↓
+normalize query
+↓
+retrieve available marketplace data
+↓
+deterministic matching/ranking
+↓
+optional reasoning enrichment
+↓
+validate result
+↓
+return bounded result
+```
+
+## Project Quality Workflow
+
+```text
+validate project
+↓
+deterministic quality checks
+↓
+retrieve relevant knowledge if useful
+↓
+optional LLM explanation
+↓
+validate output
+↓
+return result
+```
+
+## Marketplace Matching Workflow
+
+```text
+validate freelancer/project
+↓
+skill normalization
+↓
+requirement analysis
+↓
+deterministic compatibility
+↓
+optional reasoning
+↓
+aggregate
+```
+
+## Budget Intelligence Workflow
+
+```text
+validate budget
+↓
+inspect requirements
+↓
+available-data analysis
+↓
+estimate only when justified
+↓
+mark estimates clearly
+↓
+return result
+```
+
+## Marketplace Insights Workflow
+
+```text
+validate dataset
+↓
+calculate deterministic metrics
+↓
+detect insufficient data
+↓
+optional reasoning
+↓
+return bounded insights
+```
+
+---
+
+# 15. AG-001 INTEGRATION
+
+Marketplace workflows must be reachable through AG-001.
+
+Use the existing intent framework.
+
+Inspect existing intent constants and registry first.
+
+Add Marketplace-specific intents only if they are genuinely missing.
+
+Do not duplicate an existing intent.
+
+Intent classification remains separate from execution.
+
+The flow must remain:
+
+```text
+request
+→ intent detection
+→ context
+→ routing
+→ planning
+→ execution
+→ Marketplace Team
+→ aggregation
+→ response
+```
+
+Do not bypass AG-001.
+
+---
+
+# 16. AGENT PLATFORM
+
+Register Marketplace agents with the existing Agent Platform.
+
+Use the existing:
+
+* AgentDefinition
+* registry
+* lifecycle controller
+* gateway
+* routing integration
+* execution lease
+* metrics
+* event log
+
+Do not create a new lifecycle implementation.
+
+Test:
+
+* READY
+* PAUSED
+* DISABLED
+* RUNNING
+* failure cleanup
+* cancellation cleanup
+* timeout cleanup
+
+Ensure platform admission remains authoritative.
+
+---
+
+# 17. COORDINATION
+
+Reuse Sprint 20 coordination.
+
+Do not create another coordinator.
+
+Use multi-agent coordination only where valuable.
+
+Example:
+
+```text
+Project Quality Agent
+        ↓
+Matching Agent
+        ↓
+Budget Agent
+        ↓
+Marketplace Insight Agent
+        ↓
+Aggregator
+```
+
+Use existing:
+
+* dependency graph
+* topological ordering
+* deadlines
+* cancellation
+* retries
+* bounded concurrency
+* failure policies
+* aggregation
+
+Agents must still execute through the existing runtime executor and Agent Platform gate.
+
+---
+
+# 18. MEMORY
+
+Marketplace AI may use AG-002 where relevant.
+
+Potential memory:
+
+* previous marketplace searches
+* user marketplace preferences
+* recurring skills/preferences
+* prior recommendations
+* workflow context
+
+Use existing AG-002 public interfaces.
+
+Never access the database directly.
+
+Apply:
+
+* authorization
+* scope
+* bounded retrieval
+* deduplication
+* redaction
+* lifecycle/security rules
+
+---
+
+# 19. KNOWLEDGE
+
+Use AG-003 for marketplace knowledge.
+
+Potential knowledge:
+
+* marketplace policies
+* project guidelines
+* skill taxonomy
+* platform rules
+* marketplace best practices
+
+Do not create a second knowledge base.
+
+Do not bypass AG-003.
+
+---
+
+# 20. TOOLS
+
+All tools must go through AG-004.
+
+Only registered tools may be used.
+
+Tool access must be explicitly allowlisted.
+
+Respect:
+
+* max calls
+* max turns
+* timeout
+* cancellation
+* output size
+* authorization
+
+Do not introduce provider-specific tool calls.
+
+If no tool is needed, keep the allowlist empty.
+
+---
+
+# 21. AGENTIC REASONING
+
+Where LLM/tool reasoning is genuinely useful, use the existing Sprint 18 agentic loop.
+
+Requirements:
+
+* bounded turns
+* bounded tool calls
+* bounded context
+* bounded result bytes
+* cancellation
+* timeout
+* authorized tools only
+* sanitized tool output
+* prompt-injection defense
+
+Do not create a second reasoning loop.
+
+---
+
+# 22. SECURITY
+
+Marketplace content must be considered untrusted.
+
+Potentially untrusted:
+
+* project descriptions
+* client requirements
+* freelancer descriptions
+* portfolio descriptions
+* tool results
+* knowledge content
+
+Use the existing security utilities.
+
+Mandatory:
+
+* validation
+* authorization
+* secret redaction
+* prompt-injection defense
+* boundary-marker neutralization
+* connection-string protection
+* bounded strings
+* bounded arrays
+* safe output validation
+
+Never place secrets into:
+
+* LLM prompts
+* events
+* metrics
+* logs
+* workflow results
+
+---
+
+# 23. PROMPT-INJECTION DEFENSE
+
+Use the existing safe encoding/delimited-content approach.
+
+Explicitly separate:
+
+```text
+CONTROL DATA
+```
+
+from:
+
+```text
+UNTRUSTED MARKETPLACE CONTENT
+```
+
+Untrusted content must never become system-level instructions.
+
+Tool output is also untrusted.
+
+---
+
+# 24. CONTEXT BUILDER
+
+Reuse existing context infrastructure.
+
+Context should be:
+
+* bounded
+* prioritized
+* normalized
+* deduplicated
+* budget-controlled
+
+Prioritize:
+
+1. current request
+2. current marketplace/project data
+3. explicit user constraints
+4. required structured fields
+5. relevant memory
+6. relevant knowledge
+7. optional historical context
+
+Never allow unlimited marketplace history into the prompt.
+
+---
+
+# 25. OUTPUT SCHEMAS
+
+Create strict schemas consistent with the repository.
+
+Possible contracts:
+
+### MarketplaceMatchResult
+
+* score
+* matched requirements
+* missing requirements
+* reasons
+* warnings
+
+### ProjectQualityResult
+
+* status
+* findings
+* missing information
+* recommendations
+
+### BudgetAnalysisResult
+
+* budget information
+* concerns
+* estimate where justified
+* `isEstimate`
+* evidence
+
+### MarketplaceInsightResult
+
+* observed metrics
+* insights
+* recommendations
+* insufficient-data state
+
+### OpportunityResult
+
+* strengths
+* concerns
+* fit
+* recommendations
+
+All outputs must be:
+
+* bounded
+* validated
+* deterministic where possible
+* free of fabricated facts
+
+---
+
+# 26. ERROR HANDLING
+
+Use existing error taxonomy.
+
+Support:
+
+* invalid input
+* unauthorized
+* forbidden
+* agent not ready
+* timeout
+* cancellation
+* tool failure
+* memory failure
+* knowledge failure
+* reasoning unavailable
+* reasoning failure
+* insufficient data
+* partial coordination failure
+
+Never leak raw internal errors.
+
+---
+
+# 27. EVENTS
+
+Create Marketplace-specific event types only where necessary.
+
+Follow existing event architecture.
+
+Safe metadata only:
+
+* execution ID
+* agent ID
+* workflow
+* correlation ID
+* outcome
+* latency
+* counts
+* error classification
+
+Never log sensitive content.
+
+---
+
+# 28. METRICS
+
+Create Marketplace Team metrics using existing patterns.
+
+Potential metrics:
+
+* workflow count
+* success/failure
+* latency
+* matching count
+* insufficient-data count
+* reasoning usage
+* tool usage
+* coordination outcomes
+
+Do not collect unnecessary user content.
+
+---
+
+# 29. RUNTIME STATUS
+
+Add:
+
+```text
+GET /api/marketplace-ai/status
+```
+
+Return safe information:
+
+* healthy
+* registered agents
+* lifecycle state
+* supported workflows
+* safe metrics summary
+
+Also add:
+
+```text
+marketplaceTeam
+```
+
+to `/healthz`.
+
+Do not break any existing health blocks.
+
+Existing health sections must remain intact.
+
+---
+
+# 30. COMPOSITION ROOT
+
+Update the existing composition root.
+
+Register:
+
+* Marketplace agents
+* platform mirrors
+* routing
+* service
+* workflows
+* events
+* metrics
+
+Use shared dependencies.
+
+Do not instantiate duplicate infrastructure.
+
+---
+
+# 31. CONFIGURATION
+
+Only add Marketplace-specific configuration if genuinely required.
+
+Follow existing configuration conventions.
+
+Defaults must be safe.
+
+Do not introduce unnecessary environment variables.
+
+Do not break existing configuration.
+
+---
+
+# 32. TESTING
+
+Create comprehensive tests.
+
+## Unit tests
+
+Cover:
+
+* schemas
+* validation
+* agent definitions
+* project quality
+* matching
+* discovery
+* budget analysis
+* marketplace insights
+* opportunity analysis
+* context
+* router
+* workflows
+* security
+* errors
+* events
+* metrics
+
+## Integration tests
+
+Cover:
+
+* AG-001 → Marketplace Team
+* Agent Platform
+* AG-002
+* AG-003
+* AG-004
+* LLM disabled
+* mock LLM
+* agentic loop where applicable
+* coordination
+* runtime endpoints
+
+## Platform tests
+
+Cover:
+
+* registered agents
+* platform mirrors
+* ready state
+* paused state
+* disabled state
+* lease cleanup
+* concurrency
+
+## Failure tests
+
+Cover:
+
+* invalid input
+* unauthorized
+* forbidden
+* timeout
+* cancellation
+* tool failure
+* memory failure
+* knowledge failure
+* reasoning unavailable
+* reasoning failure
+* insufficient data
+* partial coordination failure
+* oversized context
+* prompt injection
+* secret leakage
+
+---
+
+# 33. DETERMINISTIC TESTING
+
+With LLM disabled:
+
+* project quality analysis must work
+* matching must work
+* skill compatibility must work
+* structured budget validation must work
+* structured marketplace metrics must work when data exists
+* zero unnecessary LLM calls
+
+Do not make tests depend on an external provider.
+
+---
+
+# 34. NO FABRICATION TESTS
+
+Explicitly test that the system does NOT fabricate:
+
+* market rates
+* project inventory
+* demand statistics
+* growth percentages
+* freelancer success rates
+* competition numbers
+* client information
+* project information
+
+When information is unavailable, the result must say so.
+
+---
+
+# 35. SECURITY TESTS
+
+Explicitly test:
+
+* project description containing prompt injection
+* malicious tool output
+* boundary marker injection
+* secret-like strings
+* database connection strings
+* oversized inputs
+* oversized outputs
+
+Verify that sensitive data does not appear in:
+
+* LLM messages
+* events
+* metrics
+* errors
+
+---
+
+# 36. DOCUMENTATION
+
+Create:
+
+`docs/sprint23-marketplace-ai-team-v1.md`
+
+Document:
+
+1. Sprint objective
+2. Architecture
+3. Marketplace agents
+4. Agent capabilities
+5. Routing
+6. Workflows
+7. Matching
+8. Project quality
+9. Budget intelligence
+10. Marketplace insights
+11. Opportunity analysis
+12. Memory integration
+13. Knowledge integration
+14. Tool integration
+15. LLM integration
+16. Coordination integration
+17. Security
+18. Observability
+19. Runtime API
+20. Configuration
+21. Testing
+22. Verification
+23. Known limitations
+24. Deferred functionality
+
+Clearly distinguish:
+
+* implemented
+* partially implemented
+* deferred
+* unavailable because source data does not exist
+
+---
+
+# 37. CODE QUALITY
+
+Maintain existing standards:
+
+* TypeScript strict
+* no unnecessary `any`
+* type-only imports
+* strict schemas
+* existing error conventions
+* existing naming conventions
+* existing folder structure
+* existing testing style
+
+Do not weaken lint/type rules.
+
+Do not disable checks.
+
+Do not modify unrelated code unnecessarily.
+
+---
+
+# 38. PERFORMANCE / BOUNDS
+
+All Marketplace workflows must have bounded:
+
+* input size
+* context size
+* output size
+* array sizes
+* tool calls
+* agentic turns
+* execution time
+* concurrency
+
+Reuse existing project limits.
+
+Do not introduce unbounded loops.
+
+Do not allow unbounded project lists.
+
+---
+
+# 39. REGRESSION SAFETY
+
+After implementation, run the FULL existing test suite.
+
+The Marketplace Team must not break:
+
+* AG-001
+* AG-002
+* AG-003
+* AG-004
+* LLM
+* agentic loop
+* Agent Platform
+* coordination
+* Client AI Team
+* Freelancer AI Team
+* runtime
+* existing health checks
+
+Existing tests must remain green.
+
+---
+
+# 40. REQUIRED VERIFICATION GATES
+
+Run actual repository commands.
+
+At minimum:
+
+```bash
+npx tsc --noEmit
+```
+
+```bash
+npx eslint .
+```
+
+```bash
+npx prettier --check .
+```
+
+```bash
+npx vitest run
+```
+
+```bash
+npm run build
+```
+
+Also run relevant runtime/Neon integration tests according to existing repository conventions.
+
+Do not report success without actually running them.
+
+---
+
+# 41. RUNTIME SMOKE TEST
+
+Verify:
+
+```text
+/healthz
+```
+
+contains:
+
+```text
+marketplaceTeam
+```
+
+and reports healthy status.
+
+Verify:
+
+```text
+GET /api/marketplace-ai/status
+```
+
+returns healthy status.
+
+Verify at least one Marketplace workflow through the real runtime/executor path.
+
+Verify:
+
+* platform gate
+* lifecycle
+* deterministic path
+* LLM-disabled path
+
+---
+
+# 42. TEST COUNT REPORT
+
+At the end provide actual numbers:
+
+```text
+Marketplace Team unit tests: X
+Marketplace integration tests: X
+Platform integration tests: X
+Total repository tests: X
+```
+
+Do not estimate the numbers.
+
+Use actual output from Vitest.
+
+---
+
+# 43. FINAL IMPLEMENTATION REPORT
+
+At the end report:
+
+## Implemented
+
+* files added
+* files modified
+* agents
+* workflows
+* routing
+* platform registration
+* integrations
+* runtime endpoints
+
+## Verification
+
+* TypeScript
+* ESLint
+* Prettier
+* Vitest
+* build
+* runtime smoke
+* health
+* Marketplace status
+
+## Security
+
+List actually verified protections.
+
+## Deferred
+
+List anything intentionally deferred because infrastructure/data is not yet available.
+
+## Git
+
+Do NOT commit or push automatically.
+
+Only implement and verify.
+
+---
+
+# 44. IMPORTANT: DO NOT OVERBUILD
+
+Sprint 23 is Marketplace AI Team v1.
+
+Do NOT attempt to implement:
+
+* real-time marketplace crawling
+* external web scraping
+* vector search
+* recommendation ML training
+* predictive market forecasting
+* payment processing
+* marketplace database redesign
+* external analytics infrastructure
+* autonomous marketplace actions
+
+unless the existing repository already explicitly supports them and Sprint 23 requires them.
+
+Prefer a clean, deterministic foundation over speculative infrastructure.
+
+---
+
+# 45. DATA HONESTY
+
+This rule is mandatory.
+
+If the repository does not contain sufficient marketplace data for a feature, do NOT fake it.
+
+Example:
+
+If there is no historical marketplace dataset:
+
+```text
+market trend analysis
+```
+
+must return:
+
+```text
+insufficient data
+```
+
+rather than fabricated trends.
+
+If there is no real project inventory:
+
+do not pretend to search thousands of marketplace projects.
+
+If there is no historical pricing dataset:
+
+do not claim actual market rates.
+
+The AI must be useful without pretending to know information it does not have.
+
+---
+
+# 46. ARCHITECTURAL BOUNDARIES
+
+The final architecture must remain:
+
+```text
+                    AG-001
+                      │
+              Master Orchestrator
+                      │
+                Agent Platform
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+     Client      Freelancer     Marketplace
+      Team          Team            Team
+        │             │             │
+        └─────────────┼─────────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+      AG-002        AG-003        AG-004
+      Memory       Knowledge       Tools
+        │             │             │
+        └─────────────┼─────────────┘
+                      │
+               LLM / Reasoning
+                      │
+              Agentic Tool Loop
+                      │
+             Multi-Agent Coordination
+```
+
+Do not violate these boundaries.
+
+---
+
+# 47. SPRINT 23 DEFINITION OF DONE
+
+Sprint 23 is complete only when:
+
+* Marketplace AI Team implemented
+* correct catalog IDs used
+* all agents registered
+* platform mirrors created
+* lifecycle integrated
+* AG-001 routing integrated
+* Marketplace workflows implemented
+* deterministic matching implemented
+* project quality analysis implemented
+* budget intelligence implemented where data supports it
+* marketplace insights implemented where data supports it
+* insufficient-data behavior implemented
+* AG-002 integrated
+* AG-003 integrated
+* AG-004 integrated
+* LLM integrated
+* agentic loop integrated where required
+* coordination integrated where useful
+* security implemented
+* prompt-injection defense tested
+* bounded context implemented
+* outputs strictly validated
+* events implemented
+* metrics implemented
+* `/healthz` updated
+* `/api/marketplace-ai/status` working
+* full test suite passing
+* typecheck passing
+* ESLint passing
+* Prettier passing
+* build passing
+* runtime smoke test passing
+* documentation complete
+
+---
+
+# 48. EXECUTION INSTRUCTION
+
+Start now.
+
+First inspect Sprint 21, Sprint 22, the Agent Catalog, AG-001 routing/intent architecture, Agent Platform, Coordination, Memory, Knowledge, Tools, LLM and runtime.
+
+Then:
+
+1. determine exact Marketplace agent identities from the repository
+2. implement Marketplace Team using existing architecture
+3. integrate with AG-001
+4. integrate Agent Platform
+5. integrate existing Memory/Knowledge/Tools/LLM/Coordination
+6. add tests
+7. add runtime status/health
+8. add documentation
+9. run all verification gates
+10. fix all real failures
+11. rerun the full suite
+12. provide the final implementation report
+
+Do not stop at scaffolding.
+
+Do not ask for checkpoints.
+
+Complete the sprint end-to-end.
+
+Do not commit or push unless explicitly instructed.

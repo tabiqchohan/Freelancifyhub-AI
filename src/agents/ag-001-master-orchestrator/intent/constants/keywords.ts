@@ -174,6 +174,12 @@ export const INTENT_KEYWORDS: Readonly<Record<IntentId, readonly string[]>> = {
     'chat',
     'dm',
   ],
+  [IntentId.ENGAGEMENT_SCOPE]: [
+    'define engagement scope',
+    'set engagement scope',
+    'scope engagement',
+    'engagement scope',
+  ],
   [IntentId.SEARCH_KNOWLEDGE]: [
     'search knowledge',
     'search articles',

@@ -12,7 +12,7 @@ function inMemoryEnv(overrides: Record<string, string> = {}): ReturnType<typeof 
 }
 
 describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
-  it('registers AG-101 + client team AG-102..AG-105 + freelancer team AG-201/202/206/207', async () => {
+  it('registers AG-101 + client AG-102..105 + freelancer AG-201/202/206/207 + marketplace AG-301..306', async () => {
     const composition = await createProductionComposition({ env: inMemoryEnv() });
     try {
       const registry = composition.services.platformRegistry;
@@ -35,11 +35,42 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
       expect(
         registry.getAgent('AG-207')?.capabilities.some((c) => c.id === 'insight.analyze'),
       ).toBe(true);
+      expect(
+        registry.getAgent('AG-301')?.capabilities.some((c) => c.id === 'contract.generate'),
+      ).toBe(true);
+      expect(
+        registry.getAgent('AG-301')?.capabilities.some((c) => c.id === 'project.quality'),
+      ).toBe(true);
+      expect(registry.getAgent('AG-302')?.capabilities.some((c) => c.id === 'milestone.plan')).toBe(
+        true,
+      );
+      expect(registry.getAgent('AG-302')?.capabilities.some((c) => c.id === 'budget.analyze')).toBe(
+        true,
+      );
+      expect(
+        registry.getAgent('AG-303')?.capabilities.some((c) => c.id === 'review.generate'),
+      ).toBe(true);
+      expect(registry.getAgent('AG-304')?.capabilities.some((c) => c.id === 'scam.report')).toBe(
+        true,
+      );
+      expect(
+        registry.getAgent('AG-304')?.capabilities.some((c) => c.id === 'marketplace.insights'),
+      ).toBe(true);
+      expect(
+        registry.getAgent('AG-304')?.capabilities.some((c) => c.id === 'marketplace.discovery'),
+      ).toBe(true);
+      expect(registry.getAgent('AG-305')?.capabilities.some((c) => c.id === 'dispute.open')).toBe(
+        true,
+      );
+      expect(registry.getAgent('AG-306')?.capabilities.some((c) => c.id === 'message.send')).toBe(
+        true,
+      );
       expect(registry.lifecycleStateOf('AG-101')?.toString()).toBe('READY');
       expect(registry.lifecycleStateOf('AG-102')?.toString()).toBe('READY');
       expect(registry.lifecycleStateOf('AG-202')?.toString()).toBe('READY');
-      expect(registry.snapshot().registered).toBe(9);
-      expect(registry.snapshot().ready).toBe(9);
+      expect(registry.lifecycleStateOf('AG-304')?.toString()).toBe('READY');
+      expect(registry.snapshot().registered).toBe(15);
+      expect(registry.snapshot().ready).toBe(15);
       expect(composition.services.platformGateway.isPlatformManaged('AG-101')).toBe(true);
       expect(composition.services.platformGateway.isPlatformManaged('AG-001')).toBe(false);
       expect(composition.services.platformGateway.isToolAllowed('AG-101', 'calculator')).toBe(
@@ -54,6 +85,15 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
         false,
       );
       expect(composition.services.platformGateway.isToolAllowed('AG-206', 'calculator')).toBe(
+        false,
+      );
+      // Marketplace mirrors are managed with an empty tool allowlist (fail-closed).
+      expect(composition.services.platformGateway.isPlatformManaged('AG-301')).toBe(true);
+      expect(composition.services.platformGateway.isPlatformManaged('AG-306')).toBe(true);
+      expect(composition.services.platformGateway.isToolAllowed('AG-301', 'calculator')).toBe(
+        false,
+      );
+      expect(composition.services.platformGateway.isToolAllowed('AG-304', 'calculator')).toBe(
         false,
       );
     } finally {
@@ -84,9 +124,15 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
           activeAgents: number;
           establishedAgents: number;
         };
+        marketplaceTeam: {
+          healthy: boolean;
+          enabled: boolean;
+          activeAgents: number;
+          establishedAgents: number;
+        };
       };
-      expect(health.platform.registered).toBe(9);
-      expect(health.platform.ready).toBe(9);
+      expect(health.platform.registered).toBe(15);
+      expect(health.platform.ready).toBe(15);
       expect(health.platform.running).toBe(0);
       expect(health.platform.healthy).toBe(true);
       expect(health.clientTeam.healthy).toBe(true);
@@ -97,6 +143,10 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
       expect(health.freelancerTeam.enabled).toBe(true);
       expect(health.freelancerTeam.activeAgents).toBe(4);
       expect(health.freelancerTeam.establishedAgents).toBe(4);
+      expect(health.marketplaceTeam.healthy).toBe(true);
+      expect(health.marketplaceTeam.enabled).toBe(true);
+      expect(health.marketplaceTeam.activeAgents).toBe(6);
+      expect(health.marketplaceTeam.establishedAgents).toBe(6);
       expect(JSON.stringify(health)).not.toMatch(/postgres|neon|database_url/i);
     } finally {
       await runtime.shutdown();

@@ -234,6 +234,18 @@ export function buildDefaultDefinitions(): readonly IntentDefinition[] {
       status: IntentStatus.Active,
     },
     {
+      id: IntentId.ENGAGEMENT_SCOPE,
+      name: 'Define Engagement Scope',
+      description:
+        'Draft a complete engagement scope (risk, milestones and contract outline) before work begins.',
+      category: IntentCategory.Contracts,
+      priority: IntentPriority.Medium,
+      allowedRoles: [UserRole.Client, UserRole.Freelancer],
+      confidenceThreshold: 0.55,
+      supportedAgents: ['AG-301', 'AG-302'],
+      status: IntentStatus.Active,
+    },
+    {
       id: IntentId.SEARCH_KNOWLEDGE,
       name: 'Search Knowledge',
       description: 'Query the knowledge base for articles.',

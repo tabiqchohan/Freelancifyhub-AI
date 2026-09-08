@@ -99,6 +99,15 @@ import {
   FreelancerWorkflowRegistry,
 } from '../agents/freelancer-ai-team/index.js';
 import {
+  createMarketplaceTeamAgents,
+  createMarketplaceTeamAgentDefinitions,
+  MarketplaceAIService,
+  MarketplaceContextBuilder,
+  MarketplaceTeamRouter,
+  MarketplaceToolClient,
+  MarketplaceWorkflowRegistry,
+} from '../agents/marketplace-ai-team/index.js';
+import {
   AgentSelector,
   CoordinationCoordinator,
   CoordinationEventLog,
@@ -188,6 +197,8 @@ export interface ProductionComposition {
     readonly clientAi: ClientAIService;
     /** Sprint 22 freelancer AI team service (Freelancer AI). */
     readonly freelancerAi: FreelancerAIService;
+    /** Sprint 23 marketplace AI team service (Marketplace AI). */
+    readonly marketplaceAi: MarketplaceAIService;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -204,6 +215,8 @@ export interface ProductionComposition {
     readonly probeClientTeam: () => Promise<{ healthy: boolean }>;
     /** Sprint 22 freelancer AI team readiness probe. */
     readonly probeFreelancerTeam: () => Promise<{ healthy: boolean }>;
+    /** Sprint 23 marketplace AI team readiness probe. */
+    readonly probeMarketplaceTeam: () => Promise<{ healthy: boolean }>;
   };
 }
 
@@ -391,6 +404,10 @@ export async function createProductionComposition(
   // Sprint 22 freelancer AI team runtime agents (AG-201/AG-202/AG-206/AG-207).
   for (const freelancerAgent of createFreelancerTeamAgents()) {
     registry.register(freelancerAgent);
+  }
+  // Sprint 23 marketplace AI team runtime agents (AG-301..AG-306).
+  for (const marketplaceAgent of createMarketplaceTeamAgents()) {
+    registry.register(marketplaceAgent);
   }
 
   const requestActors = new RequestActorRegistry();
@@ -595,6 +612,11 @@ export async function createProductionComposition(
   for (const freelancerDefinition of createFreelancerTeamAgentDefinitions()) {
     platformRegistry.registerAgent(freelancerDefinition, { activate: true });
   }
+  // Sprint 23 marketplace platform mirrors (AG-301..AG-306).
+  // Deterministic-only v1 with an empty tool allowlist (fail-closed tooling).
+  for (const marketplaceDefinition of createMarketplaceTeamAgentDefinitions()) {
+    platformRegistry.registerAgent(marketplaceDefinition, { activate: true });
+  }
 
   const platformGateway = new AgentPlatformGateway({
     registry: platformRegistry,
@@ -688,6 +710,37 @@ export async function createProductionComposition(
     logger,
   });
 
+  // ---- Sprint 23 marketplace AI team (deterministic-first service) ---------
+  // Mirrors the client/freelancer teams: bounded AG-002/AG-003 context under
+  // the MARKETPLACE actor groups, AG-001 intent routing, platform-gated
+  // execution, a coordination workflow for engagement scoping, AG-004 tool
+  // access that fails closed, and data-honest marketplace intelligence
+  // (insufficient-data signals never fabricate prices or trends).
+  const marketplaceContextBuilder = new MarketplaceContextBuilder({
+    memory: contract,
+    knowledge: knowledgeManager,
+    logger,
+  });
+  const marketplaceRouter = new MarketplaceTeamRouter({ selector: coordinationSelector });
+  const marketplaceWorkflows = new MarketplaceWorkflowRegistry({
+    selector: coordinationSelector,
+  });
+  const marketplaceToolClient = new MarketplaceToolClient({
+    gateway: platformGateway,
+    toolManager,
+  });
+  const marketplaceAi = new MarketplaceAIService({
+    router: marketplaceRouter,
+    workflows: marketplaceWorkflows,
+    contextBuilder: marketplaceContextBuilder,
+    coordination,
+    executorRegistry,
+    gateway: platformGateway,
+    toolClient: marketplaceToolClient,
+    agenticLoop,
+    logger,
+  });
+
   const executionEngine = new ExecutionEngine({
     registry: executorRegistry,
     config: executionConfig,
@@ -766,6 +819,7 @@ export async function createProductionComposition(
       coordinationMetrics,
       clientAi,
       freelancerAi,
+      marketplaceAi,
       requestActors,
     },
     storage: {
@@ -782,6 +836,7 @@ export async function createProductionComposition(
       probeToolStorage,
       probeClientTeam: async () => ({ healthy: clientAi.status().healthy }),
       probeFreelancerTeam: async () => ({ healthy: freelancerAi.status().healthy }),
+      probeMarketplaceTeam: async () => ({ healthy: marketplaceAi.status().healthy }),
     },
   };
 }

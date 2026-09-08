@@ -397,6 +397,7 @@ const INTENT_CAPABILITIES: Readonly<Record<IntentId, readonly string[]>> = {
   [IntentId.REPORT_SCAM]: ['scam.report'],
   [IntentId.OPEN_DISPUTE]: ['dispute.open'],
   [IntentId.SEND_MESSAGE]: ['message.send'],
+  [IntentId.ENGAGEMENT_SCOPE]: ['engagement.scope'],
   [IntentId.SEARCH_KNOWLEDGE]: ['knowledge.search'],
   [IntentId.PLATFORM_HELP]: ['platform.help'],
   [IntentId.ADMIN_ACTION]: ['admin.action'],

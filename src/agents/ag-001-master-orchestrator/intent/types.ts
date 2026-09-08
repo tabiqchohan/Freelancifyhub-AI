@@ -23,6 +23,7 @@ export enum IntentId {
   REPORT_SCAM = 'scam.report',
   OPEN_DISPUTE = 'dispute.open',
   SEND_MESSAGE = 'message.send',
+  ENGAGEMENT_SCOPE = 'engagement.scope',
   SEARCH_KNOWLEDGE = 'knowledge.search',
   PLATFORM_HELP = 'platform.help',
   ADMIN_ACTION = 'admin.action',
