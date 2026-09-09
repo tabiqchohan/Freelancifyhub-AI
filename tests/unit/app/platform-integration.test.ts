@@ -65,12 +65,29 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
       expect(registry.getAgent('AG-306')?.capabilities.some((c) => c.id === 'message.send')).toBe(
         true,
       );
+      expect(
+        registry.getAgent('AG-401')?.capabilities.some((c) => c.id === 'marketing.research'),
+      ).toBe(true);
+      expect(
+        registry.getAgent('AG-402')?.capabilities.some((c) => c.id === 'marketing.post.draft'),
+      ).toBe(true);
+      expect(
+        registry.getAgent('AG-403')?.capabilities.some((c) => c.id === 'marketing.blog.draft'),
+      ).toBe(true);
+      expect(
+        registry.getAgent('AG-404')?.capabilities.some((c) => c.id === 'marketing.seo.analyze'),
+      ).toBe(true);
+      expect(
+        registry.getAgent('AG-405')?.capabilities.some((c) => c.id === 'marketing.email.draft'),
+      ).toBe(true);
       expect(registry.lifecycleStateOf('AG-101')?.toString()).toBe('READY');
       expect(registry.lifecycleStateOf('AG-102')?.toString()).toBe('READY');
       expect(registry.lifecycleStateOf('AG-202')?.toString()).toBe('READY');
       expect(registry.lifecycleStateOf('AG-304')?.toString()).toBe('READY');
-      expect(registry.snapshot().registered).toBe(15);
-      expect(registry.snapshot().ready).toBe(15);
+      expect(registry.lifecycleStateOf('AG-401')?.toString()).toBe('READY');
+      expect(registry.lifecycleStateOf('AG-405')?.toString()).toBe('READY');
+      expect(registry.snapshot().registered).toBe(20);
+      expect(registry.snapshot().ready).toBe(20);
       expect(composition.services.platformGateway.isPlatformManaged('AG-101')).toBe(true);
       expect(composition.services.platformGateway.isPlatformManaged('AG-001')).toBe(false);
       expect(composition.services.platformGateway.isToolAllowed('AG-101', 'calculator')).toBe(
@@ -94,6 +111,15 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
         false,
       );
       expect(composition.services.platformGateway.isToolAllowed('AG-304', 'calculator')).toBe(
+        false,
+      );
+      // Marketing mirrors are managed with an empty tool allowlist (fail-closed).
+      expect(composition.services.platformGateway.isPlatformManaged('AG-401')).toBe(true);
+      expect(composition.services.platformGateway.isPlatformManaged('AG-405')).toBe(true);
+      expect(composition.services.platformGateway.isToolAllowed('AG-401', 'calculator')).toBe(
+        false,
+      );
+      expect(composition.services.platformGateway.isToolAllowed('AG-405', 'calculator')).toBe(
         false,
       );
     } finally {
@@ -130,9 +156,15 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
           activeAgents: number;
           establishedAgents: number;
         };
+        marketingTeam: {
+          healthy: boolean;
+          enabled: boolean;
+          activeAgents: number;
+          establishedAgents: number;
+        };
       };
-      expect(health.platform.registered).toBe(15);
-      expect(health.platform.ready).toBe(15);
+      expect(health.platform.registered).toBe(20);
+      expect(health.platform.ready).toBe(20);
       expect(health.platform.running).toBe(0);
       expect(health.platform.healthy).toBe(true);
       expect(health.clientTeam.healthy).toBe(true);
@@ -147,6 +179,10 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
       expect(health.marketplaceTeam.enabled).toBe(true);
       expect(health.marketplaceTeam.activeAgents).toBe(6);
       expect(health.marketplaceTeam.establishedAgents).toBe(6);
+      expect(health.marketingTeam.healthy).toBe(true);
+      expect(health.marketingTeam.enabled).toBe(true);
+      expect(health.marketingTeam.activeAgents).toBe(5);
+      expect(health.marketingTeam.establishedAgents).toBe(5);
       expect(JSON.stringify(health)).not.toMatch(/postgres|neon|database_url/i);
     } finally {
       await runtime.shutdown();

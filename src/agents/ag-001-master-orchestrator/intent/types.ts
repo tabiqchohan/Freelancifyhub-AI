@@ -24,6 +24,12 @@ export enum IntentId {
   OPEN_DISPUTE = 'dispute.open',
   SEND_MESSAGE = 'message.send',
   ENGAGEMENT_SCOPE = 'engagement.scope',
+  MARKETING_RESEARCH = 'marketing.research',
+  MARKETING_SOCIAL = 'marketing.social',
+  MARKETING_BLOG = 'marketing.blog',
+  MARKETING_SEO = 'marketing.seo',
+  MARKETING_EMAIL = 'marketing.email',
+  MARKETING_CAMPAIGN = 'marketing.campaign',
   SEARCH_KNOWLEDGE = 'knowledge.search',
   PLATFORM_HELP = 'platform.help',
   ADMIN_ACTION = 'admin.action',
@@ -51,6 +57,7 @@ export enum IntentCategory {
   Admin = 'Admin',
   Help = 'Help',
   Knowledge = 'Knowledge',
+  Marketing = 'Marketing',
   System = 'System',
 }
 

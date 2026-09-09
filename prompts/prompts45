@@ -1,0 +1,1003 @@
+You are implementing **Sprint 24 — Marketing AI Team** in the existing `freelancify-ai` repository.
+
+Repository:
+`D:\Quarter04\freelancer_app\freelancify-ai`
+
+## PRIMARY OBJECTIVE
+
+Implement the complete **Marketing AI Team** on top of the existing production-ready architecture.
+
+This is NOT a greenfield implementation.
+
+You MUST inspect and reuse the existing:
+
+* AG-001 Master Orchestrator
+* AG-002 Memory Manager
+* AG-003 Knowledge Manager
+* AG-004 Tool Manager
+* LLM Provider & AI Reasoning Layer
+* Agentic Tool Calling / Reasoning Loop
+* Agent Platform & Agent Lifecycle
+* Multi-Agent Coordination Layer
+* Client AI Team
+* Freelancer AI Team
+* Marketplace AI Team
+* Existing schemas, security utilities, events, metrics, runtime wiring, health checks, routing, testing patterns and composition root
+
+Do NOT duplicate infrastructure that already exists.
+
+---
+
+# 1. FIRST: REPOSITORY DISCOVERY
+
+Before modifying code:
+
+1. Inspect the complete repository structure.
+2. Read:
+
+   * `docs/freelancify-ai-blueprint-v1.0.md`
+   * `docs/product-requirements-v1.md`
+   * `docs/agent-catalog-v1.md`
+   * `docs/master-orchestrator-specification-v1.md`
+   * `docs/shared-memory-architecture-v1.md`
+   * `docs/tool-registry-architecture-v1.md`
+   * `docs/knowledge-base-architecture-v1.md`
+   * `docs/agent-development-kit-v1.md`
+   * `docs/architecture-review-v1.md`
+3. Read the Sprint 20, 21, 22 and 23 implementation/docs.
+4. Inspect the existing:
+
+   * `src/agents/agent-platform/`
+   * `src/agents/client-ai-team/`
+   * `src/agents/freelancer-ai-team/`
+   * `src/agents/marketplace-ai-team/`
+   * AG-001 routing/intent infrastructure
+   * composition root
+   * runtime
+   * existing tests
+5. Inspect the existing agent catalog to determine the intended Marketing AI Team agent IDs and responsibilities.
+
+IMPORTANT:
+
+Do not invent a conflicting agent catalog.
+
+The existing architecture/documentation is the source of truth for Marketing AI Team identity and responsibilities.
+
+---
+
+# 2. MARKETING AI TEAM
+
+Create:
+
+`src/agents/marketing-ai-team/`
+
+Follow the same architectural quality and organization established by the existing AI teams.
+
+The module should contain appropriate equivalents of:
+
+* `types.ts`
+* `constants.ts`
+* `errors.ts`
+* `schemas.ts`
+* `security.ts`
+* `agents.ts`
+* `context.ts`
+* `router.ts`
+* `workflows.ts`
+* `tooling.ts`
+* `events.ts`
+* `metrics.ts`
+* `service.ts`
+* `index.ts`
+
+You may introduce additional focused modules where necessary, but keep the architecture clean and consistent with the existing teams.
+
+Do NOT blindly copy files.
+
+Reuse shared infrastructure wherever possible.
+
+---
+
+# 3. MARKETING AGENTS
+
+Use the existing agent catalog as the authoritative source.
+
+Implement every Marketing AI Team agent required by the catalog.
+
+For each agent:
+
+* preserve its catalog ID
+* preserve its intended responsibility
+* define strict input/output contracts
+* define capabilities
+* define execution mode
+* define security boundaries
+* define allowed tools
+* define lifecycle/platform registration
+* integrate through AG-001
+* support deterministic execution where possible
+* support LLM reasoning only where genuinely useful
+
+The implementation must NOT turn every operation into an LLM call.
+
+Deterministic work should remain deterministic.
+
+---
+
+# 4. EXPECTED MARKETING CAPABILITIES
+
+The Marketing AI Team should support the marketing/business workflows defined by the existing product requirements and agent catalog.
+
+Examples of responsibilities that may be present in the catalog include:
+
+* marketing content generation
+* campaign planning
+* campaign optimization
+* audience/segment analysis
+* marketplace promotion
+* freelancer/client acquisition assistance
+* SEO-oriented content assistance
+* social-media/content planning
+* marketing analytics
+* campaign performance analysis
+* growth recommendations
+* promotional strategy
+* marketing insights
+
+IMPORTANT:
+
+The exact agent responsibilities MUST come from the repository's existing catalog/specification.
+
+Do not introduce arbitrary capabilities that conflict with the documented architecture.
+
+---
+
+# 5. CONTRACTS AND SCHEMAS
+
+Create strict Zod schemas for all public Marketing AI Team contracts.
+
+Requirements:
+
+* bounded strings
+* bounded arrays
+* bounded objects
+* bounded metadata
+* explicit enums
+* no `any`
+* no unbounded recursive structures
+* safe defaults
+* strict validation
+* output schemas
+* workflow request schemas
+* workflow result schemas
+* agent request/result schemas
+* tool request/result schemas where needed
+
+Every public service boundary must validate input and output.
+
+Invalid input must fail closed.
+
+---
+
+# 6. SECURITY
+
+Marketing content is an untrusted-data boundary.
+
+Implement the same security discipline already established in the previous AI teams.
+
+Requirements:
+
+* prompt-injection resistance
+* untrusted content isolation
+* delimiter/boundary neutralization
+* secret redaction
+* API-key/token protection
+* connection-string protection
+* no raw credentials in events
+* no raw credentials in metrics
+* no secret leakage through errors
+* bounded context
+* bounded generated content
+* bounded campaign data
+* bounded tool results
+* safe serialization
+
+Marketing text supplied by users must NEVER automatically become system instructions.
+
+Treat all externally supplied marketing material as untrusted data.
+
+---
+
+# 7. CONTEXT BUILDER
+
+Implement Marketing AI Team context construction using existing AG-002/AG-003 architecture.
+
+The context layer may consume:
+
+* relevant memory
+* relevant knowledge
+* marketplace information
+* campaign information
+* user-provided marketing requirements
+* historical marketing signals
+* existing platform information
+
+But:
+
+* respect existing authorization
+* respect namespace/group boundaries
+* respect memory retrieval limits
+* respect knowledge retrieval limits
+* enforce token/byte budgets
+* deduplicate information
+* prioritize critical information
+* sanitize untrusted text
+
+Do NOT directly access the database from the Marketing AI Team.
+
+Use existing public boundaries/adapters.
+
+---
+
+# 8. AG-001 INTEGRATION
+
+Marketing AI Team requests MUST enter through the existing orchestration architecture.
+
+Do not create a second orchestrator.
+
+Integrate Marketing AI Team intents/capabilities with AG-001.
+
+Add only the necessary new intents.
+
+Follow the same pattern used by:
+
+* Client AI Team
+* Freelancer AI Team
+* Marketplace AI Team
+
+Routing must be:
+
+* deterministic where possible
+* capability-aware
+* lifecycle-aware
+* authorization-aware
+* fail-closed
+
+Use existing routing and AgentSelector mechanisms.
+
+---
+
+# 9. AGENT PLATFORM INTEGRATION
+
+Every Marketing agent that is platform-managed MUST be registered through the existing Agent Platform.
+
+For every registered agent:
+
+* create the platform mirror/definition as required
+* register capabilities
+* register allowed tools
+* configure execution mode
+* configure lifecycle
+* expose through the existing gateway
+* respect concurrency limits
+* respect readiness checks
+* respect pause/disable behavior
+* respect execution leases
+
+Do NOT bypass the Agent Platform.
+
+Do NOT implement another lifecycle system.
+
+Paused/disabled/failed agents must be rejected through the same platform mechanism already used by previous teams.
+
+---
+
+# 10. TOOL INTEGRATION
+
+Marketing AI Team must use AG-004 Tool Manager.
+
+Do NOT call tools directly.
+
+Do NOT access external tools through arbitrary imports.
+
+All tool access must go through the existing tool boundary.
+
+Implement a Marketing-specific tool client/adapter only if necessary.
+
+Every tool call must:
+
+* be allowlisted
+* be authorization checked
+* respect agent capability restrictions
+* respect agentic tool restrictions
+* sanitize results
+* remain bounded
+* produce safe observability metadata
+
+If a tool is unavailable, fail closed.
+
+Do not silently bypass the tool manager.
+
+---
+
+# 11. AGENTIC REASONING
+
+Where Marketing workflows benefit from reasoning, integrate with the existing Sprint 18 agentic reasoning loop.
+
+Requirements:
+
+* bounded turns
+* bounded tool calls
+* bounded context
+* bounded result bytes
+* cancellation support
+* timeout support
+* authorization
+* tool allowlisting
+* prompt-injection defense
+* deterministic fallback where possible
+
+LLM-disabled mode MUST remain functional.
+
+If LLM reasoning is unavailable:
+
+* deterministic workflows should continue
+* unsupported reasoning operations must fail clearly and safely
+* never fabricate LLM-derived results
+
+---
+
+# 12. MARKETING WORKFLOWS
+
+Implement the workflows required by the existing Marketing AI Team specification.
+
+Workflows should follow the same patterns established by the other teams.
+
+Potential workflow patterns include:
+
+### Campaign Planning
+
+Input:
+
+* campaign objective
+* target audience
+* budget/constraints
+* timeframe
+* channel preferences
+
+Output:
+
+* campaign strategy
+* recommended actions
+* content plan
+* measurable goals
+* assumptions
+
+### Content Planning
+
+Input:
+
+* campaign/brand context
+* target audience
+* channel
+* topic/objective
+
+Output:
+
+* content plan
+* content variants
+* scheduling recommendations
+* metadata
+
+### Marketing Analysis
+
+Input:
+
+* campaign signals
+* historical metrics
+* available marketplace/business signals
+
+Output:
+
+* observations
+* trends
+* risks
+* opportunities
+* recommendations
+
+### Growth Recommendation
+
+Input:
+
+* business/marketplace context
+* available signals
+
+Output:
+
+* prioritized recommendations
+* rationale
+* expected impact
+* confidence
+* assumptions
+
+Again, ONLY implement workflows that align with the existing product requirements/catalog.
+
+---
+
+# 13. OUTPUT HONESTY
+
+All generated recommendations, estimates and predictions MUST be clearly classified.
+
+Never present an estimate as observed fact.
+
+Use fields/patterns consistent with the existing teams, such as:
+
+* `isEstimate`
+* confidence
+* assumptions
+* source/signal metadata
+* insufficient-data indicators
+
+If there is insufficient data:
+
+return an explicit insufficient-data result rather than inventing numbers.
+
+---
+
+# 14. MULTI-AGENT COORDINATION
+
+Where a Marketing workflow needs multiple Marketing agents:
+
+use the existing Sprint 20 Coordination Layer.
+
+Support appropriate modes such as:
+
+* SINGLE
+* SEQUENTIAL
+* PARALLEL
+* PIPELINE
+* DEBATE
+* HYBRID
+
+Do not create a custom coordination engine.
+
+Respect:
+
+* dependency graphs
+* cancellation
+* global deadlines
+* bounded concurrency
+* retries
+* failure policies
+* conflict policies
+* aggregation strategies
+
+Agents must still execute through the existing runtime executor and Agent Platform gate.
+
+No double-claiming.
+
+No lifecycle bypass.
+
+---
+
+# 15. MEMORY INTEGRATION
+
+Marketing workflows may read/write memory only through AG-002 boundaries.
+
+Respect:
+
+* scope
+* authorization
+* lifecycle
+* retention
+* security
+* deduplication
+* budget
+* audit requirements
+
+Do not directly use Neon/Postgres from Marketing AI Team code.
+
+---
+
+# 16. KNOWLEDGE INTEGRATION
+
+Marketing workflows may consume knowledge through AG-003.
+
+Use the existing Knowledge Manager interfaces/adapters.
+
+Respect:
+
+* namespace
+* group
+* authorization
+* document lifecycle
+* versioning
+* chunk limits
+* retrieval budgets
+* security
+
+Do not implement a duplicate knowledge store.
+
+---
+
+# 17. EVENTS
+
+Implement Marketing-specific event types using the existing event architecture.
+
+Events should capture useful lifecycle information such as:
+
+* request received
+* workflow started
+* agent started
+* agent completed
+* workflow completed
+* workflow failed
+* tool denied
+* tool executed
+* reasoning unavailable
+* cancellation
+* timeout
+
+Events MUST contain safe metadata only.
+
+Never log:
+
+* passwords
+* API keys
+* tokens
+* secrets
+* connection strings
+* raw sensitive payloads
+
+Follow the event conventions already used by Client/Freelancer/Marketplace teams.
+
+---
+
+# 18. METRICS
+
+Implement Marketing AI Team metrics following existing patterns.
+
+Track useful aggregate information such as:
+
+* request count
+* success count
+* failure count
+* latency
+* workflow counts
+* agent execution counts
+* tool usage
+* cancellation
+* timeout
+* reasoning usage
+
+Metrics must remain bounded and safe.
+
+Do not add high-cardinality raw user content.
+
+---
+
+# 19. SERVICE API
+
+Create a clean public Marketing AI Team service.
+
+It should expose a small stable API for:
+
+* marketing request execution
+* workflow execution
+* agent capability dispatch
+* health/readiness
+* metrics/status
+
+Avoid leaking internal implementation details.
+
+Use the same architectural style as the previous AI teams.
+
+---
+
+# 20. ROUTER / DISPATCHER
+
+Implement a capability-aware dispatcher.
+
+It must:
+
+1. validate request
+2. identify requested capability
+3. verify capability exists
+4. verify agent availability
+5. verify authorization
+6. verify tool permissions
+7. execute through the existing runtime/platform
+8. return typed result
+
+Unknown capability:
+
+→ fail closed.
+
+Unavailable agent:
+
+→ fail closed.
+
+Unauthorized tool:
+
+→ fail closed.
+
+Invalid request:
+
+→ fail closed.
+
+---
+
+# 21. RUNTIME WIRING
+
+Update the existing composition root.
+
+Wire:
+
+* Marketing AI Team service
+* Marketing agents
+* platform registrations
+* router/dispatcher
+* workflows
+* probes
+* events
+* metrics
+* status service
+
+Do NOT replace existing services.
+
+Do NOT break existing teams.
+
+---
+
+# 22. HEALTH ENDPOINT
+
+Extend existing `/healthz`.
+
+Add:
+
+`marketingTeam`
+
+It should follow the same structure and semantics as:
+
+* `clientTeam`
+* `freelancerTeam`
+* `marketplaceTeam`
+
+Health must reflect real readiness.
+
+Do not report healthy merely because the object exists.
+
+---
+
+# 23. STATUS ENDPOINT
+
+Add:
+
+`GET /api/marketing-ai/status`
+
+Follow the existing status endpoint patterns.
+
+It should expose safe information such as:
+
+* healthy
+* readiness
+* registered agents
+* ready agents
+* workflow availability
+* metrics summary if appropriate
+* LLM availability if relevant
+
+Never expose:
+
+* secrets
+* tokens
+* internal credentials
+* sensitive prompts
+* private user data
+
+---
+
+# 24. TESTING — MANDATORY
+
+Create comprehensive tests.
+
+At minimum:
+
+## Unit tests
+
+Cover:
+
+* contracts
+* schemas
+* validation
+* security
+* agents
+* routing
+* dispatch
+* context
+* workflows
+* tool authorization
+* event emission
+* metrics
+* service
+* errors
+
+## Integration tests
+
+Cover:
+
+* complete Marketing workflow
+* AG-001 routing
+* AG-002 memory
+* AG-003 knowledge
+* AG-004 tools
+* Agent Platform
+* agentic reasoning
+* cancellation
+* timeout
+* partial failure
+* concurrency
+* LLM-disabled behavior
+
+## Platform tests
+
+Verify:
+
+* agent registration
+* lifecycle
+* readiness
+* pause behavior
+* disabled behavior
+* capability resolution
+* tool allowlists
+
+## Runtime tests
+
+Verify:
+
+* `/healthz`
+* `/api/marketing-ai/status`
+* real composition root wiring
+* production configuration behavior
+
+---
+
+# 25. REQUIRED SECURITY TESTS
+
+Explicitly test:
+
+* prompt injection
+* malicious marketing content
+* secret leakage
+* tool denial
+* unauthorized capability
+* unknown capability
+* paused agent
+* disabled agent
+* cancelled request
+* timeout
+* oversized input
+* oversized output
+* oversized tool result
+* malformed structured input
+
+---
+
+# 26. REGRESSION REQUIREMENT
+
+Existing tests MUST continue to pass.
+
+Do not weaken existing tests.
+
+Do not increase test timeouts unless absolutely necessary and justified.
+
+Do not modify unrelated tests just to make the suite green.
+
+Do not hide failures.
+
+If a test exposes a real architectural defect, fix the root cause.
+
+---
+
+# 27. CODE QUALITY
+
+Maintain:
+
+* strict TypeScript
+* no `any`
+* no unsafe casts unless unavoidable and documented
+* clean imports
+* type-only imports where appropriate
+* consistent naming
+* small focused modules
+* deterministic behavior
+* bounded resource usage
+* clear errors
+* no dead code
+* no duplicate infrastructure
+
+Follow existing repository formatting and linting.
+
+---
+
+# 28. DOCUMENTATION
+
+Create:
+
+`docs/sprint24-marketing-ai-team-v1.md`
+
+Document:
+
+1. Sprint objective
+2. Architecture
+3. Marketing agents
+4. Capabilities
+5. Routing
+6. Workflows
+7. AG-001 integration
+8. AG-002 integration
+9. AG-003 integration
+10. AG-004 integration
+11. Agent Platform integration
+12. Coordination integration
+13. Security
+14. Events
+15. Metrics
+16. Runtime endpoints
+17. Tests
+18. Verification
+19. Known limitations
+20. Future extensions
+
+Do not claim functionality that was not implemented.
+
+---
+
+# 29. VERIFICATION GATES
+
+Before declaring Sprint 24 complete, run the repository's appropriate verification commands.
+
+At minimum:
+
+```bash
+npx tsc --noEmit
+npm run lint
+npx prettier --check .
+npx vitest run
+npm run build
+```
+
+If the repository uses different scripts, inspect `package.json` and use the correct equivalent.
+
+Also perform runtime smoke tests where the project supports them.
+
+Verify:
+
+```text
+/healthz
+/api/marketing-ai/status
+```
+
+Verify at least one real Marketing workflow through the actual runtime/composition root.
+
+Verify LLM-disabled mode.
+
+Verify a tool-enabled workflow through AG-004.
+
+Verify platform lifecycle behavior.
+
+Verify existing Client/Freelancer/Marketplace functionality still works.
+
+---
+
+# 30. FINAL ACCEPTANCE CRITERIA
+
+Sprint 24 is complete ONLY if:
+
+* Marketing AI Team is fully implemented
+* all catalog-defined Marketing agents exist
+* all required capabilities resolve
+* AG-001 integration works
+* AG-002 integration works
+* AG-003 integration works
+* AG-004 integration works
+* Agent Platform integration works
+* Multi-Agent Coordination integration works where required
+* LLM reasoning integration works where required
+* deterministic fallback works
+* security boundaries are enforced
+* lifecycle controls work
+* tool authorization works
+* health endpoint works
+* status endpoint works
+* events work
+* metrics work
+* tests pass
+* typecheck passes
+* lint passes
+* prettier passes
+* build passes
+* documentation is complete
+* no existing team is broken
+
+---
+
+# 31. IMPORTANT IMPLEMENTATION RULES
+
+DO NOT:
+
+* rewrite AG-001
+* rewrite AG-002
+* rewrite AG-003
+* rewrite AG-004
+* create another orchestrator
+* create another memory system
+* create another knowledge system
+* create another tool registry
+* create another lifecycle system
+* bypass Agent Platform
+* bypass runtime executor
+* directly access the database
+* directly call external tools
+* hard-code secrets
+* make LLM mandatory for deterministic workflows
+* fabricate analytics
+* fabricate campaign metrics
+* weaken security for tests
+* disable existing tests
+* silently swallow errors
+* create unnecessary abstractions
+
+DO:
+
+* reuse existing architecture
+* follow Client/Freelancer/Marketplace team patterns
+* preserve backwards compatibility
+* use strict schemas
+* use typed contracts
+* fail closed
+* keep resource limits bounded
+* keep deterministic behavior deterministic
+* use existing coordination
+* use existing platform lifecycle
+* use existing security utilities
+* use existing memory/knowledge/tool boundaries
+* add focused tests
+* update health/status
+* document the implementation
+
+---
+
+# 32. EXECUTION STYLE
+
+Work autonomously.
+
+Do not stop after analysis.
+
+Do not ask me to manually create files.
+
+Do not give me a plan instead of implementing it.
+
+Inspect → implement → test → fix → verify → document.
+
+If you discover an existing architectural pattern that is better than the assumptions in this prompt, follow the repository's established implementation pattern while preserving the requirements above.
+
+At the end, provide a concise final report containing:
+
+* files/modules created
+* files modified
+* Marketing agents implemented
+* capabilities implemented
+* workflows implemented
+* integrations completed
+* tests added
+* total test result
+* typecheck result
+* lint result
+* prettier result
+* build result
+* runtime smoke-test result
+* documentation created
+* any known limitations
+
+DO NOT commit or push automatically unless explicitly requested after verification.

@@ -108,6 +108,15 @@ import {
   MarketplaceWorkflowRegistry,
 } from '../agents/marketplace-ai-team/index.js';
 import {
+  createMarketingTeamAgents,
+  createMarketingTeamAgentDefinitions,
+  MarketingAIService,
+  MarketingContextBuilder,
+  MarketingTeamRouter,
+  MarketingToolClient,
+  MarketingWorkflowRegistry,
+} from '../agents/marketing-ai-team/index.js';
+import {
   AgentSelector,
   CoordinationCoordinator,
   CoordinationEventLog,
@@ -199,6 +208,8 @@ export interface ProductionComposition {
     readonly freelancerAi: FreelancerAIService;
     /** Sprint 23 marketplace AI team service (Marketplace AI). */
     readonly marketplaceAi: MarketplaceAIService;
+    /** Sprint 24 marketing AI team service (Marketing AI). */
+    readonly marketingAi: MarketingAIService;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -217,6 +228,8 @@ export interface ProductionComposition {
     readonly probeFreelancerTeam: () => Promise<{ healthy: boolean }>;
     /** Sprint 23 marketplace AI team readiness probe. */
     readonly probeMarketplaceTeam: () => Promise<{ healthy: boolean }>;
+    /** Sprint 24 marketing AI team readiness probe. */
+    readonly probeMarketingTeam: () => Promise<{ healthy: boolean }>;
   };
 }
 
@@ -408,6 +421,10 @@ export async function createProductionComposition(
   // Sprint 23 marketplace AI team runtime agents (AG-301..AG-306).
   for (const marketplaceAgent of createMarketplaceTeamAgents()) {
     registry.register(marketplaceAgent);
+  }
+  // Sprint 24 marketing AI team runtime agents (AG-401..AG-405).
+  for (const marketingAgent of createMarketingTeamAgents()) {
+    registry.register(marketingAgent);
   }
 
   const requestActors = new RequestActorRegistry();
@@ -617,6 +634,11 @@ export async function createProductionComposition(
   for (const marketplaceDefinition of createMarketplaceTeamAgentDefinitions()) {
     platformRegistry.registerAgent(marketplaceDefinition, { activate: true });
   }
+  // Sprint 24 marketing platform mirrors (AG-401..AG-405).
+  // Deterministic-only v1 with an empty tool allowlist (fail-closed tooling).
+  for (const marketingDefinition of createMarketingTeamAgentDefinitions()) {
+    platformRegistry.registerAgent(marketingDefinition, { activate: true });
+  }
 
   const platformGateway = new AgentPlatformGateway({
     registry: platformRegistry,
@@ -741,6 +763,38 @@ export async function createProductionComposition(
     logger,
   });
 
+  // ---- Sprint 24 marketing AI team (deterministic-first service) -----------
+  // Mirrors the client/freelancer/marketplace teams: bounded AG-002/AG-003
+  // context under the MARKETING actor groups, AG-001 intent routing,
+  // platform-gated execution, a coordination workflow for campaign content
+  // briefs, AG-004 tool access that fails closed, and data-honest marketing
+  // intelligence (research insights, social/blog/email drafts and SEO
+  // recommendations never fabricate claims, metrics or promises).
+  const marketingContextBuilder = new MarketingContextBuilder({
+    memory: contract,
+    knowledge: knowledgeManager,
+    logger,
+  });
+  const marketingRouter = new MarketingTeamRouter({ selector: coordinationSelector });
+  const marketingWorkflows = new MarketingWorkflowRegistry({
+    selector: coordinationSelector,
+  });
+  const marketingToolClient = new MarketingToolClient({
+    gateway: platformGateway,
+    toolManager,
+  });
+  const marketingAi = new MarketingAIService({
+    router: marketingRouter,
+    workflows: marketingWorkflows,
+    contextBuilder: marketingContextBuilder,
+    coordination,
+    executorRegistry,
+    gateway: platformGateway,
+    toolClient: marketingToolClient,
+    agenticLoop,
+    logger,
+  });
+
   const executionEngine = new ExecutionEngine({
     registry: executorRegistry,
     config: executionConfig,
@@ -820,6 +874,7 @@ export async function createProductionComposition(
       clientAi,
       freelancerAi,
       marketplaceAi,
+      marketingAi,
       requestActors,
     },
     storage: {
@@ -837,6 +892,7 @@ export async function createProductionComposition(
       probeClientTeam: async () => ({ healthy: clientAi.status().healthy }),
       probeFreelancerTeam: async () => ({ healthy: freelancerAi.status().healthy }),
       probeMarketplaceTeam: async () => ({ healthy: marketplaceAi.status().healthy }),
+      probeMarketingTeam: async () => ({ healthy: marketingAi.status().healthy }),
     },
   };
 }
