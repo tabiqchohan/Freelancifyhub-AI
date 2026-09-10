@@ -58,6 +58,8 @@ export interface HealthPayload {
   readonly marketplaceTeam: MarketplaceTeamHealthSnapshot;
   /** Sprint 24 marketing AI team status (safe aggregate; never secrets). */
   readonly marketingTeam: MarketingTeamHealthSnapshot;
+  /** Sprint 25 admin AI team status (safe aggregate; never secrets). */
+  readonly adminTeam: AdminTeamHealthSnapshot;
 }
 
 /** Safe coordination health snapshot for the runtime health block. */
@@ -108,6 +110,16 @@ export interface MarketingTeamHealthSnapshot {
   readonly eventCount: number;
 }
 
+/** Safe admin AI team snapshot for the runtime health block. */
+export interface AdminTeamHealthSnapshot {
+  readonly healthy: boolean;
+  readonly enabled: boolean;
+  readonly activeAgents: number;
+  readonly establishedAgents: number;
+  readonly workflows: readonly string[];
+  readonly eventCount: number;
+}
+
 /** Default coordination health snapshot when the layer is absent. */
 export function defaultCoordinationHealth(): CoordinationHealthSnapshot {
   return { healthy: true, activeCoordinations: 0, activeTaskCount: 0, eventCount: 0 };
@@ -125,6 +137,7 @@ export async function defaultHealth(
   freelancerTeamInfo?: () => FreelancerTeamHealthSnapshot,
   marketplaceTeamInfo?: () => MarketplaceTeamHealthSnapshot,
   marketingTeamInfo?: () => MarketingTeamHealthSnapshot,
+  adminTeamInfo?: () => AdminTeamHealthSnapshot,
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
   const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
@@ -154,6 +167,7 @@ export async function defaultHealth(
     freelancerTeam: freelancerTeamInfo?.() ?? defaultFreelancerTeamHealth(),
     marketplaceTeam: marketplaceTeamInfo?.() ?? defaultMarketplaceTeamHealth(),
     marketingTeam: marketingTeamInfo?.() ?? defaultMarketingTeamHealth(),
+    adminTeam: adminTeamInfo?.() ?? defaultAdminTeamHealth(),
   };
 }
 
@@ -195,6 +209,18 @@ export function defaultMarketplaceTeamHealth(): MarketplaceTeamHealthSnapshot {
 
 /** Default marketing AI team snapshot when the layer is absent. */
 export function defaultMarketingTeamHealth(): MarketingTeamHealthSnapshot {
+  return {
+    healthy: false,
+    enabled: false,
+    activeAgents: 0,
+    establishedAgents: 0,
+    workflows: [],
+    eventCount: 0,
+  };
+}
+
+/** Default admin AI team snapshot when the layer is absent. */
+export function defaultAdminTeamHealth(): AdminTeamHealthSnapshot {
   return {
     healthy: false,
     enabled: false,
@@ -349,6 +375,21 @@ export class ProductionRuntime {
               eventCount: status.eventCount,
             };
           },
+          () => {
+            const status = options.composition.services.adminAi.status();
+            const platformRegistry = options.composition.services.platformRegistry;
+            const established = ['AG-501', 'AG-502', 'AG-503', 'AG-504', 'AG-505'].filter(
+              (agentId) => platformRegistry.getAgent(agentId) !== undefined,
+            ).length;
+            return {
+              healthy: status.healthy,
+              enabled: status.enabled,
+              activeAgents: status.agents.active,
+              establishedAgents: established,
+              workflows: status.workflows,
+              eventCount: status.eventCount,
+            };
+          },
         ));
   }
 
@@ -428,6 +469,10 @@ export class ProductionRuntime {
 
     if (url.pathname === '/api/marketing-ai/status') {
       return this.handleMarketingAiStatus(res);
+    }
+
+    if (url.pathname === '/api/admin-ai/status') {
+      return this.handleAdminAiStatus(res);
     }
 
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
@@ -551,6 +596,27 @@ export class ProductionRuntime {
     return this.sendJson(res, 200, {
       name: marketingAi.name,
       version: marketingAi.version,
+      healthy: status.healthy,
+      enabled: status.enabled,
+      agents: status.agents,
+      workflows: status.workflows,
+      metrics: status.metrics,
+      events: { total: status.eventCount },
+    });
+  }
+
+  /**
+   * Admin AI status endpoint (Sprint 25). Exposes health, managed agents,
+   * workflow ids and aggregated metrics/event totals. Never releases prompts,
+   * secrets, raw request payloads, or PII.
+   */
+  private async handleAdminAiStatus(res: ServerResponse): Promise<void> {
+    const adminAi = this.composition.services.adminAi;
+    const status = adminAi.status();
+
+    return this.sendJson(res, 200, {
+      name: adminAi.name,
+      version: adminAi.version,
       healthy: status.healthy,
       enabled: status.enabled,
       agents: status.agents,

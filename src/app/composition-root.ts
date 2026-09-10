@@ -117,6 +117,15 @@ import {
   MarketingWorkflowRegistry,
 } from '../agents/marketing-ai-team/index.js';
 import {
+  createAdminTeamAgents,
+  createAdminTeamAgentDefinitions,
+  AdminAIService,
+  AdminContextBuilder,
+  AdminTeamRouter,
+  AdminToolClient,
+  AdminWorkflowRegistry,
+} from '../agents/admin-ai-team/index.js';
+import {
   AgentSelector,
   CoordinationCoordinator,
   CoordinationEventLog,
@@ -210,6 +219,8 @@ export interface ProductionComposition {
     readonly marketplaceAi: MarketplaceAIService;
     /** Sprint 24 marketing AI team service (Marketing AI). */
     readonly marketingAi: MarketingAIService;
+    /** Sprint 25 admin AI team service (Admin AI). */
+    readonly adminAi: AdminAIService;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -230,6 +241,8 @@ export interface ProductionComposition {
     readonly probeMarketplaceTeam: () => Promise<{ healthy: boolean }>;
     /** Sprint 24 marketing AI team readiness probe. */
     readonly probeMarketingTeam: () => Promise<{ healthy: boolean }>;
+    /** Sprint 25 admin AI team readiness probe. */
+    readonly probeAdminTeam: () => Promise<{ healthy: boolean }>;
   };
 }
 
@@ -425,6 +438,10 @@ export async function createProductionComposition(
   // Sprint 24 marketing AI team runtime agents (AG-401..AG-405).
   for (const marketingAgent of createMarketingTeamAgents()) {
     registry.register(marketingAgent);
+  }
+  // Sprint 25 admin AI team runtime agents (AG-501..AG-505).
+  for (const adminAgent of createAdminTeamAgents()) {
+    registry.register(adminAgent);
   }
 
   const requestActors = new RequestActorRegistry();
@@ -639,6 +656,12 @@ export async function createProductionComposition(
   for (const marketingDefinition of createMarketingTeamAgentDefinitions()) {
     platformRegistry.registerAgent(marketingDefinition, { activate: true });
   }
+  // Sprint 25 admin platform mirrors (AG-501..AG-505).
+  // Deterministic-only v1 with an empty tool allowlist (fail-closed tooling).
+  // Privileged capabilities (admin.*) are scoped and approval-gated (BR-ADM-1).
+  for (const adminDefinition of createAdminTeamAgentDefinitions()) {
+    platformRegistry.registerAgent(adminDefinition, { activate: true });
+  }
 
   const platformGateway = new AgentPlatformGateway({
     registry: platformRegistry,
@@ -795,6 +818,39 @@ export async function createProductionComposition(
     logger,
   });
 
+  // ---- Sprint 25 admin AI team (deterministic-first, privileged service) --
+  // Mirrors the marketing team shape but for Admin actors: bounded AG-002/AG-003
+  // context under the ADMIN actor groups (never row-level user data), AG-001
+  // admin intent routing, authorization before execution (BR-ADM-1), approval
+  // stamping for mutating recommendations (BR-ADM-2), safe audit events
+  // (BR-ADM-3), reversible feature-flagged AI-management proposals (BR-ADM-4),
+  // a parallel executive-review workflow (AG-505), and AG-004 tool access that
+  // fails closed. Admin agents never fabricate metrics and never execute writes.
+  const adminContextBuilder = new AdminContextBuilder({
+    memory: contract,
+    knowledge: knowledgeManager,
+    logger,
+  });
+  const adminRouter = new AdminTeamRouter({ selector: coordinationSelector });
+  const adminWorkflows = new AdminWorkflowRegistry({
+    selector: coordinationSelector,
+  });
+  const adminToolClient = new AdminToolClient({
+    gateway: platformGateway,
+    toolManager,
+  });
+  const adminAi = new AdminAIService({
+    router: adminRouter,
+    workflows: adminWorkflows,
+    contextBuilder: adminContextBuilder,
+    coordination,
+    executorRegistry,
+    gateway: platformGateway,
+    toolClient: adminToolClient,
+    agenticLoop,
+    logger,
+  });
+
   const executionEngine = new ExecutionEngine({
     registry: executorRegistry,
     config: executionConfig,
@@ -875,6 +931,7 @@ export async function createProductionComposition(
       freelancerAi,
       marketplaceAi,
       marketingAi,
+      adminAi,
       requestActors,
     },
     storage: {
@@ -893,6 +950,7 @@ export async function createProductionComposition(
       probeFreelancerTeam: async () => ({ healthy: freelancerAi.status().healthy }),
       probeMarketplaceTeam: async () => ({ healthy: marketplaceAi.status().healthy }),
       probeMarketingTeam: async () => ({ healthy: marketingAi.status().healthy }),
+      probeAdminTeam: async () => ({ healthy: adminAi.status().healthy }),
     },
   };
 }

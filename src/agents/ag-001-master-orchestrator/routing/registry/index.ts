@@ -411,6 +411,11 @@ const INTENT_CAPABILITIES: Readonly<Record<IntentId, readonly string[]>> = {
   [IntentId.SEARCH_KNOWLEDGE]: ['knowledge.search'],
   [IntentId.PLATFORM_HELP]: ['platform.help'],
   [IntentId.ADMIN_ACTION]: ['admin.action'],
+  [IntentId.ADMIN_ANALYTICS]: ['analytics.query'],
+  [IntentId.ADMIN_FRAUD]: ['fraud.monitor'],
+  [IntentId.ADMIN_HEALTH]: ['platform.health'],
+  [IntentId.ADMIN_AI_OPS]: ['ai.ops'],
+  [IntentId.ADMIN_EXECUTIVE]: ['analytics.executive'],
   [IntentId.SYSTEM]: [],
 };
 

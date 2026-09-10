@@ -1,0 +1,1341 @@
+You are implementing **Sprint 25 — Admin AI Team** in the existing `freelancify-ai` repository.
+
+Repository:
+`D:\Quarter04\freelancer_app\freelancify-ai`
+
+The repository has now completed:
+
+* Sprint 20 — Multi-Agent Coordination
+* Sprint 21 — Client AI Team
+* Sprint 22 — Freelancer AI Team
+* Sprint 23 — Marketplace AI Team
+* Sprint 24 — Marketing AI Team
+
+Sprint 24 is committed and pushed to GitHub.
+
+The current architecture is production-oriented and contains:
+
+* AG-001 Master Orchestrator
+* AG-002 Memory Manager
+* AG-003 Knowledge Manager
+* AG-004 Tool Manager
+* LLM Provider & AI Reasoning Layer
+* Agentic Tool Calling / Reasoning Loop
+* Agent Platform & Lifecycle
+* Multi-Agent Coordination
+* Client AI Team
+* Freelancer AI Team
+* Marketplace AI Team
+* Marketing AI Team
+
+Your task is to implement the complete **Admin AI Team — AG-501 through AG-505**.
+
+---
+
+# 1. CORE RULE
+
+This is an implementation sprint, NOT a greenfield redesign.
+
+Before writing code:
+
+1. Inspect the repository.
+2. Read the existing architecture documentation.
+3. Read the agent catalog.
+4. Read the Admin AI requirements from:
+
+   * `docs/product-requirements-v1.md`
+   * `docs/agent-catalog-v1.md`
+5. Read:
+
+   * `docs/master-orchestrator-specification-v1.md`
+   * `docs/shared-memory-architecture-v1.md`
+   * `docs/tool-registry-architecture-v1.md`
+   * `docs/knowledge-base-architecture-v1.md`
+   * `docs/agent-development-kit-v1.md`
+   * `docs/architecture-review-v1.md`
+6. Inspect Sprint 20, 21, 22, 23 and 24 implementations.
+7. Follow the existing patterns instead of inventing new architecture.
+
+The existing `agent-catalog-v1.md` is the source of truth for AG-501..AG-505 responsibilities.
+
+Do NOT invent conflicting agent IDs or responsibilities.
+
+---
+
+# 2. CREATE ADMIN AI TEAM
+
+Create:
+
+`src/agents/admin-ai-team/`
+
+Follow the architectural conventions established by:
+
+* `src/agents/client-ai-team/`
+* `src/agents/freelancer-ai-team/`
+* `src/agents/marketplace-ai-team/`
+* `src/agents/marketing-ai-team/`
+
+Use a clean modular structure similar to the existing teams.
+
+Expected modules include appropriate equivalents of:
+
+* `types.ts`
+* `constants.ts`
+* `errors.ts`
+* `schemas.ts`
+* `security.ts`
+* `agents.ts`
+* `context.ts`
+* `router.ts`
+* `workflows.ts`
+* `tooling.ts`
+* `events.ts`
+* `metrics.ts`
+* `service.ts`
+* `index.ts`
+
+Additional focused modules are allowed when genuinely necessary.
+
+Do NOT blindly copy the Marketing AI Team.
+
+Reuse shared infrastructure.
+
+---
+
+# 3. ADMIN AGENTS AG-501 → AG-505
+
+Implement all five Admin AI Team agents defined in the existing catalog:
+
+* AG-501
+* AG-502
+* AG-503
+* AG-504
+* AG-505
+
+Before implementation, inspect the catalog and preserve the exact documented:
+
+* agent name
+* responsibility
+* capabilities
+* inputs
+* outputs
+* execution expectations
+* dependencies
+* security requirements
+
+Do not rename catalog-defined agents.
+
+Do not change their responsibilities merely for convenience.
+
+---
+
+# 4. ADMIN TEAM PURPOSE
+
+The Admin AI Team is fundamentally different from Client/Freelancer/Marketplace/Marketing teams.
+
+It deals with privileged platform-level operations.
+
+Therefore security must be stricter.
+
+The Admin AI Team should support the administrative workflows defined in the existing product requirements and agent catalog, such as applicable areas including:
+
+* platform administration
+* moderation
+* operational monitoring
+* fraud/risk signals
+* platform health insights
+* user/account administration
+* marketplace policy enforcement
+* business/platform analytics
+* administrative recommendations
+* executive/platform insights
+
+IMPORTANT:
+
+Only implement capabilities that are actually supported by the repository's documented Admin AI specification.
+
+Do not invent privileged capabilities outside the catalog.
+
+---
+
+# 5. PRIVILEGED ACCESS MODEL
+
+Admin AI must NOT mean unrestricted access.
+
+Every Admin operation MUST have:
+
+* explicit capability
+* explicit authorization
+* actor context
+* scoped access
+* tool authorization
+* bounded input
+* bounded output
+* auditability
+
+Never create a generic:
+
+`admin.canDoEverything = true`
+
+model.
+
+Instead use explicit permissions/capabilities.
+
+---
+
+# 6. ADMIN SECURITY
+
+This is the highest-sensitivity AI team.
+
+Apply defense-in-depth.
+
+Requirements:
+
+* fail closed
+* least privilege
+* explicit authorization
+* no implicit privilege escalation
+* prompt-injection resistance
+* secret redaction
+* token redaction
+* credential redaction
+* connection-string protection
+* safe error messages
+* safe event metadata
+* safe metrics
+* bounded context
+* bounded outputs
+* bounded tool results
+* sensitive-data minimization
+* authorization before execution
+* authorization again before privileged tools where appropriate
+
+User-provided text MUST NEVER become trusted admin instructions.
+
+---
+
+# 7. SECURITY BOUNDARY
+
+Treat all of the following as untrusted unless explicitly authorized:
+
+* user text
+* client text
+* freelancer text
+* project descriptions
+* proposals
+* messages
+* reviews
+* marketing content
+* imported data
+* tool output
+* knowledge content
+* memory content
+* external API responses
+
+Prompt injection inside any of these sources MUST NOT be able to grant:
+
+* admin access
+* additional capabilities
+* additional tools
+* database access
+* secret access
+* policy override
+
+---
+
+# 8. ADMIN CONTEXT BUILDER
+
+Implement Admin context construction using existing:
+
+* AG-002 Memory Manager
+* AG-003 Knowledge Manager
+* existing runtime/context architecture
+
+Do NOT directly query the database.
+
+Context should be:
+
+* authorization-aware
+* scope-aware
+* bounded
+* deduplicated
+* prioritized
+* sanitized
+* provenance-aware where useful
+
+Sensitive information should only be included when the current capability explicitly permits it.
+
+Never dump the entire platform state into an LLM context.
+
+---
+
+# 9. AG-001 INTEGRATION
+
+Admin requests MUST integrate with AG-001.
+
+Do NOT create a second orchestrator.
+
+Add only the required Admin intents.
+
+Follow existing intent architecture.
+
+Routing must be:
+
+* deterministic
+* capability-aware
+* authorization-aware
+* lifecycle-aware
+* fail-closed
+
+Unknown admin intent:
+
+→ fail closed.
+
+Unknown capability:
+
+→ fail closed.
+
+Unauthorized capability:
+
+→ fail closed.
+
+---
+
+# 10. ADMIN ROUTING
+
+Implement an Admin-specific capability-aware dispatcher following existing team patterns.
+
+Flow:
+
+```text
+request
+→ validate
+→ identify intent
+→ resolve capability
+→ authenticate/authorize
+→ verify agent lifecycle
+→ verify tool permissions
+→ build bounded context
+→ execute through runtime
+→ validate output
+→ emit audit/event
+→ return typed result
+```
+
+Never skip authorization because the request came from AG-001.
+
+---
+
+# 11. AGENT PLATFORM
+
+Register AG-501 through AG-505 with the existing Agent Platform.
+
+Do NOT create another lifecycle system.
+
+Each agent should have:
+
+* identity
+* capabilities
+* execution mode
+* limits
+* allowed tools
+* lifecycle
+* readiness
+* concurrency policy
+
+Platform behavior must work exactly like previous AI teams.
+
+Verify:
+
+* READY
+* RUNNING
+* PAUSED
+* DISABLED
+* FAILED
+* TERMINATED
+
+where supported by the existing lifecycle model.
+
+A paused/disabled Admin agent MUST be rejected.
+
+---
+
+# 12. TOOL MANAGER
+
+Admin tools must go through AG-004.
+
+Never directly call:
+
+* database APIs
+* filesystem operations
+* external APIs
+* admin APIs
+* shell commands
+* privileged services
+
+from Admin Team code.
+
+Use the existing Tool Manager boundary.
+
+Admin tools MUST be explicitly allowlisted.
+
+Prefer empty allowlists for capabilities that do not need tools.
+
+Do not automatically grant every Admin agent every tool.
+
+---
+
+# 13. PRIVILEGED TOOL SAFETY
+
+For privileged tool operations:
+
+1. Validate capability.
+2. Validate actor.
+3. Validate authorization.
+4. Validate tool allowlist.
+5. Validate arguments.
+6. Execute through AG-004.
+7. Sanitize result.
+8. Emit safe audit metadata.
+9. Return typed result.
+
+If any check fails:
+
+→ fail closed.
+
+Do not attempt fallback execution outside AG-004.
+
+---
+
+# 14. ADMIN AUDITABILITY
+
+Admin operations require stronger observability than ordinary AI operations.
+
+Use existing event architecture.
+
+Track safe metadata such as:
+
+* actor category
+* capability
+* agent
+* operation type
+* outcome
+* timestamp
+* correlation ID
+* latency
+* authorization result
+* tool authorization result
+
+Never log:
+
+* passwords
+* tokens
+* API keys
+* session secrets
+* connection strings
+* raw sensitive payloads
+
+Where an operation changes platform state, the event/audit record must clearly distinguish:
+
+* requested
+* authorized
+* executed
+* failed
+* rejected
+
+---
+
+# 15. ADMIN ACTION SAFETY
+
+The Admin AI Team must distinguish between:
+
+### READ operations
+
+Examples:
+
+* inspect
+* analyze
+* summarize
+* report
+* diagnose
+
+and:
+
+### WRITE / MUTATING operations
+
+Examples:
+
+* modify
+* suspend
+* approve
+* reject
+* delete
+* change configuration
+* trigger operational actions
+
+Mutating actions must have stricter authorization.
+
+If the existing architecture supports approval gates, use them.
+
+Do NOT automatically perform high-impact irreversible operations merely because an LLM recommended them.
+
+Where approval is required by the existing requirements:
+
+```text
+AI recommendation
+→ approval required
+→ authorized execution
+```
+
+not:
+
+```text
+AI recommendation
+→ automatic execution
+```
+
+---
+
+# 16. LLM USAGE
+
+Admin AI should be deterministic-first.
+
+Do NOT use an LLM for:
+
+* basic validation
+* authorization
+* lifecycle checks
+* permission checks
+* policy enforcement
+* deterministic calculations
+* state transitions
+
+LLM reasoning may be used for:
+
+* summarization
+* analysis
+* explanation
+* recommendations
+* anomaly interpretation
+* executive insights
+
+where the catalog/requirements support it.
+
+If LLM is unavailable:
+
+* deterministic Admin functionality MUST continue
+* reasoning-dependent functions should fail clearly
+* never fabricate analysis
+* never pretend an LLM generated a result
+
+---
+
+# 17. AGENTIC REASONING
+
+If an Admin workflow uses the existing agentic reasoning loop:
+
+enforce:
+
+* maximum turns
+* maximum tool calls
+* maximum context
+* maximum result bytes
+* timeout
+* cancellation
+* tool authorization
+* capability authorization
+* prompt-injection defense
+
+The model must NEVER be allowed to dynamically grant itself additional tools.
+
+The allowed tool list must come from the authorized agent capability.
+
+---
+
+# 18. MULTI-AGENT ADMIN WORKFLOWS
+
+If the Admin Team requires multiple agents to collaborate:
+
+use the existing Sprint 20 coordination layer.
+
+Do NOT build custom orchestration.
+
+Use:
+
+* SINGLE
+* SEQUENTIAL
+* PARALLEL
+* PIPELINE
+* DEBATE
+* HYBRID
+
+only where appropriate.
+
+Respect:
+
+* dependency graph
+* cycle detection
+* deadline
+* cancellation
+* bounded concurrency
+* retries
+* failure policy
+* conflict policy
+* aggregation
+
+All agent execution must still go through the existing runtime executor and platform gate.
+
+---
+
+# 19. ADMIN ANALYTICS HONESTY
+
+Never invent platform metrics.
+
+If actual data is unavailable:
+
+return:
+
+* insufficientData
+* unavailable signal
+* estimate where appropriate
+* assumptions
+
+Do not fabricate:
+
+* users
+* revenue
+* conversion
+* fraud rate
+* retention
+* project counts
+* growth percentages
+* platform health metrics
+
+Any estimate must be explicitly marked as an estimate.
+
+---
+
+# 20. ADMIN RECOMMENDATIONS
+
+Recommendations should include appropriate fields such as:
+
+* recommendation
+* rationale
+* priority
+* confidence
+* supporting signals
+* assumptions
+* estimated impact where applicable
+* required approval where applicable
+
+Do not present recommendations as facts.
+
+Do not claim an action was performed unless it actually executed successfully.
+
+---
+
+# 21. POLICY / MODERATION SAFETY
+
+If Admin AI includes moderation or policy-related functionality according to the catalog:
+
+ensure:
+
+* deterministic policy checks remain deterministic
+* AI classification is clearly identified
+* uncertain cases can be escalated
+* AI does not silently invent policy rules
+* decisions include evidence/signals
+* moderation actions respect authorization
+* irreversible actions require required approval
+
+Never allow user-provided content to override platform policy.
+
+---
+
+# 22. WORKFLOWS
+
+Implement the workflows required by the existing Admin catalog.
+
+Examples of possible workflow patterns include:
+
+### Administrative Analysis
+
+```text
+Admin request
+→ context
+→ relevant signals
+→ deterministic analysis
+→ optional reasoning
+→ typed report
+```
+
+### Platform Monitoring
+
+```text
+signals
+→ health/status checks
+→ anomaly detection
+→ optional reasoning
+→ recommendation
+```
+
+### Moderation / Risk
+
+```text
+content/event
+→ deterministic checks
+→ risk signals
+→ optional AI analysis
+→ policy result
+→ action or escalation
+```
+
+### Executive Insights
+
+```text
+platform signals
+→ aggregation
+→ trend analysis
+→ recommendation
+→ executive summary
+```
+
+ONLY implement workflows supported by the existing catalog/specification.
+
+---
+
+# 23. SCHEMAS
+
+Use strict Zod schemas.
+
+All public Admin contracts must validate:
+
+* request
+* intent
+* capability
+* authorization context
+* agent input
+* workflow input
+* workflow output
+* tool arguments
+* tool results
+* events
+* metrics/status
+
+Requirements:
+
+* no `any`
+* bounded strings
+* bounded arrays
+* bounded objects
+* explicit enums
+* strict object shapes where appropriate
+* safe defaults
+* bounded metadata
+* safe error contracts
+
+---
+
+# 24. ERROR HANDLING
+
+Create Admin-specific typed errors only where needed.
+
+Errors should distinguish:
+
+* invalid request
+* unauthorized
+* forbidden
+* capability unavailable
+* agent unavailable
+* tool denied
+* validation failure
+* reasoning unavailable
+* cancelled
+* timed out
+* insufficient data
+* execution failure
+
+Never expose sensitive internal information through public errors.
+
+---
+
+# 25. CANCELLATION / TIMEOUT
+
+All Admin workflows must support:
+
+* cooperative cancellation
+* bounded timeout
+* AbortSignal propagation
+* correct final classification
+
+Use existing cancellation conventions.
+
+Do not create custom cancellation infrastructure.
+
+Ensure:
+
+```text
+cancelled → CANCELLED
+timeout → TIMED_OUT
+```
+
+and do not incorrectly classify these as generic failures.
+
+---
+
+# 26. EVENTS
+
+Add Admin AI Team event types using existing event patterns.
+
+Examples:
+
+* admin request received
+* admin workflow started
+* admin agent started
+* admin agent completed
+* admin request completed
+* admin request failed
+* authorization denied
+* capability denied
+* tool denied
+* privileged action requested
+* privileged action approved
+* privileged action executed
+* privileged action failed
+* cancellation
+* timeout
+
+Use safe metadata only.
+
+---
+
+# 27. METRICS
+
+Add bounded Admin metrics.
+
+Track aggregate values such as:
+
+* requests
+* successes
+* failures
+* authorization denials
+* tool denials
+* workflow counts
+* agent execution counts
+* latency
+* cancellation
+* timeout
+* reasoning usage
+* approval-required actions
+
+Do not include raw user content.
+
+Do not introduce uncontrolled high-cardinality labels.
+
+---
+
+# 28. ADMIN SERVICE
+
+Create a stable public service API.
+
+The service should expose only the necessary operations for:
+
+* admin request execution
+* workflow execution
+* capability dispatch
+* health/readiness
+* status
+* metrics
+
+Keep internal implementation details private.
+
+Follow the same architecture used by the other AI teams.
+
+---
+
+# 29. RUNTIME INTEGRATION
+
+Update the existing composition root.
+
+Wire:
+
+* AG-501..AG-505
+* Admin service
+* router
+* workflows
+* context provider
+* tool client
+* platform definitions
+* lifecycle
+* event log
+* metrics
+* health probe
+
+Do NOT break:
+
+* Client AI Team
+* Freelancer AI Team
+* Marketplace AI Team
+* Marketing AI Team
+* AG-001
+* AG-002
+* AG-003
+* AG-004
+* Coordination
+
+---
+
+# 30. HEALTH
+
+Extend:
+
+`/healthz`
+
+with:
+
+```text
+adminTeam
+```
+
+Follow the exact structure used by:
+
+* clientTeam
+* freelancerTeam
+* marketplaceTeam
+* marketingTeam
+
+Health must reflect actual readiness.
+
+---
+
+# 31. STATUS ENDPOINT
+
+Add:
+
+`GET /api/admin-ai/status`
+
+Expose safe operational information:
+
+* healthy
+* readiness
+* registered agents
+* ready agents
+* capabilities
+* workflow availability
+* metrics summary if appropriate
+
+Never expose:
+
+* credentials
+* secrets
+* private prompts
+* sensitive user information
+* internal database details
+
+---
+
+# 32. TESTING
+
+Create comprehensive tests.
+
+Minimum coverage:
+
+## Unit
+
+Test:
+
+* schemas
+* contracts
+* security
+* authorization
+* capabilities
+* agents
+* context
+* routing
+* dispatcher
+* workflows
+* service
+* events
+* metrics
+* errors
+
+## Integration
+
+Test:
+
+* AG-001 routing
+* AG-002 memory integration
+* AG-003 knowledge integration
+* AG-004 tool integration
+* Agent Platform
+* Coordination where applicable
+* LLM-disabled behavior
+* LLM reasoning where applicable
+* cancellation
+* timeout
+* partial failure
+* concurrency
+
+## Platform
+
+Test:
+
+* AG-501 registration
+* AG-502 registration
+* AG-503 registration
+* AG-504 registration
+* AG-505 registration
+* readiness
+* lifecycle
+* pause
+* disable
+* capability resolution
+* tool allowlists
+
+## Runtime
+
+Test:
+
+* `/healthz`
+* `/api/admin-ai/status`
+* actual composition root
+* production configuration
+* at least one complete Admin workflow
+
+---
+
+# 33. SECURITY TEST MATRIX
+
+Explicitly test:
+
+### Authorization
+
+* valid authorized request
+* unauthorized request
+* missing actor
+* invalid actor
+* wrong capability
+* capability escalation attempt
+
+### Prompt injection
+
+Test malicious input attempting to:
+
+* become system instructions
+* grant admin privilege
+* change policy
+* reveal secrets
+* invoke unavailable tools
+* bypass approval
+* override authorization
+
+All must fail safely.
+
+### Tool security
+
+Test:
+
+* allowed tool
+* denied tool
+* unknown tool
+* malformed arguments
+* malicious arguments
+* oversized arguments
+* malicious tool result
+
+### Lifecycle
+
+Test:
+
+* READY
+* PAUSED
+* DISABLED
+* FAILED
+* TERMINATED
+
+where supported.
+
+### Data safety
+
+Test:
+
+* secret redaction
+* token redaction
+* connection-string protection
+* safe errors
+* safe events
+* safe metrics
+
+### Resource limits
+
+Test:
+
+* oversized input
+* oversized context
+* oversized output
+* oversized tool result
+* excessive agentic turns
+* excessive tool calls
+
+---
+
+# 34. REGRESSION TESTING
+
+The full existing test suite MUST remain green.
+
+Do NOT:
+
+* delete tests
+* weaken assertions
+* skip unrelated failures
+* globally increase timeouts
+* change behavior of existing teams just to accommodate Admin AI
+
+If a real architectural problem is discovered, fix the root cause.
+
+---
+
+# 35. DOCUMENTATION
+
+Create:
+
+`docs/sprint25-admin-ai-team-v1.md`
+
+Document:
+
+1. Sprint objective
+2. Admin AI architecture
+3. AG-501
+4. AG-502
+5. AG-503
+6. AG-504
+7. AG-505
+8. Capabilities
+9. Authorization model
+10. Security model
+11. Routing
+12. Context
+13. Workflows
+14. AG-001 integration
+15. AG-002 integration
+16. AG-003 integration
+17. AG-004 integration
+18. Agent Platform integration
+19. Coordination integration
+20. Events
+21. Metrics
+22. Health
+23. Status API
+24. Testing
+25. Verification
+26. Known limitations
+27. Future improvements
+
+Do not document functionality that was not implemented.
+
+---
+
+# 36. PROMPT DOCUMENTATION
+
+Follow the repository's existing prompt-documentation convention.
+
+If previous sprint implementation conventions include updating:
+
+`prompts/prompts*.md`
+
+or an equivalent prompt history/index, update it consistently.
+
+Do not create duplicate prompt documentation systems.
+
+---
+
+# 37. CODE QUALITY
+
+Maintain:
+
+* TypeScript strict mode
+* no `any`
+* clean imports
+* type-only imports
+* existing lint conventions
+* existing formatting
+* existing naming conventions
+* deterministic-first behavior
+* bounded resource usage
+* clean module boundaries
+* no dead code
+* no duplicate infrastructure
+
+---
+
+# 38. IMPORTANT: DO NOT REIMPLEMENT EXISTING SYSTEMS
+
+Do NOT create:
+
+* another orchestrator
+* another memory system
+* another knowledge system
+* another tool manager
+* another lifecycle system
+* another coordination engine
+* another authorization framework if an existing reusable mechanism already exists
+* another event framework
+* another metrics framework
+
+Reuse existing infrastructure.
+
+---
+
+# 39. IMPORTANT: DO NOT BYPASS SECURITY
+
+Never:
+
+* bypass Agent Platform
+* bypass runtime executor
+* bypass AG-004
+* directly access DB
+* directly execute privileged operations
+* let LLM choose arbitrary tools
+* let user content grant permissions
+* silently elevate privileges
+* automatically execute high-impact actions without required approval
+
+---
+
+# 40. VERIFICATION GATES
+
+After implementation run the repository's real verification commands.
+
+At minimum inspect `package.json` and run the appropriate equivalents of:
+
+```bash
+npx tsc --noEmit
+npm run lint
+npx prettier --check .
+npx vitest run
+npm run build
+```
+
+All must pass.
+
+Also perform runtime smoke tests.
+
+Verify:
+
+```text
+GET /healthz
+GET /api/admin-ai/status
+```
+
+Verify at least one complete Admin workflow through the real composition root.
+
+Verify:
+
+* LLM disabled
+* authorized request
+* unauthorized request
+* tool denial
+* lifecycle pause
+* cancellation
+* timeout
+
+---
+
+# 41. ACCEPTANCE CRITERIA
+
+Sprint 25 is complete ONLY when:
+
+* AG-501 implemented
+* AG-502 implemented
+* AG-503 implemented
+* AG-504 implemented
+* AG-505 implemented
+* all catalog-defined capabilities work
+* AG-001 integration works
+* AG-002 integration works
+* AG-003 integration works
+* AG-004 integration works
+* Agent Platform integration works
+* Coordination integration works where required
+* authorization is enforced
+* privileged operations are protected
+* tool access is allowlisted
+* prompt injection defenses work
+* deterministic fallback works
+* LLM integration works where required
+* cancellation works
+* timeout works
+* events work
+* metrics work
+* `/healthz` works
+* `/api/admin-ai/status` works
+* tests pass
+* typecheck passes
+* lint passes
+* prettier passes
+* build passes
+* documentation is complete
+* existing AI teams remain functional
+
+---
+
+# 42. FINAL REPORT
+
+At the end provide a concise implementation report containing:
+
+* Admin module files created
+* files modified
+* AG-501..AG-505 responsibilities implemented
+* capabilities implemented
+* workflows implemented
+* authorization/security model
+* AG-001 integration
+* AG-002 integration
+* AG-003 integration
+* AG-004 integration
+* Agent Platform integration
+* Coordination integration
+* tests added
+* total tests passed
+* typecheck result
+* lint result
+* prettier result
+* build result
+* runtime smoke-test result
+* documentation created
+* known limitations
+
+Do NOT commit or push automatically.
+
+I will explicitly request commit/push after reviewing the implementation.
+
+---
+
+# 43. EXECUTION MODE
+
+Work autonomously.
+
+Do not stop at planning.
+
+Do not ask me to manually create files.
+
+Do not return only a proposed architecture.
+
+Actually implement the sprint.
+
+Follow:
+
+```text
+inspect
+→ understand existing architecture
+→ implement
+→ test
+→ fix
+→ verify
+→ document
+→ final report
+```
+
+Preserve backwards compatibility with all previous sprints.
+
+The final implementation must feel like a natural continuation of Sprint 20–24, not a separate subsystem.

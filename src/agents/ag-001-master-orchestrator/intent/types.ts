@@ -33,6 +33,11 @@ export enum IntentId {
   SEARCH_KNOWLEDGE = 'knowledge.search',
   PLATFORM_HELP = 'platform.help',
   ADMIN_ACTION = 'admin.action',
+  ADMIN_ANALYTICS = 'admin.analytics',
+  ADMIN_FRAUD = 'admin.fraud',
+  ADMIN_HEALTH = 'admin.health',
+  ADMIN_AI_OPS = 'admin.aiops',
+  ADMIN_EXECUTIVE = 'admin.executive',
   SYSTEM = 'system',
 }
 
