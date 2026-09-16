@@ -130,6 +130,9 @@ export class FreelancerWorkflowRegistry {
         })),
         truncated: context.truncated,
       },
+      ...(readKnobNumber(request.metadata, 'freelancer.delayMs') !== undefined
+        ? { 'freelancer.delayMs': readKnobNumber(request.metadata, 'freelancer.delayMs') }
+        : {}),
     };
     const retry = {
       maxRetries: 1,
@@ -176,4 +179,13 @@ export class FreelancerWorkflowRegistry {
     };
     return [profile, match, proposal];
   }
+}
+
+/** Deterministic, bounded knob reader from uncontrolled request metadata. */
+function readKnobNumber(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

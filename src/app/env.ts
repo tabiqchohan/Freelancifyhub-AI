@@ -10,6 +10,8 @@ import type { LLMConfig } from '../llm/config/schema.js';
 import { parseLlmConfig } from '../llm/config/index.js';
 import type { AgenticConfig } from '../agents/runtime/agentic/config.js';
 import { parseAgenticConfig } from '../agents/runtime/agentic/config.js';
+import type { AiosConfig } from '../ai-operating-system/config.js';
+import { parseAiosConfig } from '../ai-operating-system/config.js';
 
 /**
  * Environment surface consumed by the production composition root. Combines the
@@ -28,6 +30,8 @@ export interface Environment {
   readonly llm: LLMConfig;
   /** Sprint 18 — agentic tool-calling loop limits (validated, fail-fast). */
   readonly agentic: AgenticConfig;
+  /** Sprint 26 — AI Operating System boundary config (validated, fail-closed). */
+  readonly aios: AiosConfig;
 }
 
 /** Parses the runtime environment; throwable (fail-closed) on invalid env. */
@@ -38,5 +42,6 @@ export function parseCompiledEnv(raw: NodeJS.ProcessEnv = process.env): Environm
   const tools = parseToolConfig(raw);
   const llm = parseLlmConfig(raw);
   const agentic = parseAgenticConfig(raw);
-  return { base, memory, knowledge, tools, llm, agentic };
+  const aios = parseAiosConfig(raw);
+  return { base, memory, knowledge, tools, llm, agentic, aios };
 }

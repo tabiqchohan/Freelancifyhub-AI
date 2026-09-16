@@ -196,7 +196,7 @@ export function createRuntimeAgent(options: RuntimeAgentOptions = {}): RuntimeAg
 }
 
 /** Parses a possibly-string numeric knob into an integer or fallback. */
-function parseInputNumber(value: unknown, fallback: number): number {
+export function parseInputNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;
   }
@@ -209,16 +209,16 @@ function parseInputNumber(value: unknown, fallback: number): number {
   return fallback;
 }
 
-function clampDelay(value: number): number {
+export function clampDelay(value: number): number {
   return Math.min(Math.max(Math.trunc(value), 0), 5000);
 }
 
-function isTruthy(value: unknown): boolean {
+export function isTruthy(value: unknown): boolean {
   return value === true || value === 'true' || value === 1 || value === '1' || value === 'yes';
 }
 
 /** Delays without blocking cancellation; aborts early when cancelled. */
-function cancellableDelay(
+export function cancellableDelay(
   ms: number,
   signal: RuntimeAgentExecutionContext['signal'],
 ): Promise<void> {

@@ -131,6 +131,9 @@ export class MarketingWorkflowRegistry {
         })),
         truncated: context.truncated,
       },
+      ...(readKnobNumber(request.metadata, 'marketing.delayMs') !== undefined
+        ? { 'marketing.delayMs': readKnobNumber(request.metadata, 'marketing.delayMs') }
+        : {}),
     };
     const retry = {
       maxRetries: 1,
@@ -186,4 +189,13 @@ export class MarketingWorkflowRegistry {
     };
     return [research, social, email];
   }
+}
+
+/** Deterministic, bounded knob reader from uncontrolled request metadata. */
+function readKnobNumber(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

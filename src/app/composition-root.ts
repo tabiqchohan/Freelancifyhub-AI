@@ -142,11 +142,20 @@ import { AgentRegistry } from '../agents/runtime/registry.js';
 import { ProductionAgentExecutor, ProductionExecutorRegistry } from '../agents/runtime/executor.js';
 import { RuntimeAgentEventType } from '../agents/runtime/types.js';
 import { createRuntimeAgent } from '../agents/runtime/runtime-agent.js';
+import { createKnowledgeRuntimeAgent } from '../agents/runtime/knowledge-runtime-agent.js';
 import type { RuntimeAgent } from '../agents/runtime/types.js';
 import { RuntimeEventBridge } from './runtime-event-bridge.js';
 import { RequestActorRegistry } from './request-actors.js';
 import { MemoryAwareContextInputBuilder } from './memory-context-builder.js';
 import { DiagnosticError } from './errors.js';
+import {
+  AiosGateway,
+  AiosEventLog,
+  AiosMetrics,
+  AiosPipeline,
+  AiosService,
+  createDefaultPolicy,
+} from '../ai-operating-system/index.js';
 
 /**
  * Phase 1 — the single, authoritative production composition root.
@@ -221,6 +230,8 @@ export interface ProductionComposition {
     readonly marketingAi: MarketingAIService;
     /** Sprint 25 admin AI team service (Admin AI). */
     readonly adminAi: AdminAIService;
+    /** Sprint 26 AI Operating System gateway (single AIOS boundary). */
+    readonly aios: AiosGateway;
     readonly requestActors: RequestActorRegistry;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
@@ -243,6 +254,8 @@ export interface ProductionComposition {
     readonly probeMarketingTeam: () => Promise<{ healthy: boolean }>;
     /** Sprint 25 admin AI team readiness probe. */
     readonly probeAdminTeam: () => Promise<{ healthy: boolean }>;
+    /** Sprint 26 AI Operating System readiness probe. */
+    readonly probeAios: () => Promise<{ healthy: boolean }>;
   };
 }
 
@@ -423,6 +436,11 @@ export async function createProductionComposition(
   // ---- runtime agent registry + executor ----------------------------------
   const registry = new AgentRegistry();
   registry.register(createRuntimeAgent({ logger }));
+  // AG-003 knowledge manager (Sprint 26 orchestrator tail): deterministic
+  // runtime agent so platform-level intents (knowledge.search / platform.help)
+  // execute through the same executor-gated path as every team agent.
+  const knowledgeRuntimeAgent = createKnowledgeRuntimeAgent({ logger });
+  registry.register(knowledgeRuntimeAgent);
   // Sprint 21 client AI team runtime agents (AG-102..AG-105).
   for (const clientAgent of createClientTeamAgents()) {
     registry.register(clientAgent);
@@ -632,6 +650,11 @@ export async function createProductionComposition(
     });
   }
   platformRegistry.registerAgent(agentDefinitionFromRuntimeAgent(runtimeAgent101), {
+    activate: true,
+  });
+  // AG-003 mirror (Sprint 26): same contract as AG-101 above, so the executor's
+  // capability claims always match the platform definition.
+  platformRegistry.registerAgent(agentDefinitionFromRuntimeAgent(knowledgeRuntimeAgent), {
     activate: true,
   });
   // Sprint 21 client platform mirrors (AG-102..AG-105). Definitions own their
@@ -896,6 +919,43 @@ export async function createProductionComposition(
   });
   void orchestratorUnsub;
 
+  // ---- Sprint 26 AI Operating System (AIOS) --------------------------------
+  // Thin fail-closed boundary over the AG-001 orchestrator and the five AI
+  // team services. Intent is classified by the SAME RuleBasedIntentClassifier;
+  // the tail is the owning team service (or the orchestrator for platform-level
+  // intents). Events are forwarded onto the shared runtime event bridge so the
+  // AG-002 log observes the AIOS lifecycle (persist-events phase analog).
+  const aiosConfig = env.aios;
+  const aiosEventLog = new AiosEventLog({
+    window: aiosConfig.AIOS_EVENT_WINDOW,
+    onForward: (event) => eventBridge.accept(event),
+  });
+  const aiosMetrics = new AiosMetrics();
+  const aiosService = new AiosService({
+    config: aiosConfig,
+    orchestrator,
+    clientAi,
+    freelancerAi,
+    marketplaceAi,
+    marketingAi,
+    adminAi,
+  });
+  const aiosPipeline = new AiosPipeline({
+    config: aiosConfig,
+    classifier: intentClassifier,
+    requestActors,
+    policy: createDefaultPolicy(),
+    service: aiosService,
+    eventLog: aiosEventLog,
+    metrics: aiosMetrics,
+  });
+  const aios = new AiosGateway({
+    config: aiosConfig,
+    pipeline: aiosPipeline,
+    service: aiosService,
+    metrics: aiosMetrics,
+  });
+
   return {
     env,
     logger,
@@ -932,6 +992,7 @@ export async function createProductionComposition(
       marketplaceAi,
       marketingAi,
       adminAi,
+      aios,
       requestActors,
     },
     storage: {
@@ -951,6 +1012,7 @@ export async function createProductionComposition(
       probeMarketplaceTeam: async () => ({ healthy: marketplaceAi.status().healthy }),
       probeMarketingTeam: async () => ({ healthy: marketingAi.status().healthy }),
       probeAdminTeam: async () => ({ healthy: adminAi.status().healthy }),
+      probeAios: async () => ({ healthy: aios.status().healthy }),
     },
   };
 }

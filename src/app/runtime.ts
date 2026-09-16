@@ -28,6 +28,8 @@ import type { ProductionComposition } from './composition-root.js';
 import type { RequestActorBinding } from './request-actors.js';
 import { agenticLimitSummary } from '../agents/runtime/agentic/config.js';
 import type { AgentPlatformStatusSnapshot } from '../agents/agent-platform/index.js';
+import { toAiosError } from '../ai-operating-system/index.js';
+import type { AiosRequest } from '../ai-operating-system/index.js';
 
 /** Options for constructing the production HTTP runtime (Phase 7). */
 export interface ProductionRuntimeOptions {
@@ -60,6 +62,18 @@ export interface HealthPayload {
   readonly marketingTeam: MarketingTeamHealthSnapshot;
   /** Sprint 25 admin AI team status (safe aggregate; never secrets). */
   readonly adminTeam: AdminTeamHealthSnapshot;
+  /** Sprint 26 AI Operating System status (safe aggregate; never secrets). */
+  readonly aiOperatingSystem: AiosHealthSnapshot;
+}
+
+/** Safe AI Operating System snapshot for the runtime health block. */
+export interface AiosHealthSnapshot {
+  readonly enabled: boolean;
+  readonly healthy: boolean;
+  readonly activeRequests: number;
+  readonly completedRequests: number;
+  readonly requestCounts: Readonly<Record<string, number>>;
+  readonly statusCounts: Readonly<Record<string, number>>;
 }
 
 /** Safe coordination health snapshot for the runtime health block. */
@@ -138,6 +152,7 @@ export async function defaultHealth(
   marketplaceTeamInfo?: () => MarketplaceTeamHealthSnapshot,
   marketingTeamInfo?: () => MarketingTeamHealthSnapshot,
   adminTeamInfo?: () => AdminTeamHealthSnapshot,
+  aiosInfo?: () => AiosHealthSnapshot,
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
   const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
@@ -168,6 +183,19 @@ export async function defaultHealth(
     marketplaceTeam: marketplaceTeamInfo?.() ?? defaultMarketplaceTeamHealth(),
     marketingTeam: marketingTeamInfo?.() ?? defaultMarketingTeamHealth(),
     adminTeam: adminTeamInfo?.() ?? defaultAdminTeamHealth(),
+    aiOperatingSystem: aiosInfo?.() ?? defaultAiosHealth(),
+  };
+}
+
+/** Default AI Operating System snapshot when the layer is absent. */
+export function defaultAiosHealth(): AiosHealthSnapshot {
+  return {
+    enabled: false,
+    healthy: false,
+    activeRequests: 0,
+    completedRequests: 0,
+    requestCounts: {},
+    statusCounts: {},
   };
 }
 
@@ -276,6 +304,23 @@ export interface ToolExecuteBody {
   readonly requestId?: string;
   readonly traceId?: string;
   readonly timeoutMs?: number;
+}
+
+/** Body shape accepted at the Sprint 26 AIOS request endpoint. */
+export interface AiosRequestInput {
+  readonly text: string;
+  readonly structured?: Readonly<Record<string, unknown>>;
+  readonly role?: string;
+  readonly actorId?: string;
+  readonly actorGroup?: string;
+  readonly namespaces?: readonly string[];
+  readonly adminScopes?: readonly string[];
+  readonly securityClearance?: string;
+  readonly requestId?: string;
+  readonly traceId?: string;
+  readonly idempotencyKey?: string;
+  readonly timeoutMs?: number;
+  readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -390,6 +435,17 @@ export class ProductionRuntime {
               eventCount: status.eventCount,
             };
           },
+          () => {
+            const status = options.composition.services.aios.status();
+            return {
+              enabled: status.enabled,
+              healthy: status.healthy,
+              activeRequests: status.activeRequests,
+              completedRequests: status.completedRequests,
+              requestCounts: status.requestCounts,
+              statusCounts: status.statusCounts,
+            };
+          },
         ));
   }
 
@@ -473,6 +529,18 @@ export class ProductionRuntime {
 
     if (url.pathname === '/api/admin-ai/status') {
       return this.handleAdminAiStatus(res);
+    }
+
+    if (url.pathname === '/api/ai/request') {
+      return this.handleAiosRequest(req, res);
+    }
+
+    if (url.pathname === '/api/ai/status') {
+      return this.handleAiosStatus(req, res, url);
+    }
+
+    if (url.pathname === '/api/ai/cancel') {
+      return this.handleAiosCancel(req, res);
     }
 
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
@@ -624,6 +692,83 @@ export class ProductionRuntime {
       metrics: status.metrics,
       events: { total: status.eventCount },
     });
+  }
+
+  /** Body shape accepted at the Sprint 26 AIOS request endpoint. */
+  private async handleAiosRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await this.readJson<AiosRequestInput>(req);
+    if (body === undefined) {
+      return this.sendJson(res, 400, { status: 'error', error: 'invalid_json' });
+    }
+    if (typeof body.text !== 'string' || body.text.trim().length === 0) {
+      return this.sendJson(res, 400, { status: 'error', error: 'text_required' });
+    }
+
+    const requestId = body.requestId ?? `aios-${Date.now()}`;
+    const traceId = body.traceId ?? `trace-${requestId}`;
+    const role = toUserRole(body.role as UserRole | undefined) ?? UserRoleValue.Freelancer;
+
+    const request: AiosRequest = {
+      requestId,
+      traceId,
+      input: { text: body.text, structured: body.structured as AiosRequest['input']['structured'] },
+      actor: {
+        actorId: body.actorId ?? 'aios-gateway',
+        role,
+        group: body.actorGroup,
+        namespaces: body.namespaces ?? [],
+        adminScopes: body.adminScopes,
+        securityClearance: body.securityClearance,
+      },
+      options: {
+        idempotencyKey: body.idempotencyKey,
+        timeoutMs: body.timeoutMs,
+        metadata: body.metadata,
+      },
+    };
+
+    try {
+      const response = await this.composition.services.aios.request(request);
+      return this.sendJson(res, 200, response);
+    } catch (error) {
+      this.logger.error({ error, requestId }, 'aios request failed');
+      return this.sendAiosError(res, error, requestId);
+    }
+  }
+
+  /** AIOS status endpoint (Sprint 26). Overall or per-request snapshot. */
+  private async handleAiosStatus(
+    _req: IncomingMessage,
+    res: ServerResponse,
+    url: URL,
+  ): Promise<void> {
+    const requestId = url.searchParams.get('requestId') ?? undefined;
+    const status = this.composition.services.aios.status(requestId);
+    return this.sendJson(res, 200, status);
+  }
+
+  /** AIOS cancel endpoint (Sprint 26). Cooperative abort of an in-flight request. */
+  private async handleAiosCancel(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await this.readJson<{ readonly requestId?: string }>(req);
+    const requestId = body?.requestId;
+    if (requestId === undefined || requestId.length === 0) {
+      return this.sendJson(res, 400, { status: 'error', error: 'requestId_required' });
+    }
+    this.composition.services.aios.cancel(requestId);
+    return this.sendJson(res, 200, { status: 'cancelled', requestId });
+  }
+
+  private sendAiosError(res: ServerResponse, error: unknown, requestId: string): void {
+    const aios = toAiosError(error);
+    const payload = {
+      status: 'error',
+      requestId,
+      error: aios.code,
+      message: aios.message,
+      stage: aios.stage,
+      details: aios.details,
+    };
+    return this.sendJson(res, aios.status, payload);
   }
 
   private agenticStatus(): {

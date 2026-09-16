@@ -129,6 +129,9 @@ export class AdminWorkflowRegistry {
       },
       // BR-ADM-1: agent-level re-enforcement of role scopes (never expanded).
       'admin.scopes': request.actor.adminScopes ?? [],
+      ...(readKnobNumber(request.metadata, 'admin.delayMs') !== undefined
+        ? { 'admin.delayMs': readKnobNumber(request.metadata, 'admin.delayMs') }
+        : {}),
     };
     const retry = {
       maxRetries: 1,
@@ -184,4 +187,13 @@ export class AdminWorkflowRegistry {
     };
     return [analytics, health, fraud];
   }
+}
+
+/** Deterministic, bounded knob reader from uncontrolled request metadata. */
+function readKnobNumber(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

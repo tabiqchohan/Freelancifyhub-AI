@@ -127,6 +127,9 @@ export class ClientWorkflowRegistry {
         })),
         truncated: context.truncated,
       },
+      ...(readKnobNumber(request.metadata, 'client.delayMs') !== undefined
+        ? { 'client.delayMs': readKnobNumber(request.metadata, 'client.delayMs') }
+        : {}),
     };
     const retry = {
       maxRetries: 1,
@@ -185,4 +188,13 @@ export class ClientWorkflowRegistry {
     };
     return [describe, budget, timeline, skills];
   }
+}
+
+/** Deterministic, bounded knob reader from uncontrolled request metadata. */
+function readKnobNumber(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }

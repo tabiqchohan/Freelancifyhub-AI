@@ -106,8 +106,9 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
       expect(registry.lifecycleStateOf('AG-405')?.toString()).toBe('READY');
       expect(registry.lifecycleStateOf('AG-501')?.toString()).toBe('READY');
       expect(registry.lifecycleStateOf('AG-505')?.toString()).toBe('READY');
-      expect(registry.snapshot().registered).toBe(25);
-      expect(registry.snapshot().ready).toBe(25);
+      expect(registry.lifecycleStateOf('AG-003')?.toString()).toBe('READY');
+      expect(registry.snapshot().registered).toBe(26);
+      expect(registry.snapshot().ready).toBe(26);
       expect(composition.services.platformGateway.isPlatformManaged('AG-101')).toBe(true);
       expect(composition.services.platformGateway.isPlatformManaged('AG-001')).toBe(false);
       expect(composition.services.platformGateway.isToolAllowed('AG-101', 'calculator')).toBe(
@@ -198,8 +199,8 @@ describe('createProductionComposition - Agent Platform (Sprint 19)', () => {
           establishedAgents: number;
         };
       };
-      expect(health.platform.registered).toBe(25);
-      expect(health.platform.ready).toBe(25);
+      expect(health.platform.registered).toBe(26);
+      expect(health.platform.ready).toBe(26);
       expect(health.platform.running).toBe(0);
       expect(health.platform.healthy).toBe(true);
       expect(health.clientTeam.healthy).toBe(true);

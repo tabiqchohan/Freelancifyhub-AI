@@ -134,6 +134,11 @@ export class MarketplaceWorkflowRegistry {
         })),
         truncated: context.truncated,
       },
+      ...(readKnobNumber(request.metadata, 'marketplace.delayMs') !== undefined
+        ? {
+            'marketplace.delayMs': readKnobNumber(request.metadata, 'marketplace.delayMs'),
+          }
+        : {}),
     };
     const retry = {
       maxRetries: 1,
@@ -189,4 +194,13 @@ export class MarketplaceWorkflowRegistry {
     };
     return [risk, milestones, contract];
   }
+}
+
+/** Deterministic, bounded knob reader from uncontrolled request metadata. */
+function readKnobNumber(
+  metadata: Readonly<Record<string, unknown>> | undefined,
+  key: string,
+): number | undefined {
+  const value = metadata?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
