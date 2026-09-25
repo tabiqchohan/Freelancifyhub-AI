@@ -14,6 +14,14 @@ export const EnvSchema = z.object({
   PORT: z.coerce.number().int().positive().max(65535).default(3000),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   LOG_PRETTY: booleanFromString,
+  /**
+   * Shared server-to-server token. When non-empty, every inbound request that
+   * reaches a business endpoint MUST present it via the `x-aios-service-token`
+   * header (fail-closed). Business endpoints are all paths except the liveness
+   * probes (`/health`, `/healthz`). When empty the runtime stays open for
+   * local/development use — production deployments MUST set it.
+   */
+  AIOS_SERVICE_TOKEN: z.string().max(512).default(''),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

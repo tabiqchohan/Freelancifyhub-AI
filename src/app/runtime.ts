@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server, IncomingMessage, ServerResponse } from 'node:http';
 import type { Logger } from 'pino';
@@ -37,6 +38,12 @@ export interface ProductionRuntimeOptions {
   readonly logger: Logger;
   /** Health/readiness payload builder; omit for default (no storage probe). */
   readonly healthCheck?: () => Promise<HealthPayload>;
+  /**
+   * Server-to-server token required on business endpoints. Defaults to the
+   * parsed environment value (`AIOS_SERVICE_TOKEN`). Empty means the runtime
+   * stays open for local development; production MUST configure a token.
+   */
+  readonly serviceToken?: string;
 }
 
 /** The health/readiness payload exposed at `/healthz` (Phase 8). */
@@ -336,12 +343,15 @@ export class ProductionRuntime {
   private readonly composition: ProductionComposition;
   private readonly logger: Logger;
   private readonly healthCheck: () => Promise<HealthPayload>;
+  private readonly serviceToken: string;
   private server: Server | undefined;
   private shuttingDown = false;
 
   constructor(options: ProductionRuntimeOptions) {
     this.composition = options.composition;
     this.logger = options.logger;
+    this.serviceToken =
+      options.serviceToken ?? options.composition.env.base.AIOS_SERVICE_TOKEN ?? '';
     this.healthCheck =
       options.healthCheck ??
       (() =>
@@ -489,6 +499,17 @@ export class ProductionRuntime {
 
     if (url.pathname === '/healthz' || url.pathname === '/health') {
       return this.sendJson(res, 200, await this.healthCheck());
+    }
+
+    if (!this.isServiceAuthorized(req)) {
+      if (this.serviceToken !== '') {
+        this.logger.warn({ path: url.pathname }, 'service auth rejected');
+      }
+      return this.sendJson(res, 401, {
+        status: 'error',
+        error: 'unauthorized',
+        path: url.pathname,
+      });
     }
 
     if (req.method === 'POST' && url.pathname === '/runtime/request') {
@@ -1129,6 +1150,29 @@ export class ProductionRuntime {
   private sendJson(res: ServerResponse, status: number, payload: unknown): void {
     res.writeHead(status, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(payload));
+  }
+
+  /**
+   * Server-to-server auth gate (Sprint 29 boundary). All business endpoints
+   * require the configured `x-aios-service-token` header. When no token is
+   * configured the runtime stays open (local development default). The
+   * comparison is constant-time to avoid timing side channels, and the header
+   * is never echoed into responses or logs.
+   */
+  private isServiceAuthorized(req: IncomingMessage): boolean {
+    if (this.serviceToken === '') {
+      return true;
+    }
+    const provided = req.headers['x-aios-service-token'];
+    if (typeof provided !== 'string' || provided.length === 0) {
+      return false;
+    }
+    const providedBuffer = Buffer.from(provided);
+    const expectedBuffer = Buffer.from(this.serviceToken);
+    if (providedBuffer.length !== expectedBuffer.length) {
+      return false;
+    }
+    return timingSafeEqual(providedBuffer, expectedBuffer);
   }
 }
 
