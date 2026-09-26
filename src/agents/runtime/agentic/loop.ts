@@ -115,6 +115,8 @@ interface RunContext {
   reasoningCalls: number;
   inputTokens: number;
   outputTokens: number;
+  /** Sprint 33 — tool calls issued within the current reasoning turn. */
+  toolCallsThisTurn: number;
 }
 
 /** The agentic reasoning + tool-calling loop service. */
@@ -187,6 +189,8 @@ export class AgenticLoopService {
           code: 'AGENTIC_LOOP_CANCELLED',
         });
       }
+      // A fresh loop iteration is a fresh reasoning turn.
+      run.toolCallsThisTurn = 0;
       const now = Date.now();
       if (now >= run.deadline) {
         run.state.transition(AgenticLoopState.TimedOut);
@@ -308,6 +312,18 @@ export class AgenticLoopService {
 
       // --- TOOL_CALL: pre-flight + execute through AG-004 -----------------
       if (outcome.decision.type === ToolDecisionType.ToolCall) {
+        // Sprint 33 — enforce the per-turn tool-call ceiling. The structured
+        // decision currently admits one call per ask(); with
+        // AGENTIC_MAX_TOOL_CALLS_PER_TURN > 1 this also bounds multi-call
+        // emissions from a single reasoning pass.
+        if (run.toolCallsThisTurn >= this.config.AGENTIC_MAX_TOOL_CALLS_PER_TURN) {
+          run.state.transition(AgenticLoopState.LimitReached);
+          throw new AgenticLoopLimitReachedError('Agentic loop exceeded max tool calls per turn', {
+            code: 'AGENTIC_LOOP_LIMIT_REACHED',
+            details: { limit: 'AGENTIC_MAX_TOOL_CALLS_PER_TURN' },
+          });
+        }
+        run.toolCallsThisTurn += 1;
         const tool = outcome.decision.tool;
         const call: ToolCallRequest = {
           callId: `call_${turnIndex}`,
@@ -684,6 +700,7 @@ export class AgenticLoopService {
       reasoningCalls: 0,
       inputTokens: 0,
       outputTokens: 0,
+      toolCallsThisTurn: 0,
     };
   }
 

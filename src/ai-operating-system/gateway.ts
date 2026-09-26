@@ -56,16 +56,6 @@ export class AiosGateway implements AiosGatewayContract {
   async request(req: AiosRequest): Promise<AiosResponse> {
     const requestId = req.requestId;
 
-    if (req.options?.idempotencyKey !== undefined) {
-      const claim = this.idempotency.claim(req.options.idempotencyKey, requestId);
-      if (claim.outcome === 'replay') {
-        return claim.response;
-      }
-      if (claim.outcome === 'conflict') {
-        this.idempotency.throwConflict(claim.existingRequestId, req.options.idempotencyKey);
-      }
-    }
-
     const input: AiosPipelineInput = {
       requestId,
       traceId: req.traceId ?? `trace-${requestId}`,
@@ -77,13 +67,31 @@ export class AiosGateway implements AiosGatewayContract {
       },
     };
 
-    const response = await this.pipeline.execute(input);
-
+    // Claim AFTER validation so an invalid payload never consumes a key.
     if (req.options?.idempotencyKey !== undefined) {
-      this.idempotency.complete(req.options.idempotencyKey, response);
+      const claim = this.idempotency.claim(req.options.idempotencyKey, requestId);
+      if (claim.outcome === 'replay') {
+        return claim.response;
+      }
+      if (claim.outcome === 'conflict') {
+        this.idempotency.throwConflict(claim.existingRequestId, req.options.idempotencyKey);
+      }
     }
 
-    return response;
+    try {
+      const response = await this.pipeline.execute(input);
+      if (req.options?.idempotencyKey !== undefined) {
+        this.idempotency.complete(req.options.idempotencyKey, response);
+      }
+      return response;
+    } catch (error) {
+      // Sprint 33 — a failed/timed-out request must not pin the idempotency
+      // key for the rest of the window; release it so retries replay cleanly.
+      if (req.options?.idempotencyKey !== undefined) {
+        this.idempotency.release(req.options.idempotencyKey);
+      }
+      throw error;
+    }
   }
 
   status(requestId?: string): AiosStatus {

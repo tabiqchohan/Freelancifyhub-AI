@@ -70,4 +70,35 @@ describe('AIOS idempotency registry (Sprint 26)', () => {
     const again = registry.claim('k-4', 'req-1', now + 5_000);
     expect(again.outcome).toBe('new');
   });
+
+  it('releases an in-flight key so a retry is not blocked (Sprint 33)', () => {
+    const registry = new AiosIdempotencyRegistry(60_000);
+    registry.claim('k-5', 'req-1');
+    expect(registry.claim('k-5', 'req-2')).toEqual({
+      outcome: 'conflict',
+      existingRequestId: 'req-1',
+    });
+    registry.release('k-5');
+    expect(registry.claim('k-5', 'req-2')).toEqual({ outcome: 'new' });
+  });
+
+  it('does not release a completed key (Sprint 33)', () => {
+    const registry = new AiosIdempotencyRegistry(60_000);
+    registry.claim('k-6', 'req-1');
+    registry.complete('k-6', response('req-1'));
+    registry.release('k-6');
+    expect(registry.claim('k-6', 'req-1')).toEqual({
+      outcome: 'replay',
+      response: response('req-1'),
+    });
+  });
+
+  it('evicts expired entries during a later claim so entryCount stays bounded (Sprint 33)', () => {
+    const registry = new AiosIdempotencyRegistry(1_000);
+    const now = 1_000_000;
+    registry.claim('k-7', 'req-1', now);
+    expect(registry.entryCount()).toBe(1);
+    registry.claim('k-8', 'req-1', now + 5_000);
+    expect(registry.entryCount()).toBe(1);
+  });
 });

@@ -31,15 +31,17 @@ function stubService(): AiosService {
 }
 
 function buildPipeline(config = DEFAULT_AIOS_CONFIG) {
-  return new AiosPipeline({
+  const requestActors = new RequestActorRegistry();
+  const pipeline = new AiosPipeline({
     config,
     classifier,
-    requestActors: new RequestActorRegistry(),
+    requestActors,
     policy: createDefaultPolicy(),
     service: stubService(),
     eventLog: new AiosEventLog(),
     metrics: new AiosMetrics(),
   });
+  return { pipeline, requestActors };
 }
 
 function input(
@@ -59,7 +61,7 @@ function input(
 
 describe('AIOS pipeline phase chain (Sprint 26)', () => {
   it('runs the full client route to SUCCESS with the complete stage list', async () => {
-    const pipeline = buildPipeline();
+    const { pipeline } = buildPipeline();
     const response = await pipeline.execute(input('create project new website', 'Freelancer'));
     expect(response.intent).toBe('project.create');
     expect(response.status).toBe(AggregationStatus.Success);
@@ -70,14 +72,14 @@ describe('AIOS pipeline phase chain (Sprint 26)', () => {
   });
 
   it('routes admin intents to the admin tail', async () => {
-    const pipeline = buildPipeline();
+    const { pipeline } = buildPipeline();
     const response = await pipeline.execute(input('analytics query platform trend', 'Admin'));
     expect(response.intent).toBe('admin.analytics');
     expect(response.execution.target).toEqual({ kind: 'admin' });
   });
 
   it('throws UnknownIntent fail-closed on undetectable text', async () => {
-    const pipeline = buildPipeline();
+    const { pipeline } = buildPipeline();
     await expect(
       pipeline.execute(input('flibbertigibbet zyzzy', 'Freelancer')),
     ).rejects.toMatchObject({
@@ -86,17 +88,34 @@ describe('AIOS pipeline phase chain (Sprint 26)', () => {
   });
 
   it('throws SecretDetected when inbound text carries a secret shape', async () => {
-    const pipeline = buildPipeline();
+    const { pipeline } = buildPipeline();
     await expect(
       pipeline.execute(input('create a new project key sk-ABCDEFGHIJKLMNOPQRST', 'Freelancer')),
     ).rejects.toMatchObject({ code: AiosErrorCode.SecretDetected });
   });
 
   it('throws UnauthorizedScope fail-closed for a Guest reaching project features', async () => {
-    const pipeline = buildPipeline();
+    const { pipeline } = buildPipeline();
     await expect(pipeline.execute(input('view project', 'Guest'))).rejects.toMatchObject({
       code: AiosErrorCode.UnauthorizedScope,
     });
+  });
+
+  it('releases the request-scoped memory binding after success (Sprint 33)', async () => {
+    const { pipeline, requestActors } = buildPipeline();
+    const req = input('create project new website', 'Freelancer');
+    const response = await pipeline.execute(req);
+    expect(response.status).toBe(AggregationStatus.Success);
+    expect(requestActors.get(`exec_${req.requestId}`)).toBeUndefined();
+  });
+
+  it('releases the request-scoped memory binding when execution fails (Sprint 33)', async () => {
+    const { pipeline, requestActors } = buildPipeline();
+    const req = input('flibbertigibbet zyzzy', 'Freelancer');
+    await expect(pipeline.execute(req)).rejects.toMatchObject({
+      code: AiosErrorCode.UnknownIntent,
+    });
+    expect(requestActors.get(`exec_${req.requestId}`)).toBeUndefined();
   });
 
   it('injects a probe event when the caller opts into observability', async () => {

@@ -387,7 +387,7 @@ export class CoordinationCoordinator {
           if (runnable.length >= budget) {
             break;
           }
-          const perAgent = runningByAgent.get(task.agentId) ?? 0;
+          const perAgent = this.perAgentLoad(task.agentId, runningByAgent, runnable);
           if (perAgent >= plan.limits.maxTasksPerAgent) {
             continue;
           }
@@ -420,6 +420,23 @@ export class CoordinationCoordinator {
 
       await waitForSettled();
     }
+  }
+
+  /**
+   * Sprint 33 — computes the effective per-agent load as the number of tasks
+   * for that agent already running plus those admitted earlier in this same
+   * dispatch pass. The old check only consulted `runningByAgent`, so a batch
+   * could admit more than `maxTasksPerAgent` concurrent tasks for one agent
+   * within a single pass.
+   */
+  private perAgentLoad(
+    agentId: string,
+    runningByAgent: Map<string, number>,
+    runnable: readonly { agentId: string }[],
+  ): number {
+    return (
+      (runningByAgent.get(agentId) ?? 0) + runnable.filter((t) => t.agentId === agentId).length
+    );
   }
 
   private recordTask(

@@ -308,6 +308,48 @@ describe('CoordinationCoordinator (Sprint 20 §4–§22)', () => {
     expect(status.eventCount).toBeGreaterThan(0);
     expect(metrics.snapshot().counts.totalCoordinations).toBeGreaterThan(0);
   });
+
+  it('honors maxTasksPerAgent within a single parallel batch (Sprint 33)', async () => {
+    const { planner, eventLog, metrics } = harness();
+    let activeForAgent = 0;
+    let peakConcurrency = 0;
+    const fake = makeInvocation(() => ({ success: true, output: 'ok' }));
+    fake.invoke = async (task: AgentTask) => {
+      if (task.agentId === 'AG-200') {
+        activeForAgent += 1;
+        peakConcurrency = Math.max(peakConcurrency, activeForAgent);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      if (task.agentId === 'AG-200') {
+        activeForAgent -= 1;
+      }
+      return {
+        success: true,
+        output: { task: task.taskId },
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        durationMs: 5,
+      };
+    };
+    const coordinator = new CoordinationCoordinator({
+      planner,
+      invocation: fake as never,
+      eventLog,
+      metrics,
+      now: nowFactory(),
+    });
+    const result = await coordinator.coordinate({
+      ...parallelRequest(),
+      tasks: [
+        { taskId: 't1', agentId: 'AG-200', objective: 'alpha' },
+        { taskId: 't2', agentId: 'AG-200', objective: 'bravo' },
+        { taskId: 't3', agentId: 'AG-200', objective: 'charlie' },
+      ],
+      limits: { maxConcurrentTasks: 3, maxTasksPerAgent: 1, maxTasks: 3 },
+    });
+    expect(result.status).toBe('COMPLETED');
+    expect(peakConcurrency).toBe(1);
+  });
 });
 
 function singleRequest(overrides: Partial<CoordinationRequest> = {}): CoordinationRequest {

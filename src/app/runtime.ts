@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server, IncomingMessage, ServerResponse } from 'node:http';
 import type { Logger } from 'pino';
@@ -44,6 +44,12 @@ export interface ProductionRuntimeOptions {
    * stays open for local development; production MUST configure a token.
    */
   readonly serviceToken?: string;
+  /**
+   * Sprint 33 — when true and no service token is configured, business
+   * endpoints are rejected (fail-closed) instead of accepting requests open.
+   * Defaults to `true` when `NODE_ENV=production`.
+   */
+  readonly serviceTokenRequiredInProduction?: boolean;
 }
 
 /** The health/readiness payload exposed at `/healthz` (Phase 8). */
@@ -344,6 +350,7 @@ export class ProductionRuntime {
   private readonly logger: Logger;
   private readonly healthCheck: () => Promise<HealthPayload>;
   private readonly serviceToken: string;
+  private readonly serviceTokenRequiredInProduction: boolean;
   private server: Server | undefined;
   private shuttingDown = false;
 
@@ -352,6 +359,9 @@ export class ProductionRuntime {
     this.logger = options.logger;
     this.serviceToken =
       options.serviceToken ?? options.composition.env.base.AIOS_SERVICE_TOKEN ?? '';
+    this.serviceTokenRequiredInProduction =
+      options.serviceTokenRequiredInProduction ??
+      options.composition.env.base.NODE_ENV === 'production';
     this.healthCheck =
       options.healthCheck ??
       (() =>
@@ -725,7 +735,9 @@ export class ProductionRuntime {
       return this.sendJson(res, 400, { status: 'error', error: 'text_required' });
     }
 
-    const requestId = body.requestId ?? `aios-${Date.now()}`;
+    // Sprint 33 — a default request id must never collide across concurrent
+    // requests; callers may still supply their own (bounded length).
+    const requestId = body.requestId ? sanitizeRequestId(body.requestId) : `aios-${randomUUID()}`;
     const traceId = body.traceId ?? `trace-${requestId}`;
     const role = toUserRole(body.role as UserRole | undefined) ?? UserRoleValue.Freelancer;
 
@@ -899,7 +911,10 @@ export class ProductionRuntime {
       if (req.method === 'GET' && id === undefined) {
         const queryParam = url.searchParams.get('query') ?? '';
         const namespace = url.searchParams.get('ns') ?? 'default';
-        const maxResults = Number(url.searchParams.get('max') ?? '10') || 10;
+        // Sprint 33 — clamp the caller-controlled limit at the boundary; the
+        // knowledge service enforces the same ceiling for all callers.
+        const rawMax = Number(url.searchParams.get('max') ?? '10');
+        const maxResults = Number.isFinite(rawMax) && rawMax > 0 ? Math.floor(rawMax) : 10;
         const actorGroup =
           toKnowledgeActorGroup(url.searchParams.get('group') ?? undefined) ??
           KnowledgeActorGroup.KnowledgeManager;
@@ -1155,13 +1170,15 @@ export class ProductionRuntime {
   /**
    * Server-to-server auth gate (Sprint 29 boundary). All business endpoints
    * require the configured `x-aios-service-token` header. When no token is
-   * configured the runtime stays open (local development default). The
-   * comparison is constant-time to avoid timing side channels, and the header
-   * is never echoed into responses or logs.
+   * configured the runtime stays open in development/test (local use) but is
+   * FAIL-CLOSED in production — an unauthenticated production gateway must
+   * not silently accept requests (Sprint 33). The comparison is constant-time
+   * to avoid timing side channels, and the header is never echoed into
+   * responses or logs.
    */
   private isServiceAuthorized(req: IncomingMessage): boolean {
     if (this.serviceToken === '') {
-      return true;
+      return this.serviceTokenRequiredInProduction ? false : true;
     }
     const provided = req.headers['x-aios-service-token'];
     if (typeof provided !== 'string' || provided.length === 0) {
@@ -1201,6 +1218,19 @@ function toUserRole(value: UserRole | undefined): UserRole | undefined {
     return value;
   }
   return undefined;
+}
+
+/**
+ * Sprint 33 — bounds a caller-supplied request id so a client cannot use it
+ * to overwrite unrelated request-state entries (e.g. another request's
+ * completed result or memory binding). Falls back to a fresh UUID when the
+ * value is not a tame identifier.
+ */
+function sanitizeRequestId(value: string): string {
+  if (/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}$/.test(value)) {
+    return value;
+  }
+  return `aios-${randomUUID()}`;
 }
 
 /** Maps a raw string to a {@link KnowledgeActorGroup}, or undefined when unknown. */

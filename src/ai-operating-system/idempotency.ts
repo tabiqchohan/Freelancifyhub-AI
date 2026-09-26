@@ -33,6 +33,7 @@ export class AiosIdempotencyRegistry {
   }
 
   claim(key: string, requestId: string, now = Date.now()): IdempotencyClaim {
+    this.sweepExpired(now);
     const existing = this.states.get(key);
     if (existing === undefined || this.isExpired(existing, now)) {
       this.states.set(key, {
@@ -59,6 +60,17 @@ export class AiosIdempotencyRegistry {
     }
   }
 
+  /**
+   * Sprint 33 — releases a key that failed/timed out mid-flight so a client
+   * retry is not blocked for the remainder of the window. Idempotent.
+   */
+  release(key: string): void {
+    const existing = this.states.get(key);
+    if (existing !== undefined && existing.state === 'in-flight') {
+      this.states.delete(key);
+    }
+  }
+
   /** Throws the bounded conflicting-request error used at the boundary. */
   throwConflict(existingRequestId: string, key: string): never {
     throw new AiosError(AiosErrorCode.IdempotencyConflict, 'Idempotency key already in flight', {
@@ -68,5 +80,14 @@ export class AiosIdempotencyRegistry {
 
   entryCount(): number {
     return this.states.size;
+  }
+
+  /** Evicts expired entries globally so a rarely-used key can never pin memory. */
+  private sweepExpired(now: number): void {
+    for (const [key, state] of this.states) {
+      if (this.isExpired(state, now)) {
+        this.states.delete(key);
+      }
+    }
   }
 }

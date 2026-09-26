@@ -44,8 +44,9 @@ export interface AiosServiceDeps {
 
 /** Outcome of a dispatched tail (bounded; the AIOS never throws tail errors). */
 interface TailOutcome {
-  readonly status: 'result' | 'timeout';
+  readonly status: 'result' | 'timeout' | 'error';
   readonly result?: ExecutionCatcher;
+  readonly error?: unknown;
 }
 
 type TeamHandle = (request: never) => Promise<{
@@ -60,6 +61,10 @@ const TEAM_TARGETS: ReadonlySet<AiosExecutionTarget['kind']> = new Set([
   'marketing',
   'admin',
 ]);
+
+/** Upper bound on completed-request results retained for status/cancel lookup.
+ * Insertion-order eviction keeps the map bounded under sustained traffic. */
+const MAX_COMPLETED_REQUESTS = 1_000;
 
 /**
  * The AIOS execution service. Runs one validated request on its tail and
@@ -116,15 +121,35 @@ export class AiosService {
           completedAtMs: Date.now(),
           error: { code: AiosErrorCode.DeadlineExceeded, message: 'Deadline exceeded' },
         };
-        this.completedRequests.set(ctx.requestId, catcher);
+        this.recordResult(ctx.requestId, catcher);
+        return catcher;
+      }
+      if (outcome.status === 'error') {
+        // Preserve the original tail failure instead of silently producing a
+        // success-shaped undefined result (Sprint 33 correctness fix).
+        const catcher = this.failedCatcher(exec, 'The AIOS execution tail failed', outcome.error);
+        this.recordResult(ctx.requestId, catcher);
         return catcher;
       }
       const result = outcome.result ?? this.failedCatcher(exec, 'No tail result was produced');
-      this.completedRequests.set(ctx.requestId, result);
+      this.recordResult(ctx.requestId, result);
       return result;
     } finally {
       this.active.delete(ctx.requestId);
     }
+  }
+
+  /** Bounded retention for completed requests (Sprint 33). Keeps at most
+   * {@link MAX_COMPLETED_REQUESTS} results so the map cannot grow without
+   * bound under sustained traffic. */
+  private recordResult(requestId: string, catcher: ExecutionCatcher): void {
+    if (this.completedRequests.size >= MAX_COMPLETED_REQUESTS) {
+      const oldest = this.completedRequests.keys().next().value;
+      if (oldest !== undefined) {
+        this.completedRequests.delete(oldest as string);
+      }
+    }
+    this.completedRequests.set(requestId, catcher);
   }
 
   private async runTail(ctx: RequestContext, exec: ExecutionContext): Promise<TailOutcome> {
@@ -149,6 +174,9 @@ export class AiosService {
       this.deps.orchestrator.cancel(ctx.requestId, 'deadline exceeded by AIOS gateway');
       return { status: 'timeout' };
     }
+    if (outcome.status === 'error') {
+      return { status: 'error', error: outcome.error };
+    }
     return {
       status: 'result',
       result: normalizeExecutionResult(exec.target, outcome.value, exec.startedAtMs),
@@ -163,6 +191,9 @@ export class AiosService {
     if (outcome.status === 'timeout') {
       exec.controller.abort();
       return { status: 'timeout' };
+    }
+    if (outcome.status === 'error') {
+      return { status: 'error', error: outcome.error };
     }
     const raw = outcome.value as {
       readonly status?: string;
@@ -314,7 +345,14 @@ export class AiosService {
     return out;
   }
 
-  private failedCatcher(exec: ExecutionContext, message: string): ExecutionCatcher {
+  private failedCatcher(
+    exec: ExecutionContext,
+    message: string,
+    cause?: unknown,
+  ): ExecutionCatcher {
+    const code = cause instanceof AiosError ? cause.code : AiosErrorCode.ExecutionFailed;
+    const detailMessage =
+      cause instanceof Error && cause.message.length > 0 ? cause.message : message;
     return {
       target: exec.target,
       status: AggregationStatus.Failed,
@@ -322,7 +360,7 @@ export class AiosService {
       agents: [],
       startedAtMs: exec.startedAtMs,
       completedAtMs: Date.now(),
-      error: { code: AiosErrorCode.ExecutionFailed, message },
+      error: { code, message: detailMessage },
     };
   }
 }
@@ -349,15 +387,24 @@ function opt(
   return typeof value === 'string' ? value : undefined;
 }
 
-/** Races the tail run against the execution deadline. */
+/** Races the tail run against the execution deadline. Preserves tail failures
+ * (instead of swallowing them) so dispatch can produce an accurate failed
+ * catcher (Sprint 33 fix). */
 async function raceDeadline<T>(
   run: Promise<T>,
   exec: ExecutionContext,
-): Promise<{ readonly status: 'result'; readonly value: T } | { readonly status: 'timeout' }> {
+): Promise<
+  | { readonly status: 'result'; readonly value: T }
+  | { readonly status: 'timeout' }
+  | { readonly status: 'error'; readonly error: unknown }
+> {
   return new Promise((resolve) => {
     let settled = false;
     const settle = (
-      r: { readonly status: 'result'; readonly value: T } | { readonly status: 'timeout' },
+      r:
+        | { readonly status: 'result'; readonly value: T }
+        | { readonly status: 'timeout' }
+        | { readonly status: 'error'; readonly error: unknown },
     ): void => {
       if (!settled) {
         settled = true;
@@ -373,11 +420,7 @@ async function raceDeadline<T>(
     }, remaining);
     run.then(
       (value) => settle({ status: 'result', value }),
-      () => {
-        clearTimeout(timer);
-        settled = true;
-        resolve({ status: 'result', value: undefined as unknown as T });
-      },
+      (error) => settle({ status: 'error', error }),
     );
   });
 }

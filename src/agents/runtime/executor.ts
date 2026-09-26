@@ -826,6 +826,13 @@ export class ProductionAgentExecutor implements AgentExecutor {
 
   private releaseSignal(executionId: string): void {
     this.signals.delete(executionId);
+    // Sprint 33 — release per-execution attempt counters alongside signals so
+    // the map cannot grow without bound under sustained traffic.
+    for (const key of this.attemptCounters.keys()) {
+      if (key.startsWith(`${executionId}:`)) {
+        this.attemptCounters.delete(key);
+      }
+    }
   }
 
   private async guard(

@@ -150,8 +150,16 @@ export class RetrievalServiceImpl implements RetrievalService {
 
     this.logger.info({ deduplicatedCount: deduplicated.length }, 'After deduplication');
 
-    // Step 9: Result limit
-    const effectiveLimit = request.maxResults ?? this.config.MEMORY_RETRIEVAL_MAX_RESULTS ?? 50;
+    // Step 9: Result limit (Sprint 33 — caller-supplied maxResults is clamped
+    // to the configured ceiling so it cannot force unbounded retrieval; a
+    // caller may still pass 0 to intentionally request no results).
+    const configured = this.config.MEMORY_RETRIEVAL_MAX_RESULTS ?? 50;
+    const effectiveLimit =
+      request.maxResults !== undefined
+        ? request.maxResults <= 0
+          ? 0
+          : Math.min(Math.floor(request.maxResults), configured)
+        : configured;
     const limited = this.applyLimit(deduplicated, effectiveLimit);
 
     this.logger.info({ limitedCount: limited.length }, 'After limit filter');

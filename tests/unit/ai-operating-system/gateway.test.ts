@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AggregationStatus } from '../../../src/agents/ag-001-master-orchestrator/aggregation/index.js';
 import type { UserRole } from '../../../src/agents/ag-001-master-orchestrator/intent/index.js';
-import { AiosErrorCode } from '../../../src/ai-operating-system/errors.js';
+import { AiosError, AiosErrorCode } from '../../../src/ai-operating-system/errors.js';
 import { AiosGateway } from '../../../src/ai-operating-system/gateway.js';
 import { AiosMetrics } from '../../../src/ai-operating-system/metrics.js';
 import type { AiosPipeline } from '../../../src/ai-operating-system/pipeline.js';
@@ -154,5 +154,52 @@ describe('AIOS gateway (Sprint 26)', () => {
     await gateway.request(req('req-t1', undefined, { whatever: true }));
     await gateway.request(Object.assign(req('req-t2'), { options: { timeoutMs: 20_000 } }));
     expect(seen).toEqual([5_000, 5_000]);
+  });
+
+  it('does not consume an idempotency key for an invalid payload (Sprint 33)', async () => {
+    const pipeline = { execute: vi.fn(async () => done) } as unknown as AiosPipeline;
+    const gateway = new AiosGateway({
+      config: DEFAULT_AIOS_CONFIG,
+      pipeline,
+      service: stubService(),
+      metrics: new AiosMetrics(),
+    });
+
+    const bad = Object.assign(req('req-invalid', 'key-skip'), {
+      input: { text: '' },
+    });
+    await expect(gateway.request(bad)).rejects.toMatchObject({
+      code: AiosErrorCode.PayloadTooLarge,
+    });
+    expect(pipeline.execute).not.toHaveBeenCalled();
+
+    const ok = await gateway.request(req('req-after', 'key-skip'));
+    expect(ok.status).toBe(AggregationStatus.Success);
+    expect(pipeline.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases an idempotency key when the pipeline fails (Sprint 33)', async () => {
+    const failing = new AiosError(AiosErrorCode.UnknownIntent, 'boom', { requestId: 'req-fail' });
+    const pipeline = {
+      execute: vi.fn(async () => {
+        throw failing;
+      }),
+    } as unknown as AiosPipeline;
+    const gateway = new AiosGateway({
+      config: DEFAULT_AIOS_CONFIG,
+      pipeline,
+      service: stubService(),
+      metrics: new AiosMetrics(),
+    });
+
+    await expect(gateway.request(req('req-fail', 'key-fail'))).rejects.toMatchObject({
+      code: AiosErrorCode.UnknownIntent,
+    });
+
+    // A retry with the same key must not hit a conflict — the key was released.
+    pipeline.execute = vi.fn(async () => done);
+    const retry = await gateway.request(req('req-fail-2', 'key-fail'));
+    expect(retry.status).toBe(AggregationStatus.Success);
+    expect(pipeline.execute).toHaveBeenCalledTimes(1);
   });
 });

@@ -73,10 +73,12 @@ export class AiosPipeline {
     const secretScanEnabled = this.options.config.AIOS_SECRET_SCAN_ENABLED;
     assertNoSecrets(input.input.text, secretScanEnabled);
 
-    let ctx: RequestContext;
+    let ctx: RequestContext | undefined;
     let execution: ExecutionCatcher;
 
+    const bindingKey = `exec_${input.requestId}`;
     try {
+      this.provisionMemoryContext(input, bindingKey);
       ctx = createRequestContext({
         requestId: input.requestId,
         traceId: input.traceId,
@@ -95,7 +97,6 @@ export class AiosPipeline {
         intent: ctx.route.intentId,
       });
 
-      this.provisionMemoryContext(ctx);
       this.stage(log, input.requestId, input.traceId, AiosStage.BuildContext, reached, {
         namespaces: ctx.actor.namespaces,
       });
@@ -163,6 +164,7 @@ export class AiosPipeline {
       const aios = toAiosError(error);
       metrics.recordStatus(statusForCode(aios.code));
       metrics.recordPoint(`errors.${aios.code}`);
+      metrics.recordDuration('duration.all', Math.max(0, Date.now() - startedAtMs));
       log.emitFor(
         input.requestId,
         input.traceId,
@@ -171,6 +173,10 @@ export class AiosPipeline {
         { errorCode: aios.code, stage: aios.stage ?? reached[reached.length - 1] },
       );
       throw aios;
+    } finally {
+      // Release the request-scoped memory binding so the registry cannot grow
+      // without bound across requests (Sprint 33 — bounded retention).
+      this.options.requestActors.unregister(bindingKey);
     }
 
     const response = composeAiosResponse(ctx, execution, reached, { secretScanEnabled });
@@ -189,15 +195,15 @@ export class AiosPipeline {
     return ctx.timeoutMs;
   }
 
-  private provisionMemoryContext(ctx: RequestContext): void {
+  private provisionMemoryContext(input: AiosPipelineInput, bindingKey: string): void {
     this.options.requestActors.register({
-      requestId: `exec_${ctx.requestId}`,
-      traceId: ctx.traceId,
-      actorGroup: resolveActorGroup(ctx),
-      actorId: ctx.actor.actorId,
-      actorRole: ctx.actor.role,
-      namespaces: ctx.actor.namespaces,
-      securityClearance: ctx.actor.securityClearance as RequestActorBinding['securityClearance'],
+      requestId: bindingKey,
+      traceId: input.traceId,
+      actorGroup: resolveActorGroupFor(input),
+      actorId: input.actor.actorId,
+      actorRole: input.actor.role,
+      namespaces: input.actor.namespaces,
+      securityClearance: input.actor.securityClearance as RequestActorBinding['securityClearance'],
     });
   }
 
@@ -244,19 +250,21 @@ export class AiosPipeline {
   }
 }
 
-/** Maps a team/memory actor group value, falling back to role defaults. */
-function resolveActorGroup(ctx: RequestContext): MemoryActorGroup {
-  const raw = ctx.actor.group;
+/** Maps a team/memory actor group value, falling back to role defaults.
+ * Accepts the raw request input so the binding can be provisioned before a
+ * full RequestContext exists. */
+function resolveActorGroupFor(input: AiosPipelineInput): MemoryActorGroup {
+  const raw = input.actor.group;
   if (raw !== undefined) {
     const match = Object.values(MemoryActorGroup).find((v) => v === raw);
     if (match !== undefined) {
       return match;
     }
   }
-  if (ctx.target.kind === 'admin' || ctx.actor.role === 'Admin' || ctx.actor.role === 'System') {
+  if (input.actor.role === 'Admin' || input.actor.role === 'System') {
     return MemoryActorGroup.Admin;
   }
-  if (ctx.actor.role === 'Freelancer') {
+  if (input.actor.role === 'Freelancer') {
     return MemoryActorGroup.Freelancer;
   }
   return MemoryActorGroup.Client;

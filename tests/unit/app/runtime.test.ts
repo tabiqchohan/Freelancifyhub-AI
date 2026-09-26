@@ -100,6 +100,50 @@ describe('ProductionRuntime (Phase 7)', () => {
       await runtime.shutdown();
     }
   });
+
+  it('routes an AIOS request with a caller-supplied request id and echoes it back (Sprint 33)', async () => {
+    const { runtime, baseUrl } = await startRuntime();
+    try {
+      const res = await fetch(`${baseUrl}/api/ai/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId: 'req-abc-123',
+          text: 'create project',
+          role: 'Freelancer',
+          actorId: 'user:1',
+        }),
+      });
+      expect(res.status).toBe(200);
+      const payload = (await res.json()) as { requestId: string; status: string };
+      expect(payload.requestId).toBe('req-abc-123');
+      expect(payload.status).toBe('SUCCESS');
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it('falls back to a tame random id for an unsafe caller-supplied request id (Sprint 33)', async () => {
+    const { runtime, baseUrl } = await startRuntime();
+    try {
+      const res = await fetch(`${baseUrl}/api/ai/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requestId: 'exec_other-request../../etc',
+          text: 'create project',
+          role: 'Freelancer',
+          actorId: 'user:1',
+        }),
+      });
+      expect(res.status).toBe(200);
+      const payload = (await res.json()) as { requestId: string; status: string };
+      expect(payload.requestId).toMatch(/^aios-/);
+      expect(payload.requestId).not.toContain('other-request');
+    } finally {
+      await runtime.shutdown();
+    }
+  });
 });
 
 describe('defaultHealth (Phase 8)', () => {

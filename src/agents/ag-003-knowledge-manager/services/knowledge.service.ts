@@ -536,7 +536,17 @@ export class KnowledgeManagerService {
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score || a.doc.title.localeCompare(b.doc.title));
 
-    const maxResults = input.maxResults ?? this.config.KNOWLEDGE_RETRIEVAL_MAX_RESULTS;
+    // Sprint 33 — clamp caller-supplied limits so an unauthenticated caller
+    // cannot force unbounded result assembly; the configured cap is the ceiling.
+    // 0 is honored as an explicit "no results" request for consistency
+    // with the memory retrieval contract.
+    const configured = this.config.KNOWLEDGE_RETRIEVAL_MAX_RESULTS;
+    const maxResults =
+      input.maxResults !== undefined
+        ? input.maxResults <= 0
+          ? 0
+          : Math.min(Math.floor(input.maxResults), configured)
+        : configured;
     const results = scored.slice(0, maxResults).map((s) => s.doc);
 
     // Emit retrieval event

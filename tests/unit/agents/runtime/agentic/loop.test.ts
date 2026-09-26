@@ -152,7 +152,11 @@ const actor: ToolActor = {
   namespaces: ['default'],
 };
 
-function makeLoop(input: { reasoning: FakeReasoning; tools: AgenticToolCoordinator }): {
+function makeLoop(input: {
+  reasoning: FakeReasoning;
+  tools: AgenticToolCoordinator;
+  config?: typeof config;
+}): {
   loop: AgenticLoopService;
   events: AgenticEventLog;
   metrics: AgenticLoopMetrics;
@@ -162,7 +166,7 @@ function makeLoop(input: { reasoning: FakeReasoning; tools: AgenticToolCoordinat
   const loop = new AgenticLoopService({
     reasoning: input.reasoning,
     tools: input.tools,
-    config,
+    config: input.config ?? config,
     eventLog: events,
     metrics,
     defaultNamespace: 'default',
@@ -241,6 +245,29 @@ describe('agentic loop service (Sprint 18)', () => {
     expect(result.toolCalls[0]?.status).toBe(ToolCallStatus.Succeeded);
     expect(result.reasoningCalls).toBe(2);
     expect(result.finalResponse).toBe('The answer is 42.');
+  });
+
+  it('resets the per-turn tool-call counter across reasoning turns (Sprint 33)', async () => {
+    const perTurnConfig = AgenticConfigSchema.parse({
+      AGENTIC_MAX_TOOL_CALLS_PER_TURN: 1,
+      AGENTIC_MAX_TOOL_CALLS: 6,
+    });
+    const reasoning = new FakeReasoning()
+      .then(
+        JSON.stringify({ type: 'TOOL_CALL', tool: 'calculator', arguments: { expression: '1+1' } }),
+      )
+      .then(
+        JSON.stringify({ type: 'TOOL_CALL', tool: 'calculator', arguments: { expression: '2+2' } }),
+      )
+      .then(JSON.stringify({ type: 'FINAL_RESPONSE', response: 'All computed.' }));
+    const tools = new FakeCoordinator();
+    const { loop } = makeLoop({ reasoning, tools, config: perTurnConfig });
+
+    const result = await loop.run(runInput());
+    expect(result.status).toBe(AgenticLoopStatus.Completed);
+    expect(tools.executeCalls).toEqual(['calculator', 'calculator']);
+    expect(result.toolCalls).toHaveLength(2);
+    expect(result.reasoningCalls).toBe(3);
   });
 
   it('feeds a rejected tool call back and continues to a fresh decision', async () => {
