@@ -10,6 +10,7 @@
 
 import { toAiosError } from './errors.js';
 import type { AiosError } from './errors.js';
+import { AiosErrorCode } from './errors.js';
 import { AiosStage, type AiosRequest, type AiosResponse, type AiosStatus } from './types.js';
 import type { AiosGatewayContract } from './types.js';
 import type { AiosConfig } from './config.js';
@@ -24,7 +25,25 @@ export interface AiosGatewayOptions {
   readonly pipeline: AiosPipeline;
   readonly service: AiosService;
   readonly metrics: AiosMetrics;
+  /** Injectable clock for deterministic health tests (default: Date.now). */
+  readonly clock?: () => number;
 }
+
+/**
+ * Codes that indicate the AIOS itself is degrading rather than a normal
+ * per-request rejection. Only these degrade the gateway health signal, so a
+ * burst of client validation errors never flips the platform unhealthy.
+ */
+const HEALTH_DEGRADING_CODES: ReadonlySet<AiosErrorCode> = new Set<AiosErrorCode>([
+  AiosErrorCode.Internal,
+  AiosErrorCode.ExecutionFailed,
+  AiosErrorCode.DeadlineExceeded,
+  AiosErrorCode.RouteUnavailable,
+  AiosErrorCode.AgentNotReady,
+]);
+
+/** An infra failure observed within this window marks the gateway unhealthy. */
+export const HEALTH_DEGRADED_WINDOW_MS = 60_000;
 
 /**
  * The AIOS gateway: the single, typed entry point for inbound requests.
@@ -44,6 +63,9 @@ export class AiosGateway implements AiosGatewayContract {
   private readonly service: AiosService;
   private readonly metrics: AiosMetrics;
   private readonly idempotency: AiosIdempotencyRegistry;
+  private readonly clock: () => number;
+  /** Most recent infra-class failure timestamp; drives the real health signal. */
+  private lastInfraFailureAtMs: number | undefined;
 
   constructor(options: AiosGatewayOptions) {
     this.config = options.config;
@@ -51,6 +73,7 @@ export class AiosGateway implements AiosGatewayContract {
     this.service = options.service;
     this.metrics = options.metrics;
     this.idempotency = new AiosIdempotencyRegistry(this.config.AIOS_IDEMPOTENCY_WINDOW_MS);
+    this.clock = options.clock ?? Date.now;
   }
 
   async request(req: AiosRequest): Promise<AiosResponse> {
@@ -89,6 +112,12 @@ export class AiosGateway implements AiosGatewayContract {
       // key for the rest of the window; release it so retries replay cleanly.
       if (req.options?.idempotencyKey !== undefined) {
         this.idempotency.release(req.options.idempotencyKey);
+      }
+      // Sprint 34 — record infra-class failures so status() reflects real
+      // health instead of hardcoding healthy.
+      const aios = toAiosError(error);
+      if (HEALTH_DEGRADING_CODES.has(aios.code)) {
+        this.lastInfraFailureAtMs = this.clock();
       }
       throw error;
     }
@@ -129,9 +158,14 @@ export class AiosGateway implements AiosGatewayContract {
   private overallStatus(): AiosStatus {
     const statusCounts = this.metrics.statusCounts();
     const allCount = Object.values(statusCounts).reduce((sum, value) => sum + value, 0);
+    // Sprint 34 — real health signal: degraded for HEALTH_DEGRADED_WINDOW_MS
+    // after any infra-class failure, then self-heals.
+    const healthy =
+      this.lastInfraFailureAtMs === undefined ||
+      this.clock() - this.lastInfraFailureAtMs > HEALTH_DEGRADED_WINDOW_MS;
     return {
       enabled: true,
-      healthy: true,
+      healthy,
       stage: AiosStage.Completed,
       activeRequests: this.service.activeCount(),
       completedRequests: allCount,

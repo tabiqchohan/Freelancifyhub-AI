@@ -32,6 +32,10 @@ import type { AgentPlatformStatusSnapshot } from '../agents/agent-platform/index
 import { toAiosError } from '../ai-operating-system/index.js';
 import type { AiosRequest } from '../ai-operating-system/index.js';
 
+/** Hard deadline for a readiness probe so a hung dependency cannot stall
+ * infrastructure health checks (Sprint 34). */
+export const READINESS_PROBE_TIMEOUT_MS = 2_000;
+
 /** Options for constructing the production HTTP runtime (Phase 7). */
 export interface ProductionRuntimeOptions {
   readonly composition: ProductionComposition;
@@ -505,10 +509,35 @@ export class ProductionRuntime {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const startedAtMs = Date.now();
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
-    if (url.pathname === '/healthz' || url.pathname === '/health') {
-      return this.sendJson(res, 200, await this.healthCheck());
+    // Sprint 34 — correlate every response and emit an access-log line with the
+    // safe caller-supplied (or generated) request id. Never logs bodies.
+    const requestId =
+      sanitizeRequestId(String(req.headers['x-request-id'] ?? '')) ?? `aios-${randomUUID()}`;
+    res.setHeader('x-request-id', requestId);
+    res.on('finish', () => {
+      this.logger.info(
+        {
+          requestId,
+          method: req.method,
+          path: url.pathname,
+          status: res.statusCode,
+          durationMs: Date.now() - startedAtMs,
+        },
+        'http access',
+      );
+    });
+
+    // Liveness: pure process signal, never probes dependencies.
+    if (url.pathname === '/livez') {
+      return this.sendJson(res, 200, { status: 'ok', uptime: process.uptime() });
+    }
+
+    // Readiness: bounded probe of dependencies; fail-closed when degraded.
+    if (url.pathname === '/readyz' || url.pathname === '/healthz' || url.pathname === '/health') {
+      return this.handleReadiness(res);
     }
 
     if (!this.isServiceAuthorized(req)) {
@@ -575,6 +604,28 @@ export class ProductionRuntime {
     }
 
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
+  }
+
+  /**
+   * Sprint 34 — readiness probe. Runs the configured health check under a hard
+   * deadline so a hung storage/knowledge probe cannot stall infrastructure
+   * orchestration, and fail-closes with 503 when any dependency is degraded or
+   * timed out (previously every probe returned 200 regardless of state).
+   */
+  private async handleReadiness(res: ServerResponse): Promise<void> {
+    const payload = await withDeadline(this.healthCheck(), READINESS_PROBE_TIMEOUT_MS);
+    if (payload === undefined) {
+      this.logger.warn({ timeoutMs: READINESS_PROBE_TIMEOUT_MS }, 'readiness probe timed out');
+      return this.sendJson(res, 503, {
+        status: 'degraded',
+        error: 'readiness_probe_timeout',
+        uptime: process.uptime(),
+      });
+    }
+    const ready =
+      payload.status === 'ok' &&
+      !(payload.aiOperatingSystem.enabled && payload.aiOperatingSystem.healthy === false);
+    return this.sendJson(res, ready ? 200 : 503, payload);
   }
 
   /**
@@ -1196,6 +1247,39 @@ export class ProductionRuntime {
 /** Convenience: builds a {@link ProductionRuntime} over a composition. */
 export function createProductionRuntime(options: ProductionRuntimeOptions): ProductionRuntime {
   return new ProductionRuntime(options);
+}
+
+/**
+ * Sprint 34 — resolves a promise within a hard deadline. Returns `undefined`
+ * when the deadline expires first; the in-flight probe is abandoned and its
+ * handlers are detached so it cannot keep the process alive.
+ */
+async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  return new Promise<T | undefined>((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(undefined);
+      }
+    }, ms);
+    promise.then(
+      (value) => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        }
+      },
+      () => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(undefined);
+        }
+      },
+    );
+  });
 }
 
 /** Maps a raw string to a {@link MemoryActorGroup}, or undefined when unknown. */

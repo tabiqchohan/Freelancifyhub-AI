@@ -181,6 +181,9 @@ export class AIReasoningService implements AIReasoningServiceContract {
       );
 
       const durationMs = Date.now() - started;
+      // Sprint 34 — the provider only ever sees a single attempt (retries are
+      // orchestrated here), so the truthful attempt count is retries + 1.
+      const attempts = retries + 1;
       this.metrics.record({
         providerId: this.provider.id,
         model: this.provider.model,
@@ -198,7 +201,7 @@ export class AIReasoningService implements AIReasoningServiceContract {
           model: this.provider.model,
           occurredAt: new Date().toISOString(),
           durationMs,
-          attempts: response.attempts,
+          attempts,
           usage: response.usage,
           finishReason: response.finishReason,
         }),
@@ -213,7 +216,7 @@ export class AIReasoningService implements AIReasoningServiceContract {
         latencyMs: durationMs,
         correlationId,
         requestId: response.requestId,
-        attempts: response.attempts,
+        attempts,
       };
     } catch (error) {
       const classification = classifyLLMError(error);

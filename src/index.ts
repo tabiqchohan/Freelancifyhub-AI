@@ -49,6 +49,25 @@ async function main(): Promise<void> {
 
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
   process.on('SIGINT', () => void shutdown('SIGINT'));
+
+  // Sprint 34 — never let an unhandled rejection silently kill the process or
+  // vanish into the void. Log the bounded summary and continue; the process
+  // stays up so healthy requests still drain.
+  process.on('unhandledRejection', (reason) => {
+    logger.error(boundedRejection(reason), 'unhandled promise rejection');
+  });
 }
 
 void main();
+
+/** Safe, bounded summary of a rejected value (never raw `String(reason)`). */
+function boundedRejection(reason: unknown): Record<string, unknown> {
+  if (reason instanceof Error) {
+    return { name: reason.name, message: truncate(reason.message, 500) };
+  }
+  return { name: 'rejection', message: truncate(String(reason), 500) };
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? `${value.slice(0, max)}...` : value;
+}

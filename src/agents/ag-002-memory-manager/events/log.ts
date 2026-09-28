@@ -35,7 +35,14 @@ import { metadataContainsSecret, sanitizeEventMetadata } from './sanitize.js';
 
 /** Capabilities an EventLog adapter actually supports (spec §6, §17). */
 export type EventLogCapability =
-  'append' | 'appendBatch' | 'query' | 'pagination' | 'getById' | 'immutable' | 'sanitize';
+  | 'append'
+  | 'appendBatch'
+  | 'query'
+  | 'pagination'
+  | 'getById'
+  | 'immutable'
+  | 'sanitize'
+  | 'bounded-retention';
 
 /** Declared capabilities of an EventLog adapter. */
 export interface EventLogCapabilities {
@@ -75,6 +82,13 @@ export interface EventLogOptions {
   readonly eventIdFactory?: () => MemoryEventId;
   /** When true, event metadata is sanitized on append (default true). */
   readonly sanitize?: boolean;
+  /**
+   * Maximum retained in-memory events (Sprint 34 §17/§19). The log is still
+   * append-only — eviction is a bounded-retention POLICY that drops the
+   * oldest stored events (FIFO) once the cap is reached. Sequence numbers
+   * keep increasing, so cursors and dedupe stay valid.
+   */
+  readonly maxStoredEvents?: number;
 }
 
 /**
@@ -115,6 +129,8 @@ function deepFreeze(value: unknown): void {
 
 const defaultEventIdFactory = (): MemoryEventId => `evt_${randomUUID()}`;
 
+const DEFAULT_MAX_STORED_EVENTS = 20_000;
+
 const EMPTY_PENDING: readonly StoredMemoryEvent[] = [];
 
 /** In-memory append-only EventLog implementation. */
@@ -125,6 +141,7 @@ export class InMemoryEventLog implements EventLogContract {
   private readonly clock: Clock;
   private readonly maxPageSize: number;
   private readonly maxBatchSize: number;
+  private readonly maxStoredEvents: number;
   private readonly eventIdFactory: () => MemoryEventId;
   private readonly sanitize: boolean;
 
@@ -144,6 +161,7 @@ export class InMemoryEventLog implements EventLogContract {
     this.clock = options.clock ?? new SystemClock();
     this.maxPageSize = options.maxPageSize ?? 50;
     this.maxBatchSize = options.maxBatchSize ?? 100;
+    this.maxStoredEvents = options.maxStoredEvents ?? DEFAULT_MAX_STORED_EVENTS;
     this.eventIdFactory = options.eventIdFactory ?? defaultEventIdFactory;
     this.sanitize = options.sanitize ?? true;
   }
@@ -154,6 +172,7 @@ export class InMemoryEventLog implements EventLogContract {
     this.stored.push(stored);
     this.byId.set(stored.eventId, stored);
     this.nextSequence += 1;
+    this.enforceRetention();
     this.appended += 1;
     this.appendDurationMs += this.clock.getNow().getTime() - started;
     return stored;
@@ -179,6 +198,7 @@ export class InMemoryEventLog implements EventLogContract {
       this.byId.set(stored.eventId, stored);
     }
     this.nextSequence += hosted.length;
+    this.enforceRetention();
     this.appended += hosted.length;
     return hosted;
   }
@@ -277,6 +297,7 @@ export class InMemoryEventLog implements EventLogContract {
         'getById',
         'immutable',
         'sanitize',
+        'bounded-retention',
       ],
       supports(capability: EventLogCapability): boolean {
         return this.capabilities.includes(capability);
@@ -299,6 +320,16 @@ export class InMemoryEventLog implements EventLogContract {
       sanitized: this.sanitized,
       typeCounts,
     };
+  }
+
+  /** FIFO bounded retention: drop the oldest events once the cap is exceeded. */
+  private enforceRetention(): void {
+    if (this.stored.length <= this.maxStoredEvents) return;
+    const excess = this.stored.length - this.maxStoredEvents;
+    const removed = this.stored.splice(0, excess);
+    for (const event of removed) {
+      this.byId.delete(event.eventId);
+    }
   }
 
   /** Non-mutating host used by `append` (checks only the global map). */

@@ -107,6 +107,16 @@ export class AiosService {
 
   /** Runs the tail for a request and normalizes the outcome. */
   async dispatch(ctx: RequestContext, exec: ExecutionContext): Promise<ExecutionCatcher> {
+    // Sprint 34 — reject a second dispatch while the same requestId is still
+    // in flight (previously both runs would proceed and one outcome would
+    // silently overwrite the other's active entry).
+    if (this.active.has(ctx.requestId)) {
+      throw new AiosError(
+        AiosErrorCode.IdempotencyConflict,
+        'A request with this requestId is already in flight',
+        { requestId: ctx.requestId, details: { inFlight: true } },
+      );
+    }
     this.active.set(ctx.requestId, exec);
     try {
       const outcome = await this.runTail(ctx, exec);

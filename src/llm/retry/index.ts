@@ -19,10 +19,24 @@ export interface LLMRetryConfig {
   readonly backoffMaxMs: number;
 }
 
-/** Computes a deterministic exponential backoff delay for a retry attempt. */
-export function computeBackoffDelay(attempt: number, baseMs: number, maxMs: number): number {
-  const capped = Math.pow(2, attempt) * baseMs;
-  return Math.min(Math.floor(capped), maxMs);
+/**
+ * Computes an exponential backoff delay for a retry attempt with bounded
+ * jitter (±25%) so concurrent retry storms are spread apart, never exceeding
+ * the configured ceiling. The jitter source is injectable so tests stay
+ * deterministic (pass a fixed `random`, e.g. `() => 0.5` for exact values).
+ */
+export function computeBackoffDelay(
+  attempt: number,
+  baseMs: number,
+  maxMs: number,
+  random: () => number = Math.random,
+): number {
+  const capped = Math.min(Math.floor(Math.pow(2, attempt) * baseMs), maxMs);
+  if (capped <= 0) {
+    return 0;
+  }
+  const jitterRatio = 0.75 + random() * 0.5;
+  return Math.min(Math.max(1, Math.floor(capped * jitterRatio)), maxMs);
 }
 
 /**
@@ -34,18 +48,20 @@ export async function cancellableDelay(ms: number, signal: AbortSignal | undefin
     throw new LLMCancelledError('LLM request cancelled before retry delay');
   }
   return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    if (signal === undefined) {
-      return;
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(new LLMCancelledError('LLM request cancelled during retry delay'));
+    };
+    const timer = setTimeout(() => {
+      // Sprint 34 — never keep the abort listener attached after a normal
+      // delay elapse (previously the listener lived until the signal fired
+      // or was GC'd, leaking a closure per backoff window).
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    if (signal !== undefined) {
+      signal.addEventListener('abort', onAbort, { once: true });
     }
-    signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        reject(new LLMCancelledError('LLM request cancelled during retry delay'));
-      },
-      { once: true },
-    );
   });
 }
 
@@ -67,6 +83,7 @@ export function runGuardedAttempt<T>(
 ): Promise<LLMAttemptOutcome<T>> {
   let timer: NodeJS.Timeout | undefined;
   let settled = false;
+  let onAbort: (() => void) | undefined;
 
   const run = Promise.resolve()
     .then(() => attempt())
@@ -98,23 +115,25 @@ export function runGuardedAttempt<T>(
             }
             return;
           }
-          signal.addEventListener(
-            'abort',
-            () => {
-              if (!settled) {
-                settled = true;
-                clearTimeout(timer);
-                timer = undefined;
-                resolve({ outcome: 'cancelled' });
-              }
-            },
-            { once: true },
-          );
+          onAbort = (): void => {
+            if (!settled) {
+              settled = true;
+              clearTimeout(timer);
+              timer = undefined;
+              resolve({ outcome: 'cancelled' });
+            }
+          };
+          signal.addEventListener('abort', onAbort, { once: true });
         });
 
   return Promise.race([run, timedOut, cancelled]).then((outcome) => {
     if (timer !== undefined) {
       clearTimeout(timer);
+    }
+    // Sprint 34 — detach the abort listener once the attempt has settled so a
+    // long-lived signal does not keep a closure per attempt alive.
+    if (signal !== undefined && onAbort !== undefined) {
+      signal.removeEventListener('abort', onAbort);
     }
     return outcome;
   });

@@ -76,6 +76,12 @@ export interface StoredAgenticEvent {
 export interface AgenticEventLogOptions {
   readonly maxPageSize?: number;
   readonly eventIdFactory?: () => string;
+  /**
+   * Maximum retained in-memory events (Sprint 34 §17/§19). Oldest events are
+   * dropped FIFO past the cap; sequence numbers keep increasing so cursors
+   * and dedupe stay valid.
+   */
+  readonly maxStoredEvents?: number;
 }
 
 /** Query filter for the agentic event log. */
@@ -136,6 +142,8 @@ function defaultEventIdFactory(): string {
   return `aev_${randomId()}`;
 }
 
+const DEFAULT_MAX_STORED_EVENTS = 20_000;
+
 /** Bounded random suffix (avoids requiring node crypto in the hot path). */
 function randomId(): string {
   if (typeof globalThis.crypto !== 'undefined' && 'randomUUID' in globalThis.crypto) {
@@ -150,6 +158,7 @@ export class AgenticEventLog {
   readonly backend = 'in-memory';
 
   private readonly maxPageSize: number;
+  private readonly maxStoredEvents: number;
   private readonly eventIdFactory: () => string;
   private readonly stored: StoredAgenticEvent[] = [];
   private readonly byId = new Map<string, StoredAgenticEvent>();
@@ -157,6 +166,7 @@ export class AgenticEventLog {
 
   constructor(options: AgenticEventLogOptions = {}) {
     this.maxPageSize = options.maxPageSize ?? 50;
+    this.maxStoredEvents = options.maxStoredEvents ?? DEFAULT_MAX_STORED_EVENTS;
     this.eventIdFactory = options.eventIdFactory ?? defaultEventIdFactory;
   }
 
@@ -182,7 +192,18 @@ export class AgenticEventLog {
     this.stored.push(stored);
     this.byId.set(eventId, stored);
     this.nextSequence += 1;
+    this.enforceRetention();
     return stored;
+  }
+
+  /** FIFO bounded retention: drop the oldest events once the cap is exceeded. */
+  private enforceRetention(): void {
+    if (this.stored.length <= this.maxStoredEvents) return;
+    const excess = this.stored.length - this.maxStoredEvents;
+    const removed = this.stored.splice(0, excess);
+    for (const event of removed) {
+      this.byId.delete(event.eventId);
+    }
   }
 
   getById(eventId: string): StoredAgenticEvent | undefined {

@@ -38,4 +38,15 @@ describe('AiosError surface (Sprint 26)', () => {
     expect(unknown.code).toBe(AiosErrorCode.Internal);
     expect(unknown.message).toBe('Unclassified AIOS failure');
   });
+
+  it('toAiosError never leaks internal messages from unknown failures', () => {
+    const wrapped = toAiosError(
+      new Error('connection failed to postgres: host=db.internal' as string),
+    );
+    expect(wrapped.message).not.toContain('postgres');
+    expect(wrapped.message).not.toContain('db.internal');
+    expect(wrapped.message).toBe('Unclassified AIOS failure');
+    // The real detail remains available server-side on the cause.
+    expect(wrapped.cause).toBeInstanceOf(Error);
+  });
 });

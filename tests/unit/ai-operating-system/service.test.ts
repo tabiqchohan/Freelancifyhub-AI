@@ -166,3 +166,28 @@ describe('AIOS execution service team dispatch (Sprint 33)', () => {
     expect(service.lastResult('req-1')).toBe(catcher);
   });
 });
+
+describe('AIOS execution service in-flight guard (Sprint 34)', () => {
+  it('rejects a second dispatch while the same requestId is still active', async () => {
+    const service = new AiosService(deps());
+    const target = { kind: 'client' } as AiosExecutionTarget;
+    // Dispatch is synchronous up to the in-flight guard, so create all three
+    // promises before awaiting any of them.
+    const first = service.dispatch(ctx(target), exec(target));
+    expect(service.isActive('req-1')).toBe(true);
+    const second = service.dispatch(ctx(target), exec(target));
+    const third = service.dispatch(ctx(target), exec(target));
+    await expect(second).rejects.toBeInstanceOf(AiosError);
+    await expect(third).rejects.toMatchObject({ code: AiosErrorCode.IdempotencyConflict });
+    await first;
+    expect(service.isActive('req-1')).toBe(false);
+  });
+
+  it('allows re-dispatch once the previous execution has completed', async () => {
+    const service = new AiosService(deps());
+    const target = { kind: 'client' } as AiosExecutionTarget;
+    await service.dispatch(ctx(target), exec(target));
+    const catcher = await service.dispatch(ctx(target), exec(target));
+    expect(catcher.status).toBe(AggregationStatus.Success);
+  });
+});

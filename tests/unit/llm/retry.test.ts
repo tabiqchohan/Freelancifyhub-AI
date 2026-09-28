@@ -23,10 +23,21 @@ const INTERNAL = new LLMInternalError('simulated internal failure');
 const noopSleep = async (): Promise<void> => undefined;
 
 describe('computeBackoffDelay', () => {
-  it('grows exponentially but stays bounded', () => {
-    expect(computeBackoffDelay(1, 100, 300)).toBe(200);
-    expect(computeBackoffDelay(2, 100, 300)).toBe(300);
-    expect(computeBackoffDelay(10, 100, 3000)).toBe(3000);
+  it('grows exponentially but stays bounded with injectable jitter', () => {
+    const mid = (): number => 0.5; // jitter ratio = 1.0 → exact values
+    expect(computeBackoffDelay(1, 100, 300, mid)).toBe(200);
+    expect(computeBackoffDelay(2, 100, 300, mid)).toBe(300);
+    expect(computeBackoffDelay(10, 100, 3000, mid)).toBe(3000);
+  });
+
+  it('applies bounded jitter without exceeding the ceiling', () => {
+    const low = (): number => 0; // ratio 0.75
+    const high = (): number => 1; // ratio 1.25
+    expect(computeBackoffDelay(1, 100, 300, low)).toBe(150);
+    expect(computeBackoffDelay(1, 100, 300, high)).toBe(250);
+    // Exercising the ceiling: jitter must never push past maxMs.
+    expect(computeBackoffDelay(10, 100, 3000, high)).toBeLessThanOrEqual(3000);
+    expect(computeBackoffDelay(10, 100, 3000, low)).toBeLessThanOrEqual(3000);
   });
 });
 

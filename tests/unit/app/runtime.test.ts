@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
 
 import { createProductionComposition } from '../../../src/app/composition-root.js';
-import { createProductionRuntime, defaultHealth } from '../../../src/app/runtime.js';
+import {
+  createProductionRuntime,
+  defaultHealth,
+  type HealthPayload,
+} from '../../../src/app/runtime.js';
 import { parseCompiledEnv } from '../../../src/app/env.js';
 
 async function startRuntime() {
@@ -140,6 +144,164 @@ describe('ProductionRuntime (Phase 7)', () => {
       const payload = (await res.json()) as { requestId: string; status: string };
       expect(payload.requestId).toMatch(/^aios-/);
       expect(payload.requestId).not.toContain('other-request');
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it('serves pure liveness at /livez without dependency probing (Sprint 34)', async () => {
+    const { runtime, composition, baseUrl } = await startRuntime();
+    try {
+      const live = await fetch(`${baseUrl}/livez`);
+      expect(live.status).toBe(200);
+      const payload = (await live.json()) as { status: string; uptime: number };
+      expect(payload.status).toBe('ok');
+      expect(typeof payload.uptime).toBe('number');
+      expect(payload).not.toHaveProperty('storage');
+      void composition;
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it('returns 503 readiness for a degraded health provider and 200 for healthy (Sprint 34)', async () => {
+    const base = () => ({
+      status: 'ok' as const,
+      uptime: 1,
+      storage: { healthy: true },
+      knowledge: { healthy: true },
+      tools: { healthy: true },
+      llm: { enabled: false, configured: false, provider: 'disabled', model: '' },
+      platform: {
+        registered: 0,
+        ready: 0,
+        running: 0,
+        paused: 0,
+        draining: 0,
+        disabled: 0,
+        failed: 0,
+        terminated: 0,
+        activeExecutions: 0,
+        healthy: true,
+      },
+      coordination: { healthy: true, activeCoordinations: 0, activeTaskCount: 0, eventCount: 0 },
+      clientTeam: {
+        healthy: true,
+        enabled: false,
+        activeAgents: 0,
+        establishedAgents: 0,
+        workflows: [],
+        eventCount: 0,
+      },
+      freelancerTeam: {
+        healthy: true,
+        enabled: false,
+        activeAgents: 0,
+        establishedAgents: 0,
+        workflows: [],
+        eventCount: 0,
+      },
+      marketplaceTeam: {
+        healthy: true,
+        enabled: false,
+        activeAgents: 0,
+        establishedAgents: 0,
+        workflows: [],
+        eventCount: 0,
+      },
+      marketingTeam: {
+        healthy: true,
+        enabled: false,
+        activeAgents: 0,
+        establishedAgents: 0,
+        workflows: [],
+        eventCount: 0,
+      },
+      adminTeam: {
+        healthy: true,
+        enabled: false,
+        activeAgents: 0,
+        establishedAgents: 0,
+        workflows: [],
+        eventCount: 0,
+      },
+      aiOperatingSystem: {
+        enabled: false,
+        healthy: true,
+        activeRequests: 0,
+        completedRequests: 0,
+        requestCounts: {},
+        statusCounts: {},
+      },
+    });
+
+    async function startReady(payload: {
+      status: 'ok' | 'degraded';
+      storage: { healthy: boolean };
+    }) {
+      const env = parseCompiledEnv({});
+      env.memory.MEMORY_STORAGE_BACKEND = 'in-memory';
+      const composition = await createProductionComposition({ env });
+      const runtime = createProductionRuntime({
+        composition,
+        logger: (await import('pino')).default({ level: 'silent' }),
+        healthCheck: () => Promise.resolve<HealthPayload>({ ...base(), ...payload }),
+        serviceTokenRequiredInProduction: false,
+      });
+      const server = await runtime.start(0, '127.0.0.1');
+      const { port } = server.address() as AddressInfo;
+      return { runtime, port };
+    }
+
+    const degraded = await startReady({ status: 'degraded', storage: { healthy: false } });
+    try {
+      const res = await fetch(`http://127.0.0.1:${degraded.port}/readyz`);
+      expect(res.status).toBe(503);
+      const payload = (await res.json()) as { status: string };
+      expect(payload.status).toBe('degraded');
+    } finally {
+      await degraded.runtime.shutdown();
+    }
+
+    const healthy = await startReady({ status: 'ok', storage: { healthy: true } });
+    try {
+      const res = await fetch(`http://127.0.0.1:${healthy.port}/readyz`);
+      expect(res.status).toBe(200);
+    } finally {
+      await healthy.runtime.shutdown();
+    }
+  });
+
+  it('returns 503 with a timeout marker when the readiness probe hangs (Sprint 34)', async () => {
+    const env = parseCompiledEnv({});
+    env.memory.MEMORY_STORAGE_BACKEND = 'in-memory';
+    const composition = await createProductionComposition({ env });
+    const runtime = createProductionRuntime({
+      composition,
+      logger: (await import('pino')).default({ level: 'silent' }),
+      healthCheck: () => new Promise<never>(() => undefined),
+      serviceTokenRequiredInProduction: false,
+    });
+    const server = await runtime.start(0, '127.0.0.1');
+    const { port } = server.address() as AddressInfo;
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/readyz`);
+      expect(res.status).toBe(503);
+      const payload = (await res.json()) as { error: string };
+      expect(payload.error).toBe('readiness_probe_timeout');
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it('echoes a correlation request id header on responses (Sprint 34)', async () => {
+    const { runtime, baseUrl } = await startRuntime();
+    try {
+      const res = await fetch(`${baseUrl}/livez`, {
+        headers: { 'x-request-id': 'corr-123' },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('x-request-id')).toBe('corr-123');
     } finally {
       await runtime.shutdown();
     }

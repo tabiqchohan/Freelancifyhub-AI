@@ -22,6 +22,12 @@ export interface ToolEventLogOptions {
   readonly maxPageSize?: number;
   readonly maxBatchSize?: number;
   readonly eventIdFactory?: () => string;
+  /**
+   * Maximum retained in-memory events (Sprint 34 §17/§19). Oldest events are
+   * dropped FIFO past the cap; sequence numbers keep increasing so cursors
+   * and dedupe stay valid.
+   */
+  readonly maxStoredEvents?: number;
 }
 
 /** Page of events. */
@@ -56,6 +62,8 @@ export interface ToolEventQuery {
 function defaultEventIdFactory(): string {
   return `tev_${randomUUID()}`;
 }
+
+const DEFAULT_MAX_STORED_EVENTS = 20_000;
 
 function deepFreeze(value: unknown): void {
   if (value !== null && typeof value === 'object') {
@@ -94,6 +102,7 @@ export class ToolEventLog {
 
   private readonly maxPageSize: number;
   private readonly maxBatchSize: number;
+  private readonly maxStoredEvents: number;
   private readonly eventIdFactory: () => string;
 
   private readonly stored: StoredToolEvent[] = [];
@@ -113,6 +122,7 @@ export class ToolEventLog {
   constructor(options: ToolEventLogOptions = {}) {
     this.maxPageSize = options.maxPageSize ?? 50;
     this.maxBatchSize = options.maxBatchSize ?? 100;
+    this.maxStoredEvents = options.maxStoredEvents ?? DEFAULT_MAX_STORED_EVENTS;
     this.eventIdFactory = options.eventIdFactory ?? defaultEventIdFactory;
   }
 
@@ -166,11 +176,22 @@ export class ToolEventLog {
     this.stored.push(stored);
     this.byId.set(eventId, stored);
     this.nextSequence += 1;
+    this.enforceRetention();
     return stored;
   }
 
   getById(eventId: string): StoredToolEvent | undefined {
     return this.byId.get(eventId);
+  }
+
+  /** FIFO bounded retention: drop the oldest events once the cap is exceeded. */
+  private enforceRetention(): void {
+    if (this.stored.length <= this.maxStoredEvents) return;
+    const excess = this.stored.length - this.maxStoredEvents;
+    const removed = this.stored.splice(0, excess);
+    for (const event of removed) {
+      this.byId.delete(event.eventId);
+    }
   }
 
   query(query: ToolEventQuery): ToolEventPage {

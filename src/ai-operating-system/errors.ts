@@ -84,6 +84,8 @@ export function toAiosError(
   if (isAiosError(error)) {
     return error;
   }
-  const message = error instanceof Error ? error.message : 'Unclassified AIOS failure';
-  return new AiosError(fallbackCode, message, { cause: error });
+  // Sprint 34 §13 — unknown/internal errors NEVER carry their raw message to
+  // the client boundary (they may contain driver internals, hostnames or
+  // provider text). The real detail stays on `cause` for server-side tracing.
+  return new AiosError(fallbackCode, 'Unclassified AIOS failure', { cause: error });
 }

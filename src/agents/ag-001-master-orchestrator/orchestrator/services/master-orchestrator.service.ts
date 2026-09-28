@@ -125,10 +125,27 @@ export class MasterOrchestratorService implements MasterOrchestratorServiceContr
 
   /** Runs the full orchestration lifecycle for a single request. */
   async execute(input: OrchestrationRequest): Promise<OrchestratorResponse> {
-    const startedAt = nowIso();
     const normalized = normalizeOrchestrationRequest(input);
     const { requestId, traceId } = normalized;
     this.traceIds.set(requestId, traceId);
+
+    try {
+      return await this.executeRequest(normalized);
+    } finally {
+      // Sprint 34 — release the request-scoped maps in every path (success,
+      // stage failure, escalation, cancellation) so the orchestrator cannot
+      // grow without bound under sustained traffic.
+      this.activeExecutions.delete(requestId);
+      this.cancellations.delete(requestId);
+      this.traceIds.delete(requestId);
+    }
+  }
+
+  private async executeRequest(
+    normalized: ReturnType<typeof normalizeOrchestrationRequest>,
+  ): Promise<OrchestratorResponse> {
+    const startedAt = nowIso();
+    const { requestId, traceId } = normalized;
 
     const requestContextBuilder = new RequestContextBuilder()
       .withTraceId(traceId)

@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { AggregationStatus } from '../../../src/agents/ag-001-master-orchestrator/aggregation/index.js';
 import type { UserRole } from '../../../src/agents/ag-001-master-orchestrator/intent/index.js';
 import { AiosError, AiosErrorCode } from '../../../src/ai-operating-system/errors.js';
-import { AiosGateway } from '../../../src/ai-operating-system/gateway.js';
+import {
+  AiosGateway,
+  HEALTH_DEGRADED_WINDOW_MS,
+} from '../../../src/ai-operating-system/gateway.js';
 import { AiosMetrics } from '../../../src/ai-operating-system/metrics.js';
 import type { AiosPipeline } from '../../../src/ai-operating-system/pipeline.js';
 import type { AiosService } from '../../../src/ai-operating-system/service.js';
@@ -201,5 +204,78 @@ describe('AIOS gateway (Sprint 26)', () => {
     const retry = await gateway.request(req('req-fail-2', 'key-fail'));
     expect(retry.status).toBe(AggregationStatus.Success);
     expect(pipeline.execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AIOS gateway health signal (Sprint 34)', () => {
+  it('stays healthy until an infra-class failure degrades it within the window', async () => {
+    const now = 1_000;
+    const pipeline = {
+      execute: vi.fn(async () => {
+        throw new AiosError(AiosErrorCode.ExecutionFailed, 'tail exploded', {
+          requestId: 'req-health',
+        });
+      }),
+    } as unknown as AiosPipeline;
+    const gateway = new AiosGateway({
+      config: DEFAULT_AIOS_CONFIG,
+      pipeline,
+      service: stubService(),
+      metrics: new AiosMetrics(),
+      clock: () => now,
+    });
+
+    expect(gateway.status().healthy).toBe(true);
+    await expect(gateway.request(req('req-health'))).rejects.toMatchObject({
+      code: AiosErrorCode.ExecutionFailed,
+    });
+    expect(gateway.status().healthy).toBe(false);
+  });
+
+  it('self-heals once the degraded window has elapsed', async () => {
+    let now = 1_000;
+    const pipeline = {
+      execute: vi.fn(async () => {
+        throw new AiosError(AiosErrorCode.RouteUnavailable, 'no route', {
+          requestId: 'req-health-2',
+        });
+      }),
+    } as unknown as AiosPipeline;
+    const gateway = new AiosGateway({
+      config: DEFAULT_AIOS_CONFIG,
+      pipeline,
+      service: stubService(),
+      metrics: new AiosMetrics(),
+      clock: () => now,
+    });
+
+    await expect(gateway.request(req('req-health-2'))).rejects.toMatchObject({
+      code: AiosErrorCode.RouteUnavailable,
+    });
+    expect(gateway.status().healthy).toBe(false);
+
+    now = 1_000 + HEALTH_DEGRADED_WINDOW_MS + 1;
+    expect(gateway.status().healthy).toBe(true);
+  });
+
+  it('does not degrade the health signal on client-class rejections', async () => {
+    const pipeline = {
+      execute: vi.fn(async () => {
+        throw new AiosError(AiosErrorCode.UnauthorizedScope, 'denied', {
+          requestId: 'req-health-3',
+        });
+      }),
+    } as unknown as AiosPipeline;
+    const gateway = new AiosGateway({
+      config: DEFAULT_AIOS_CONFIG,
+      pipeline,
+      service: stubService(),
+      metrics: new AiosMetrics(),
+    });
+
+    await expect(gateway.request(req('req-health-3'))).rejects.toMatchObject({
+      code: AiosErrorCode.UnauthorizedScope,
+    });
+    expect(gateway.status().healthy).toBe(true);
   });
 });

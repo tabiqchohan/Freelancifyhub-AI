@@ -184,6 +184,8 @@ function defaultEventIdFactory(): string {
   return `lev_${randomUUID()}`;
 }
 
+const DEFAULT_MAX_STORED_EVENTS = 20_000;
+
 function deepFreeze(value: unknown): void {
   if (value !== null && typeof value === 'object') {
     Object.freeze(value);
@@ -199,6 +201,12 @@ function deepFreeze(value: unknown): void {
 export interface LLMEventLogOptions {
   readonly maxPageSize?: number;
   readonly eventIdFactory?: () => string;
+  /**
+   * Maximum retained in-memory events (Sprint 34 §17/§19). Oldest events are
+   * dropped FIFO past the cap; sequence numbers keep increasing so cursors
+   * and dedupe stay valid.
+   */
+  readonly maxStoredEvents?: number;
 }
 
 /** Query filter for the reasoning event log. */
@@ -261,6 +269,7 @@ export class LLMEventLog {
   readonly backend = 'in-memory';
 
   private readonly maxPageSize: number;
+  private readonly maxStoredEvents: number;
   private readonly eventIdFactory: () => string;
 
   private readonly stored: StoredLLMEvent[] = [];
@@ -273,6 +282,7 @@ export class LLMEventLog {
 
   constructor(options: LLMEventLogOptions = {}) {
     this.maxPageSize = options.maxPageSize ?? 50;
+    this.maxStoredEvents = options.maxStoredEvents ?? DEFAULT_MAX_STORED_EVENTS;
     this.eventIdFactory = options.eventIdFactory ?? defaultEventIdFactory;
   }
 
@@ -314,7 +324,18 @@ export class LLMEventLog {
     this.stored.push(stored);
     this.byId.set(eventId, stored);
     this.nextSequence += 1;
+    this.enforceRetention();
     return stored;
+  }
+
+  /** FIFO bounded retention: drop the oldest events once the cap is exceeded. */
+  private enforceRetention(): void {
+    if (this.stored.length <= this.maxStoredEvents) return;
+    const excess = this.stored.length - this.maxStoredEvents;
+    const removed = this.stored.splice(0, excess);
+    for (const event of removed) {
+      this.byId.delete(event.eventId);
+    }
   }
 
   getById(eventId: string): StoredLLMEvent | undefined {

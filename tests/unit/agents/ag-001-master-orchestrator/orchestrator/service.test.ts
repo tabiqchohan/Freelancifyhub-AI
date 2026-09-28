@@ -219,6 +219,81 @@ describe('MasterOrchestratorService - timeout', () => {
   });
 });
 
+describe('MasterOrchestratorService - request-scoped resource cleanup (Sprint 34)', () => {
+  // Regression: long-lived maps used to retain an entry per request forever
+  // (a memory leak proportional to traffic). Every path must release them.
+  function pendingState(service: unknown): {
+    activeExecutions: number;
+    cancellations: number;
+    traceIds: number;
+  } {
+    const s = service as {
+      activeExecutions: Map<string, unknown>;
+      cancellations: Map<string, unknown>;
+      traceIds: Map<string, unknown>;
+    };
+    return {
+      activeExecutions: s.activeExecutions.size,
+      cancellations: s.cancellations.size,
+      traceIds: s.traceIds.size,
+    };
+  }
+
+  it('releases request-scoped maps after a successful execution', async () => {
+    const { service } = createTestService();
+    await service.execute({ ...validRequest, requestId: 'req-clean-ok' });
+    expect(pendingState(service)).toEqual({
+      activeExecutions: 0,
+      cancellations: 0,
+      traceIds: 0,
+    });
+  });
+
+  it('releases request-scoped maps after a failed execution', async () => {
+    const { service } = createTestService({
+      executionEngine: stubExecutionEngineThatThrows(new Error('boom')),
+    });
+    await expect(
+      service.execute({ ...validRequest, requestId: 'req-clean-fail' }),
+    ).rejects.toBeInstanceOf(Error);
+    expect(pendingState(service)).toEqual({
+      activeExecutions: 0,
+      cancellations: 0,
+      traceIds: 0,
+    });
+  });
+
+  it('releases request-scoped maps after a cancelled execution', async () => {
+    const executor = new FakeAgentExecutor({ output: { ok: true }, delayMs: 50 });
+    const { service } = createTestService({
+      intentClassifier: stubIntentClassifier(makeIntentResult()),
+      routingEngine: stubRoutingEngine(makeRouteDecision()),
+      executor,
+    });
+    const promise = service.execute({ ...validRequest, requestId: 'req-clean-cancel' });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    service.cancel('req-clean-cancel');
+    await promise;
+    expect(pendingState(service)).toEqual({
+      activeExecutions: 0,
+      cancellations: 0,
+      traceIds: 0,
+    });
+  });
+
+  it('does not accumulate state across many sequential requests', async () => {
+    const { service } = createTestService();
+    for (let i = 0; i < 25; i += 1) {
+      await service.execute({ ...validRequest, requestId: `req-load-${i}` });
+    }
+    expect(pendingState(service)).toEqual({
+      activeExecutions: 0,
+      cancellations: 0,
+      traceIds: 0,
+    });
+  });
+});
+
 describe('MasterOrchestratorService - terminal state preservation', () => {
   it('keeps a SUCCESS aggregation as SUCCESS', async () => {
     const { service } = createTestService();

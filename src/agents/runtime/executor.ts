@@ -843,9 +843,14 @@ export class ProductionAgentExecutor implements AgentExecutor {
     // The work promise is wrapped as a tagged object so it can be distinguished
     // from the guard's string outcomes in the race below.
     const workOutcome = work.then((result) => ({ kind: 'result' as const, result }));
+    const guard = this.guardPromise(signal, timeoutMs);
     const raced = await Promise.race<
       { kind: 'result'; result: RuntimeAgentExecutionResult } | GuardOutcome
-    >([workOutcome, this.guardPromise(signal, timeoutMs)]);
+    >([workOutcome, guard.promise]);
+    // Sprint 34 — the guard's timer must be cleared even when the WORK wins
+    // the race (previously the timer kept running until `timeoutMs`, leaking
+    // a dangling timer + closure per completed execution).
+    guard.dispose();
 
     if (raced !== null && typeof raced === 'object' && raced.kind === 'result') {
       return raced.result;
@@ -870,20 +875,34 @@ export class ProductionAgentExecutor implements AgentExecutor {
     };
   }
 
-  private guardPromise(signal: CancellationSignal, timeoutMs: number): Promise<GuardOutcome> {
-    return new Promise<GuardOutcome>((resolve) => {
+  private guardPromise(
+    signal: CancellationSignal,
+    timeoutMs: number,
+  ): { readonly promise: Promise<GuardOutcome>; readonly dispose: () => void } {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const promise = new Promise<GuardOutcome>((resolve) => {
       let settled = false;
       const settle = (outcome: GuardOutcome): void => {
         if (!settled) {
           settled = true;
-          clearTimeout(timer);
+          if (timer !== undefined) {
+            clearTimeout(timer);
+          }
           resolve(outcome);
         }
       };
       const explicitTimeout = timeoutMs > 0 && Number.isFinite(timeoutMs) ? timeoutMs : Infinity;
-      const timer = setTimeout(() => settle('timedOut'), explicitTimeout);
+      timer = setTimeout(() => settle('timedOut'), explicitTimeout);
       void signal.waitForCancellation().then(() => settle('cancelled'));
     });
+    return {
+      promise,
+      dispose: (): void => {
+        if (timer !== undefined) {
+          clearTimeout(timer);
+        }
+      },
+    };
   }
 
   private emitEvent(type: RuntimeAgentEventType, event: Omit<RuntimeAgentEvent, 'type'>): void {
