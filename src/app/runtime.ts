@@ -18,12 +18,13 @@ import {
   KnowledgeSourceType,
 } from '../agents/ag-003-knowledge-manager/index.js';
 import {
-  ToolActorGroup as ToolActorGroupValue,
+  ToolActorGroup,
   ToolResultStatus,
   ToolSecurityLevel,
   type ToolActor,
-  type ToolActorGroup,
 } from '../agents/ag-004-tool-manager/index.js';
+
+import { KnowledgeAccessDeniedError } from '../agents/ag-003-knowledge-manager/index.js';
 
 import type { ProductionComposition } from './composition-root.js';
 import type { RequestActorBinding } from './request-actors.js';
@@ -44,16 +45,21 @@ export interface ProductionRuntimeOptions {
   readonly healthCheck?: () => Promise<HealthPayload>;
   /**
    * Server-to-server token required on business endpoints. Defaults to the
-   * parsed environment value (`AIOS_SERVICE_TOKEN`). Empty means the runtime
-   * stays open for local development; production MUST configure a token.
+   * parsed environment value (`AIOS_SERVICE_TOKEN`). Sprint 35 F-4: when empty
+   * the runtime DENIES business endpoints unless `allowUnauthenticated` is set.
    */
   readonly serviceToken?: string;
   /**
-   * Sprint 33 — when true and no service token is configured, business
-   * endpoints are rejected (fail-closed) instead of accepting requests open.
-   * Defaults to `true` when `NODE_ENV=production`.
+   * Sprint 35 F-3 — dedicated credential required for management operations
+   * (AG-004 tool enable/disable). Defaults to `AIOS_ADMIN_TOKEN`. When empty,
+   * management endpoints are denied outright.
    */
-  readonly serviceTokenRequiredInProduction?: boolean;
+  readonly adminToken?: string;
+  /**
+   * Sprint 35 F-4 — explicit opt-in for running the business API with no service
+   * token. Default `false`; always ignored when `NODE_ENV=production`.
+   */
+  readonly allowUnauthenticated?: boolean;
 }
 
 /** The health/readiness payload exposed at `/healthz` (Phase 8). */
@@ -354,7 +360,8 @@ export class ProductionRuntime {
   private readonly logger: Logger;
   private readonly healthCheck: () => Promise<HealthPayload>;
   private readonly serviceToken: string;
-  private readonly serviceTokenRequiredInProduction: boolean;
+  private readonly adminToken: string;
+  private readonly allowUnauthenticated: boolean;
   private server: Server | undefined;
   private shuttingDown = false;
 
@@ -363,9 +370,16 @@ export class ProductionRuntime {
     this.logger = options.logger;
     this.serviceToken =
       options.serviceToken ?? options.composition.env.base.AIOS_SERVICE_TOKEN ?? '';
-    this.serviceTokenRequiredInProduction =
-      options.serviceTokenRequiredInProduction ??
-      options.composition.env.base.NODE_ENV === 'production';
+    // Sprint 35 F-3 — the admin credential is never taken from the request; it is
+    // server configuration only.
+    this.adminToken = options.adminToken ?? options.composition.env.base.AIOS_ADMIN_TOKEN ?? '';
+    // Sprint 35 F-4 — fail-closed by default. The explicit opt-in is honoured only
+    // outside production, so it can never reopen a production deployment.
+    const allowUnauthenticated =
+      options.allowUnauthenticated ??
+      options.composition.env.base.AIOS_ALLOW_UNAUTHENTICATED === true;
+    this.allowUnauthenticated =
+      allowUnauthenticated && options.composition.env.base.NODE_ENV !== 'production';
     this.healthCheck =
       options.healthCheck ??
       (() =>
@@ -540,10 +554,11 @@ export class ProductionRuntime {
       return this.handleReadiness(res);
     }
 
-    if (!this.isServiceAuthorized(req)) {
-      if (this.serviceToken !== '') {
-        this.logger.warn({ path: url.pathname }, 'service auth rejected');
-      }
+    // Sprint 35 F-4 — fail-closed auth gate. The resolved caller kind is the ONLY
+    // source of actor identity and management authority downstream.
+    const caller = this.resolveCaller(req);
+    if (caller.kind === 'unauthorized') {
+      this.logger.warn({ path: url.pathname, reason: caller.reason }, 'service auth rejected');
       return this.sendJson(res, 401, {
         status: 'error',
         error: 'unauthorized',
@@ -556,11 +571,11 @@ export class ProductionRuntime {
     }
 
     if (url.pathname.startsWith('/api/knowledge')) {
-      return this.handleKnowledge(req, res, url);
+      return this.handleKnowledge(req, res, url, caller);
     }
 
     if (url.pathname.startsWith('/api/tools')) {
-      return this.handleTools(req, res, url);
+      return this.handleTools(req, res, url, caller);
     }
 
     if (url.pathname === '/api/llm/status') {
@@ -592,7 +607,7 @@ export class ProductionRuntime {
     }
 
     if (url.pathname === '/api/ai/request') {
-      return this.handleAiosRequest(req, res);
+      return this.handleAiosRequest(req, res, caller);
     }
 
     if (url.pathname === '/api/ai/status') {
@@ -777,7 +792,11 @@ export class ProductionRuntime {
   }
 
   /** Body shape accepted at the Sprint 26 AIOS request endpoint. */
-  private async handleAiosRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private async handleAiosRequest(
+    req: IncomingMessage,
+    res: ServerResponse,
+    caller: AuthenticatedCaller,
+  ): Promise<void> {
     const body = await this.readJson<AiosRequestInput>(req);
     if (body === undefined) {
       return this.sendJson(res, 400, { status: 'error', error: 'invalid_json' });
@@ -796,6 +815,9 @@ export class ProductionRuntime {
       requestId,
       traceId,
       input: { text: body.text, structured: body.structured as AiosRequest['input']['structured'] },
+      // Sprint 35 F-2/F-6 — the idempotency keyspace is bound to the identity
+      // established by the service boundary, never to the body `actorId`.
+      principalId: caller.actorId,
       actor: {
         actorId: body.actorId ?? 'aios-gateway',
         role,
@@ -950,14 +972,21 @@ export class ProductionRuntime {
     req: IncomingMessage,
     res: ServerResponse,
     url: URL,
+    caller: AuthenticatedCaller,
   ): Promise<void> {
     const km = this.composition.services.knowledgeManager;
     const pathParts = url.pathname.split('/').filter(Boolean); // ['api','knowledge',...]
     const id = pathParts.length > 2 ? pathParts[2] : undefined;
 
+    // Sprint 35 F-1 — the actor group and actor id are taken from the trusted
+    // caller resolved by the auth gate, never from the request. `?group=` and
+    // `?actorId=` are no longer able to widen access.
+    const actorGroup = knowledgeActorGroupForCaller(caller);
+    const actorId = caller.actorId;
+
     try {
       if (req.method === 'POST' && id === undefined) {
-        return await this.handleKnowledgeCreate(req, res, km);
+        return await this.handleKnowledgeCreate(req, res, km, actorGroup, actorId);
       }
       if (req.method === 'GET' && id === undefined) {
         const queryParam = url.searchParams.get('query') ?? '';
@@ -966,10 +995,6 @@ export class ProductionRuntime {
         // knowledge service enforces the same ceiling for all callers.
         const rawMax = Number(url.searchParams.get('max') ?? '10');
         const maxResults = Number.isFinite(rawMax) && rawMax > 0 ? Math.floor(rawMax) : 10;
-        const actorGroup =
-          toKnowledgeActorGroup(url.searchParams.get('group') ?? undefined) ??
-          KnowledgeActorGroup.KnowledgeManager;
-        const actorId = url.searchParams.get('actorId') ?? 'runtime';
         const result = await km.search({
           query: queryParam,
           namespace,
@@ -984,10 +1009,6 @@ export class ProductionRuntime {
         });
       }
       if (req.method === 'GET' && id !== undefined) {
-        const actorGroup =
-          toKnowledgeActorGroup(url.searchParams.get('group') ?? undefined) ??
-          KnowledgeActorGroup.KnowledgeManager;
-        const actorId = url.searchParams.get('actorId') ?? 'runtime';
         const doc = await km.getDocument(id, actorGroup, actorId);
         if (doc === undefined) {
           return this.sendJson(res, 404, { status: 'not_found', id });
@@ -996,6 +1017,16 @@ export class ProductionRuntime {
       }
       return this.sendJson(res, 405, { status: 'method_not_allowed' });
     } catch (error) {
+      // Sprint 35 F-1/F-4 — a namespace-scoped denial is an authorization
+      // failure, not a generic 400. Logged without prompt/knowledge content.
+      const denied = error instanceof KnowledgeAccessDeniedError;
+      this.logger.warn(
+        { path: url.pathname, actorId, denied, code: (error as { code?: string })?.code },
+        denied ? 'knowledge access denied' : 'knowledge request failed',
+      );
+      if (denied) {
+        return this.sendJson(res, 403, { status: 'error', error: 'forbidden', id });
+      }
       this.logger.error({ error, path: url.pathname }, 'knowledge request failed');
       return this.sendJson(res, 400, { status: 'error', error: 'knowledge_request_failed' });
     }
@@ -1005,6 +1036,8 @@ export class ProductionRuntime {
     req: IncomingMessage,
     res: ServerResponse,
     km: ProductionComposition['services']['knowledgeManager'],
+    actorGroup: KnowledgeActorGroup,
+    actorId: string,
   ): Promise<void> {
     const body = await this.readJson<KnowledgeCreateBody>(req);
     if (body === undefined) {
@@ -1048,8 +1081,9 @@ export class ProductionRuntime {
         body.metadata !== undefined
           ? (body.metadata as Record<string, string | number | boolean | null>)
           : {},
-      actorGroup: toKnowledgeActorGroup(body.actorGroup) ?? KnowledgeActorGroup.KnowledgeManager,
-      actorId: body.actorId ?? 'runtime',
+      // Sprint 35 F-1 — identity comes from the trusted caller, not the body.
+      actorGroup,
+      actorId,
     });
     return this.sendJson(res, 201, doc);
   }
@@ -1064,7 +1098,12 @@ export class ProductionRuntime {
    *
    * Execution never leaks internal details or stack traces.
    */
-  private async handleTools(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+  private async handleTools(
+    req: IncomingMessage,
+    res: ServerResponse,
+    url: URL,
+    caller: AuthenticatedCaller,
+  ): Promise<void> {
     const tm = this.composition.services.toolManager;
     if (!tm.enabled) {
       return this.sendJson(res, 403, { status: 'error', error: 'tools_disabled' });
@@ -1075,16 +1114,27 @@ export class ProductionRuntime {
     const action = pathParts.length > 3 ? pathParts[3] : undefined;
 
     const namespace = url.searchParams.get('ns') ?? 'default';
-    const actorGroup = toToolActorGroup(url.searchParams.get('group') ?? undefined);
-    const actorId = url.searchParams.get('actorId') ?? 'runtime';
+    const isManagement = action === 'enable' || action === 'disable';
 
-    if (actorGroup === undefined) {
-      return this.sendJson(res, 400, { status: 'error', error: 'invalid_actor_group' });
+    // Sprint 35 F-3 — enable/disable is a management capability. It is authorized
+    // by the dedicated admin credential resolved by the auth gate, NOT by a
+    // caller-supplied `?group=`. Previously `?group=ADMIN` on the query string
+    // was sufficient to disable any registered tool in the deployment.
+    if (isManagement && caller.kind !== 'admin') {
+      this.logger.warn(
+        { path: url.pathname, callerKind: caller.kind, actorId: caller.actorId },
+        'tool management denied',
+      );
+      return this.sendJson(res, 403, { status: 'error', error: 'forbidden' });
     }
+
+    // Sprint 35 F-3 — read/execute actor group is likewise derived from the
+    // trusted caller; `?group=` is no longer authoritative.
+    const actorGroup = isManagement ? ToolActorGroup.Admin : toolActorGroupForCaller(caller);
 
     const actor: ToolActor = {
       group: actorGroup,
-      id: actorId,
+      id: caller.actorId,
       namespaces: [namespace],
       securityClearance: ToolSecurityLevel.Internal,
     };
@@ -1219,34 +1269,88 @@ export class ProductionRuntime {
   }
 
   /**
-   * Server-to-server auth gate (Sprint 29 boundary). All business endpoints
-   * require the configured `x-aios-service-token` header. When no token is
-   * configured the runtime stays open in development/test (local use) but is
-   * FAIL-CLOSED in production — an unauthenticated production gateway must
-   * not silently accept requests (Sprint 33). The comparison is constant-time
-   * to avoid timing side channels, and the header is never echoed into
-   * responses or logs.
+   * Server-to-server auth gate (Sprint 29 boundary; Sprint 35 F-3/F-4).
+   *
+   * Returns the *trusted* kind of caller, resolved from the presented
+   * credential — never from request fields. Liveness probes are handled before
+   * this gate.
+   *
+   * Sprint 35 F-4: this is fail-closed by default. With no configured service
+   * token the business API is denied rather than silently open; local
+   * development must opt in via `AIOS_ALLOW_UNAUTHENTICATED=true`, which is
+   * ignored in production.
+   *
+   * Sprint 35 F-3: management authorization comes from the dedicated admin
+   * credential. A caller holding only the service token can never assert an
+   * administrative actor group.
    */
-  private isServiceAuthorized(req: IncomingMessage): boolean {
-    if (this.serviceToken === '') {
-      return this.serviceTokenRequiredInProduction ? false : true;
-    }
+  private resolveCaller(req: IncomingMessage): CallerResolution {
     const provided = req.headers['x-aios-service-token'];
-    if (typeof provided !== 'string' || provided.length === 0) {
-      return false;
+    const adminProvided = req.headers['x-aios-admin-token'];
+
+    if (this.serviceToken === '') {
+      // F-4: fail-closed unless an explicit, non-production opt-in is present.
+      if (this.allowUnauthenticated) {
+        return { kind: 'anonymous', actorId: ANONYMOUS_ACTOR_ID };
+      }
+      return { kind: 'unauthorized', reason: 'service_token_not_configured' };
     }
-    const providedBuffer = Buffer.from(provided);
-    const expectedBuffer = Buffer.from(this.serviceToken);
-    if (providedBuffer.length !== expectedBuffer.length) {
-      return false;
+
+    if (!constantTimeEquals(provided, this.serviceToken)) {
+      return { kind: 'unauthorized', reason: 'invalid_service_token' };
     }
-    return timingSafeEqual(providedBuffer, expectedBuffer);
+
+    // F-3: administrative authority requires the separate admin credential and
+    // is never inferred from caller-supplied actor/group fields.
+    if (this.adminToken !== '' && constantTimeEquals(adminProvided, this.adminToken)) {
+      return { kind: 'admin', actorId: `${SERVICE_ACTOR_ID}:admin` };
+    }
+    return { kind: 'service', actorId: SERVICE_ACTOR_ID };
   }
 }
 
 /** Convenience: builds a {@link ProductionRuntime} over a composition. */
 export function createProductionRuntime(options: ProductionRuntimeOptions): ProductionRuntime {
   return new ProductionRuntime(options);
+}
+
+/**
+ * Sprint 35 F-3/F-4 — the trusted caller kinds resolved by the auth gate.
+ *
+ * `kind` is derived exclusively from the presented credential. Handlers must
+ * derive actor identity and management authority from it and must never read
+ * them from the request body, query string, or headers.
+ */
+export type TrustedCallerKind = 'admin' | 'service' | 'anonymous';
+
+/** A caller whose identity was established by the service boundary. */
+export interface AuthenticatedCaller {
+  readonly kind: TrustedCallerKind;
+  readonly actorId: string;
+}
+
+/** Outcome of the auth gate: an established caller, or a refusal with a reason. */
+export type CallerResolution =
+  AuthenticatedCaller | { readonly kind: 'unauthorized'; readonly reason: string };
+
+/** Sprint 35 F-4 — actor id used for an explicitly unauthenticated dev caller. */
+const ANONYMOUS_ACTOR_ID = 'anonymous-dev';
+
+/** Sprint 35 F-4 — server-side actor id for a service-token caller. */
+const SERVICE_ACTOR_ID = 'aios-service';
+
+/**
+ * Constant-time string comparison for credentials. Length is compared first
+ * (unavoidable for a fixed-length HMAC-style compare) but the content
+ * comparison never short-circuits, so no timing signal distinguishes a
+ * near-correct token from a wrong one. Never logs either value.
+ */
+function constantTimeEquals(provided: unknown, expected: string): boolean {
+  if (typeof provided !== 'string' || provided.length === 0) return false;
+  const providedBuffer = Buffer.from(provided);
+  const expectedBuffer = Buffer.from(expected);
+  if (providedBuffer.length !== expectedBuffer.length) return false;
+  return timingSafeEqual(providedBuffer, expectedBuffer);
 }
 
 /**
@@ -1317,26 +1421,26 @@ function sanitizeRequestId(value: string): string {
   return `aios-${randomUUID()}`;
 }
 
-/** Maps a raw string to a {@link KnowledgeActorGroup}, or undefined when unknown. */
-function toKnowledgeActorGroup(value: string | undefined): KnowledgeActorGroup | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (Object.values(KnowledgeActorGroup).includes(value as KnowledgeActorGroup)) {
-    return value as KnowledgeActorGroup;
-  }
-  return undefined;
+/**
+ * Sprint 35 F-1 — maps a *trusted* caller to its knowledge actor group.
+ *
+ * This is the only place a knowledge actor group may be produced from the HTTP
+ * boundary. An administrative credential maps to {@link KnowledgeActorGroup.Admin};
+ * every other authenticated caller maps to {@link KnowledgeActorGroup.KnowledgeManager}
+ * (read/create/update-version, but not namespace-independent admin) and is still
+ * bound to its persisted namespace membership inside AG-003.
+ */
+function knowledgeActorGroupForCaller(caller: AuthenticatedCaller): KnowledgeActorGroup {
+  return caller.kind === 'admin' ? KnowledgeActorGroup.Admin : KnowledgeActorGroup.KnowledgeManager;
 }
 
-/** Maps a raw string to a {@link ToolActorGroup}, or undefined when unknown. */
-function toToolActorGroup(value: string | undefined): ToolActorGroup | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (Object.values(ToolActorGroupValue).includes(value as ToolActorGroupValue)) {
-    return value as ToolActorGroupValue;
-  }
-  return undefined;
+/**
+ * Sprint 35 F-3 — maps a *trusted* caller to its tool actor group. Never derived
+ * from request fields. Service callers get read+execute; administrative callers
+ * additionally get management.
+ */
+function toolActorGroupForCaller(caller: AuthenticatedCaller): ToolActorGroup {
+  return caller.kind === 'admin' ? ToolActorGroup.Admin : ToolActorGroup.Orchestrator;
 }
 
 export type { OrchestrationRequest, OrchestratorResponse };

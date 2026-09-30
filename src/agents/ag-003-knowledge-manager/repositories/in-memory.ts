@@ -3,6 +3,7 @@ import type {
   KnowledgeDocument,
   KnowledgeDocumentFilter,
   KnowledgeDocumentPage,
+  KnowledgeNamespaceRecord,
   KnowledgePagination,
   KnowledgeVersion,
 } from '../types/index.js';
@@ -16,6 +17,8 @@ export class InMemoryKnowledgeRepository {
   private readonly documents = new Map<string, KnowledgeDocument>();
   private readonly versions = new Map<string, KnowledgeVersion[]>();
   private readonly chunks = new Map<string, KnowledgeChunk[]>();
+  /** Sprint 35 F-1 — persisted namespace ownership/membership. */
+  private readonly namespaces = new Map<string, KnowledgeNamespaceRecord>();
 
   async create(document: KnowledgeDocument): Promise<KnowledgeDocument> {
     const existing = this.findByNamespaceTitle(document.namespace, document.title);
@@ -167,6 +170,64 @@ export class InMemoryKnowledgeRepository {
     this.documents.clear();
     this.versions.clear();
     this.chunks.clear();
+    this.namespaces.clear();
+  }
+
+  /** Test helper: current namespace count (F-1 state-integrity assertions). */
+  namespaceCount(): number {
+    return this.namespaces.size;
+  }
+
+  /** Sprint 35 F-1 — reads the persisted namespace authorization record. */
+  async getNamespaceRecord(namespace: string): Promise<KnowledgeNamespaceRecord | undefined> {
+    const record = this.namespaces.get(namespace);
+    return record === undefined
+      ? undefined
+      : { ...record, memberActorIds: [...record.memberActorIds] };
+  }
+
+  /** Sprint 35 F-1 — atomic first-owner claim; refuses takeover. */
+  async claimNamespace(
+    namespace: string,
+    actorId: string,
+    at: string,
+  ): Promise<{ claimed: boolean; record: KnowledgeNamespaceRecord }> {
+    const existing = this.namespaces.get(namespace);
+    if (existing === undefined) {
+      const record: KnowledgeNamespaceRecord = {
+        namespace,
+        ownerActorId: actorId,
+        memberActorIds: [],
+        createdAt: at,
+        updatedAt: at,
+      };
+      this.namespaces.set(namespace, record);
+      return { claimed: true, record: { ...record, memberActorIds: [] } };
+    }
+    if (existing.ownerActorId === actorId) {
+      return {
+        claimed: false,
+        record: { ...existing, memberActorIds: [...existing.memberActorIds] },
+      };
+    }
+    return {
+      claimed: false,
+      record: { ...existing, memberActorIds: [...existing.memberActorIds] },
+    };
+  }
+
+  /** Sprint 35 F-1 — grants membership; refuses to materialize a namespace. */
+  async addNamespaceMember(namespace: string, actorId: string, at: string): Promise<boolean> {
+    const existing = this.namespaces.get(namespace);
+    if (existing === undefined) return false;
+    if (existing.ownerActorId === actorId) return true;
+    if (existing.memberActorIds.includes(actorId)) return true;
+    this.namespaces.set(namespace, {
+      ...existing,
+      memberActorIds: [...existing.memberActorIds, actorId],
+      updatedAt: at,
+    });
+    return true;
   }
 
   private findByNamespaceTitle(namespace: string, title: string): KnowledgeDocument | undefined {

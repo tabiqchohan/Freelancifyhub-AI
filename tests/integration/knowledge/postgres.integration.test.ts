@@ -113,7 +113,7 @@ suite('AG-003 - real PostgreSQL knowledge backend (integration)', () => {
       });
       expect(result.version.versionNumber).toBe(2);
 
-      const v1 = await service.getVersion(doc.id, 1);
+      const v1 = await service.getVersion(doc.id, 1, actor.group, actor.actorId);
       expect(v1?.content).toBe('Base rate is $50 per hour.');
       await repo.eraseByNamespace(`${ns}-versions`);
     }, 30000);

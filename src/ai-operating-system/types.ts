@@ -84,6 +84,17 @@ export interface AiosRequest {
   readonly traceId?: string;
   readonly input: AiosInput;
   readonly actor: AiosActor;
+  /**
+   * Sprint 35 F-2/F-6 — the identity established by the *service boundary*
+   * (resolved from the presented credential), not by the request payload.
+   *
+   * `actor` above is caller-asserted and is used for product-level
+   * authorization inside the pipeline. This field is what the idempotency
+   * window is keyed on, so two different authenticated callers can never share
+   * a key. When absent the request falls back to a single shared, conservative
+   * scope (see `UNSCOPED_IDEMPOTENCY_PRINCIPAL`).
+   */
+  readonly principalId?: string;
   readonly options?: AiosRequestOptions;
 }
 

@@ -547,6 +547,9 @@ describe('Marketing AI Team integration (Sprint 24)', () => {
     const composition = await createProductionComposition({ env: inMemoryEnv() });
     const runtime = createProductionRuntime({
       composition,
+      // Sprint 35 F-4 - suite exercises non-auth behaviour; opt out of the
+      // fail-closed service-token gate explicitly.
+      allowUnauthenticated: true,
       logger: (await import('pino')).default({ level: 'silent' }),
     });
     const server = await runtime.start(0, '127.0.0.1');

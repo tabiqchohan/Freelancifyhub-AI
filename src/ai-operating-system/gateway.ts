@@ -15,7 +15,7 @@ import { AiosStage, type AiosRequest, type AiosResponse, type AiosStatus } from 
 import type { AiosGatewayContract } from './types.js';
 import type { AiosConfig } from './config.js';
 import type { AiosMetrics } from './metrics.js';
-import { AiosIdempotencyRegistry } from './idempotency.js';
+import { AiosIdempotencyRegistry, UNSCOPED_IDEMPOTENCY_PRINCIPAL } from './idempotency.js';
 import { validateAiosInput, normalizeTimeoutMs } from './schemas.js';
 import type { AiosService } from './service.js';
 import type { AiosPipeline, AiosPipelineInput } from './pipeline.js';
@@ -91,27 +91,31 @@ export class AiosGateway implements AiosGatewayContract {
     };
 
     // Claim AFTER validation so an invalid payload never consumes a key.
-    if (req.options?.idempotencyKey !== undefined) {
-      const claim = this.idempotency.claim(req.options.idempotencyKey, requestId);
+    // Sprint 35 F-6 — the keyspace is scoped to the trusted principal, so one
+    // caller can neither collide with nor replay another caller's response.
+    const principalId = idempotencyPrincipal(req);
+    const idempotencyKey = req.options?.idempotencyKey;
+    if (idempotencyKey !== undefined) {
+      const claim = this.idempotency.claim(principalId, idempotencyKey, requestId);
       if (claim.outcome === 'replay') {
         return claim.response;
       }
       if (claim.outcome === 'conflict') {
-        this.idempotency.throwConflict(claim.existingRequestId, req.options.idempotencyKey);
+        this.idempotency.throwConflict(claim.existingRequestId, idempotencyKey);
       }
     }
 
     try {
       const response = await this.pipeline.execute(input);
-      if (req.options?.idempotencyKey !== undefined) {
-        this.idempotency.complete(req.options.idempotencyKey, response);
+      if (idempotencyKey !== undefined) {
+        this.idempotency.complete(principalId, idempotencyKey, response);
       }
       return response;
     } catch (error) {
       // Sprint 33 — a failed/timed-out request must not pin the idempotency
       // key for the rest of the window; release it so retries replay cleanly.
-      if (req.options?.idempotencyKey !== undefined) {
-        this.idempotency.release(req.options.idempotencyKey);
+      if (idempotencyKey !== undefined) {
+        this.idempotency.release(principalId, idempotencyKey);
       }
       // Sprint 34 — record infra-class failures so status() reflects real
       // health instead of hardcoding healthy.
@@ -150,7 +154,11 @@ export class AiosGateway implements AiosGatewayContract {
       completedRequests: result !== undefined ? 1 : 0,
       requestCounts: {},
       statusCounts: result !== undefined ? { [result.status]: 1 } : {},
-      lastFailure: result?.error?.message,
+      // Sprint 35 F-5 — expose the *stable error code* only. The previous
+      // `result.error.message` published raw internal failure text (driver,
+      // provider or host detail) to any caller able to name a request id.
+      // Callers must correlate with the stable code, not parse internal text.
+      lastFailure: result?.error?.code,
       since: new Date().toISOString(),
     };
   }
@@ -180,4 +188,16 @@ export class AiosGateway implements AiosGatewayContract {
 /** Maps any failure into a bounded {@link AiosError} (never leaks internals). */
 export function toGatewayError(error: unknown): AiosError {
   return toAiosError(error);
+}
+
+/**
+ * Sprint 35 F-6 — principal used for the idempotency keyspace. When the
+ * service boundary has bound a trusted principal to the request, that identity
+ * is used; otherwise a single, conservative fallback scope is applied.
+ */
+export function idempotencyPrincipal(req: AiosRequest): string {
+  if (req.principalId !== undefined && req.principalId.length > 0) {
+    return req.principalId;
+  }
+  return UNSCOPED_IDEMPOTENCY_PRINCIPAL;
 }

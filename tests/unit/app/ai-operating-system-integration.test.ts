@@ -38,7 +38,13 @@ describe('AI Operating System runtime integration (Sprint 26)', () => {
 
   beforeAll(async () => {
     composition = await createProductionComposition({ env: inMemoryEnv() });
-    runtime = createProductionRuntime({ composition, logger: await pinoReady });
+    // Sprint 35 F-4 — this suite exercises AIOS request/status/cancel behaviour,
+    // not authentication, so it opts out of the fail-closed service-token gate.
+    runtime = createProductionRuntime({
+      composition,
+      logger: await pinoReady,
+      allowUnauthenticated: true,
+    });
     const server = await runtime.start(0, '127.0.0.1');
     const { port } = server.address() as AddressInfo;
     baseUrl = `http://127.0.0.1:${port}`;

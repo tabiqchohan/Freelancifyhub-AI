@@ -74,8 +74,23 @@ describe('ProductionRuntime service-token auth (Sprint 29)', () => {
     }
   });
 
-  it('stays open when no service token is configured (dev default)', async () => {
+  it('fail-closes business endpoints when no service token is configured (Sprint 35 F-4)', async () => {
+    // F-4: the previous default silently opened the business API whenever
+    // AIOS_SERVICE_TOKEN was empty, in every non-production environment. The
+    // default is now fail-closed everywhere; local development must opt in.
     const { runtime, baseUrl } = await startRuntime('');
+    try {
+      const res = await fetch(`${baseUrl}/api/ai/status`);
+      expect(res.status).toBe(401);
+      const payload = (await res.json()) as { error: string };
+      expect(payload.error).toBe('unauthorized');
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it('opens only under the explicit non-production opt-in (Sprint 35 F-4)', async () => {
+    const { runtime, baseUrl } = await startRuntime('', { AIOS_ALLOW_UNAUTHENTICATED: 'true' });
     try {
       const res = await fetch(`${baseUrl}/api/ai/status`);
       expect(res.status).toBe(200);
@@ -99,13 +114,18 @@ describe('ProductionRuntime service-token auth (Sprint 29)', () => {
     }
   });
 
-  it('honors an explicit serviceTokenRequiredInProduction override', async () => {
-    const env = parseCompiledEnv({ AIOS_SERVICE_TOKEN: '', NODE_ENV: 'production' });
+  it('ignores the unauthenticated opt-in in production (Sprint 35 F-4)', async () => {
+    // The opt-in must never be able to reopen a production deployment.
+    const env = parseCompiledEnv({
+      AIOS_SERVICE_TOKEN: '',
+      AIOS_ALLOW_UNAUTHENTICATED: 'true',
+      NODE_ENV: 'production',
+    });
     env.memory.MEMORY_STORAGE_BACKEND = 'in-memory';
     const composition = await createProductionComposition({ env });
     const runtime = createProductionRuntime({
       composition,
-      serviceTokenRequiredInProduction: false,
+      allowUnauthenticated: true,
       logger: (await import('pino')).default({ level: 'silent' }),
     });
     const server = await runtime.start(0, '127.0.0.1');
@@ -113,7 +133,7 @@ describe('ProductionRuntime service-token auth (Sprint 29)', () => {
     const baseUrl = `http://127.0.0.1:${port}`;
     try {
       const res = await fetch(`${baseUrl}/api/ai/status`);
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(401);
     } finally {
       await runtime.shutdown();
     }

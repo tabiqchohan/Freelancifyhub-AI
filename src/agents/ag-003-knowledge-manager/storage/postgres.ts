@@ -5,6 +5,7 @@ import type {
   KnowledgeDocument,
   KnowledgeDocumentFilter,
   KnowledgeDocumentPage,
+  KnowledgeNamespaceRecord,
   KnowledgePagination,
   KnowledgeVersion,
 } from '../types/index.js';
@@ -18,6 +19,20 @@ import { migrateKnowledgeSchema, KNOWLEDGE_SCHEMA_VERSION } from './schema.js';
 
 export interface PostgresKnowledgeRepositoryOptions {
   readonly pool: pg.Pool;
+}
+
+function rowToNamespaceRecord(row: Record<string, unknown>): KnowledgeNamespaceRecord {
+  const raw = row.member_actor_ids;
+  const parsed: unknown = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  return {
+    namespace: String(row.namespace),
+    ownerActorId: String(row.owner_actor_id),
+    memberActorIds: Array.isArray(parsed) ? parsed.map((v) => String(v)) : [],
+    createdAt:
+      row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+    updatedAt:
+      row.updated_at instanceof Date ? row.updated_at.toISOString() : String(row.updated_at),
+  };
 }
 
 function rowToDocument(row: Record<string, unknown>): KnowledgeDocument {
@@ -390,6 +405,78 @@ export class PostgresKnowledgeRepository {
       namespace,
     ]);
     return res.rowCount ?? 0;
+  }
+
+  /** Sprint 35 F-1 — reads the persisted namespace authorization record. */
+  async getNamespaceRecord(namespace: string): Promise<KnowledgeNamespaceRecord | undefined> {
+    const res = await this.pool.query<Record<string, unknown>>(
+      'SELECT * FROM knowledge_namespace_access WHERE namespace = $1',
+      [namespace],
+    );
+    const row = res.rows[0];
+    return row === undefined ? undefined : rowToNamespaceRecord(row);
+  }
+
+  /**
+   * Sprint 35 F-1 — atomic first-owner claim.
+   *
+   * `ON CONFLICT DO NOTHING` + re-read makes the claim a single atomic step: a
+   * concurrent or forged self-grant can never take over a namespace another
+   * actor already owns, and no arbitrary sleeps/locks are involved.
+   */
+  async claimNamespace(
+    namespace: string,
+    actorId: string,
+    at: string,
+  ): Promise<{ claimed: boolean; record: KnowledgeNamespaceRecord }> {
+    try {
+      const ins = await this.pool.query(
+        `INSERT INTO knowledge_namespace_access (namespace, owner_actor_id, member_actor_ids, created_at, updated_at)
+         VALUES ($1, $2, '[]'::jsonb, $3, $3)
+         ON CONFLICT (namespace) DO NOTHING`,
+        [namespace, actorId, at],
+      );
+      const claimed = (ins.rowCount ?? 0) > 0;
+      const record = await this.getNamespaceRecord(namespace);
+      if (record === undefined) {
+        throw new KnowledgeStorageError('Namespace claim did not persist', {
+          details: { namespace },
+        });
+      }
+      return { claimed, record };
+    } catch (err) {
+      if (err instanceof KnowledgeStorageError) throw err;
+      throw new KnowledgeStorageError('Failed to claim knowledge namespace', {
+        details: { namespace },
+        cause: err,
+      });
+    }
+  }
+
+  /** Sprint 35 F-1 — grants membership; refuses to materialize a namespace. */
+  async addNamespaceMember(namespace: string, actorId: string, at: string): Promise<boolean> {
+    try {
+      const res = await this.pool.query(
+        `UPDATE knowledge_namespace_access
+            SET member_actor_ids = (
+                  CASE
+                    WHEN member_actor_ids @> to_jsonb($2::text)
+                      THEN member_actor_ids
+                    ELSE member_actor_ids || to_jsonb($2::text)
+                  END
+                ),
+                updated_at = $3
+          WHERE namespace = $1`,
+        [namespace, actorId, at],
+      );
+      if ((res.rowCount ?? 0) > 0) return true;
+      return (await this.getNamespaceRecord(namespace))?.ownerActorId === actorId;
+    } catch (err) {
+      throw new KnowledgeStorageError('Failed to add knowledge namespace member', {
+        details: { namespace },
+        cause: err,
+      });
+    }
   }
 
   /** Close the pool. */

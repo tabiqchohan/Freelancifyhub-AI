@@ -129,6 +129,21 @@ export class KnowledgeMatrixPermissionPolicy implements KnowledgeAuthorizationPo
   }
 }
 
+/**
+ * Sprint 35 F-1 — capability query over the *same* access matrix.
+ *
+ * Used by the knowledge service to decide whether an actor group may claim a
+ * namespace in the first place, before any namespace scope exists. This
+ * deliberately reads the one existing matrix rather than introducing a second
+ * source of truth, and it is fail-closed for unknown groups.
+ */
+export function knowledgeGroupHasPermission(
+  group: KnowledgeActorGroup,
+  permission: KnowledgePermission,
+): boolean {
+  return (KNOWLEDGE_ACCESS_MATRIX[group] ?? []).includes(permission);
+}
+
 /** Namespace scope policy — fail-closed on missing namespaces. */
 export class KnowledgeNamespaceScopePolicy implements KnowledgeAuthorizationPolicy {
   readonly name = 'knowledge-namespace-scope-policy';

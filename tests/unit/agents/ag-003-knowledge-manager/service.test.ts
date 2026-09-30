@@ -45,7 +45,7 @@ describe('AG-003 Knowledge Manager Service - end-to-end create/retrieve', () => 
     expect(doc.version).toBe(1);
     expect(doc.lifecycle).toBe(KnowledgeLifecycleState.Active);
 
-    const versions = await service.listVersions(doc.id);
+    const versions = await service.listVersions(doc.id, actor.group, actor.actorId);
     expect(versions.length).toBe(1);
     expect(versions[0]?.versionNumber).toBe(1);
 
@@ -76,7 +76,7 @@ describe('AG-003 Knowledge Manager Service - end-to-end create/retrieve', () => 
       actorId: actor.actorId,
     });
 
-    const v1 = await service.getVersion(doc.id, 1);
+    const v1 = await service.getVersion(doc.id, 1, actor.group, actor.actorId);
     expect(v1?.contentHash).toBe(doc.contentHash);
 
     const result = await service.createVersion({
@@ -93,11 +93,11 @@ describe('AG-003 Knowledge Manager Service - end-to-end create/retrieve', () => 
     expect(result.version.versionNumber).toBe(2);
     expect(result.document.version).toBe(2);
 
-    const v1After = await service.getVersion(doc.id, 1);
+    const v1After = await service.getVersion(doc.id, 1, actor.group, actor.actorId);
     expect(v1After?.content).toBe('Base rate is $50 per hour.');
     expect(v1After?.contentHash).toBe(v1?.contentHash);
 
-    const current = (await service.listVersions(doc.id)).at(-1);
+    const current = (await service.listVersions(doc.id, actor.group, actor.actorId)).at(-1);
     expect(current?.versionNumber).toBe(2);
   });
 

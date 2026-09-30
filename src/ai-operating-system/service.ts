@@ -355,14 +355,26 @@ export class AiosService {
     return out;
   }
 
+  /**
+   * Sprint 35 F-5 — builds a failed execution catcher whose `error.message` is a
+   * *bounded, caller-safe* string.
+   *
+   * Previously the raw `cause.message` was copied straight into the result. That
+   * text can be a database driver message, a provider response, a filesystem
+   * path or a connection string, and it reached clients both through the request
+   * response and through `/api/ai/status?requestId=` (`lastFailure`).
+   *
+   * The stable error code is preserved (it is safe by construction) and the raw
+   * text is dropped from the result entirely; it stays on `cause` for
+   * server-side tracing only.
+   */
   private failedCatcher(
     exec: ExecutionContext,
     message: string,
     cause?: unknown,
   ): ExecutionCatcher {
-    const code = cause instanceof AiosError ? cause.code : AiosErrorCode.ExecutionFailed;
-    const detailMessage =
-      cause instanceof Error && cause.message.length > 0 ? cause.message : message;
+    const aios = cause instanceof AiosError ? cause : undefined;
+    const code = aios?.code ?? AiosErrorCode.ExecutionFailed;
     return {
       target: exec.target,
       status: AggregationStatus.Failed,
@@ -370,8 +382,47 @@ export class AiosService {
       agents: [],
       startedAtMs: exec.startedAtMs,
       completedAtMs: Date.now(),
-      error: { code, message: detailMessage },
+      // Caller-safe: the message is derived only from the stable code, never
+      // from the underlying failure text.
+      error: { code, message: publicFailureMessage(code) },
     };
+  }
+}
+
+/**
+ * Sprint 35 F-5 — the single, caller-safe message for an AIOS failure code.
+ *
+ * Returns a fixed string per code so no provider, driver or host detail can be
+ * inferred from the response. Never include the original error text.
+ */
+function publicFailureMessage(code: AiosErrorCode): string {
+  switch (code) {
+    case AiosErrorCode.InvalidInput:
+      return 'Request was rejected as invalid';
+    case AiosErrorCode.PayloadTooLarge:
+      return 'Request exceeded the allowed size';
+    case AiosErrorCode.UnknownIntent:
+      return 'No route matched the request intent';
+    case AiosErrorCode.UnauthorizedScope:
+      return 'Actor is not authorized for this request';
+    case AiosErrorCode.RouteUnavailable:
+      return 'Target route is unavailable';
+    case AiosErrorCode.AgentNotReady:
+      return 'Target agent is not ready';
+    case AiosErrorCode.ToolNotAllowed:
+      return 'Requested tool is not permitted';
+    case AiosErrorCode.SecretDetected:
+      return 'Request contained disallowed secret material';
+    case AiosErrorCode.IdempotencyConflict:
+      return 'Idempotency key is already in flight';
+    case AiosErrorCode.DeadlineExceeded:
+      return 'Request exceeded its deadline';
+    case AiosErrorCode.Cancelled:
+      return 'Request was cancelled';
+    case AiosErrorCode.ExecutionFailed:
+    case AiosErrorCode.Internal:
+    default:
+      return 'Request failed';
   }
 }
 

@@ -140,6 +140,25 @@ CREATE INDEX IF NOT EXISTS knowledge_events_knowledge_id_idx ON knowledge_events
 CREATE INDEX IF NOT EXISTS knowledge_events_occurred_at_idx ON knowledge_events (occurred_at);
 `,
   },
+  {
+    // Sprint 35 F-1 — persisted namespace ownership/membership. Namespace scope
+    // stops being derived from the request that targets the namespace: the
+    // owner is claimed once, atomically, and every later decision reads this row.
+    version: 104,
+    name: 'knowledge-namespace-access-table',
+    sql: `
+CREATE TABLE IF NOT EXISTS knowledge_namespace_access (
+  namespace         TEXT        PRIMARY KEY,
+  owner_actor_id    TEXT        NOT NULL,
+  member_actor_ids  JSONB       NOT NULL DEFAULT '[]'::jsonb,
+  created_at        TIMESTAMPTZ NOT NULL,
+  updated_at        TIMESTAMPTZ NOT NULL,
+  CONSTRAINT knowledge_namespace_owner_valid CHECK (owner_actor_id <> '')
+);
+
+CREATE INDEX IF NOT EXISTS knowledge_namespace_access_owner_idx ON knowledge_namespace_access (owner_actor_id);
+`,
+  },
 ];
 
 /** Current schema version. */

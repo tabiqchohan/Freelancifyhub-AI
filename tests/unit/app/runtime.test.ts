@@ -16,6 +16,10 @@ async function startRuntime() {
   const runtime = createProductionRuntime({
     composition,
     logger: (await import('pino')).default({ level: 'silent' }),
+    // Sprint 35 F-4 — this suite exercises routing/AIOS behaviour, not
+    // authentication, so it opts out of the fail-closed service token gate
+    // explicitly instead of relying on the removed open-by-default behaviour.
+    allowUnauthenticated: true,
   });
   const server = await runtime.start(0, '127.0.0.1');
   const { port } = server.address() as AddressInfo;
@@ -246,7 +250,6 @@ describe('ProductionRuntime (Phase 7)', () => {
         composition,
         logger: (await import('pino')).default({ level: 'silent' }),
         healthCheck: () => Promise.resolve<HealthPayload>({ ...base(), ...payload }),
-        serviceTokenRequiredInProduction: false,
       });
       const server = await runtime.start(0, '127.0.0.1');
       const { port } = server.address() as AddressInfo;
@@ -280,7 +283,6 @@ describe('ProductionRuntime (Phase 7)', () => {
       composition,
       logger: (await import('pino')).default({ level: 'silent' }),
       healthCheck: () => new Promise<never>(() => undefined),
-      serviceTokenRequiredInProduction: false,
     });
     const server = await runtime.start(0, '127.0.0.1');
     const { port } = server.address() as AddressInfo;

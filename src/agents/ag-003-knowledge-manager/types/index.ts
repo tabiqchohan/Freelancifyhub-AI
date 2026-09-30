@@ -106,6 +106,23 @@ export interface KnowledgeChunk {
   readonly createdAt: IsoTimestamp;
 }
 
+/**
+ * Sprint 35 F-1 — persisted namespace authorization record.
+ *
+ * Namespace scope is an authorization fact that must be *persisted*, never
+ * derived from the request that happens to target the namespace. The owning
+ * actor is established once, when the namespace is first claimed, and every
+ * later access decision is resolved against this record.
+ */
+export interface KnowledgeNamespaceRecord {
+  readonly namespace: KnowledgeNamespace;
+  /** Actor that claimed the namespace; always a member of it. */
+  readonly ownerActorId: string;
+  readonly memberActorIds: readonly string[];
+  readonly createdAt: IsoTimestamp;
+  readonly updatedAt: IsoTimestamp;
+}
+
 /** Filter criteria for listing knowledge documents. */
 export interface KnowledgeDocumentFilter {
   readonly namespace?: KnowledgeNamespace;

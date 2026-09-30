@@ -33,16 +33,16 @@ function response(requestId: string): AiosResponse {
 describe('AIOS idempotency registry (Sprint 26)', () => {
   it('claims a fresh key and replays the completed response for the same request', () => {
     const registry = new AiosIdempotencyRegistry(60_000);
-    expect(registry.claim('k-1', 'req-1')).toEqual({ outcome: 'new' });
-    registry.complete('k-1', response('req-1'));
-    const replay = registry.claim('k-1', 'req-1');
+    expect(registry.claim('svc-1', 'k-1', 'req-1')).toEqual({ outcome: 'new' });
+    registry.complete('svc-1', 'k-1', response('req-1'));
+    const replay = registry.claim('svc-1', 'k-1', 'req-1');
     expect(replay).toEqual({ outcome: 'replay', response: response('req-1') });
   });
 
   it('flags an in-flight conflict for a different requestId and throws at the boundary', () => {
     const registry = new AiosIdempotencyRegistry(60_000);
-    registry.claim('k-2', 'req-a');
-    expect(registry.claim('k-2', 'req-b')).toEqual({
+    registry.claim('svc-1', 'k-2', 'req-a');
+    expect(registry.claim('svc-1', 'k-2', 'req-b')).toEqual({
       outcome: 'conflict',
       existingRequestId: 'req-a',
     });
@@ -54,40 +54,40 @@ describe('AIOS idempotency registry (Sprint 26)', () => {
   it('expires stale entries after the configured window', () => {
     const registry = new AiosIdempotencyRegistry(1_000);
     const now = 1_000_000;
-    expect(registry.claim('k-3', 'req-1', now)).toEqual({ outcome: 'new' });
-    expect(registry.claim('k-3', 'req-2', now + 500)).toEqual({
+    expect(registry.claim('svc-1', 'k-3', 'req-1', now)).toEqual({ outcome: 'new' });
+    expect(registry.claim('svc-1', 'k-3', 'req-2', now + 500)).toEqual({
       outcome: 'conflict',
       existingRequestId: 'req-1',
     });
-    expect(registry.claim('k-3', 'req-2', now + 2_000)).toEqual({ outcome: 'new' });
+    expect(registry.claim('svc-1', 'k-3', 'req-2', now + 2_000)).toEqual({ outcome: 'new' });
   });
 
   it('never overwrites an expired completed entry with a stale response', () => {
     const registry = new AiosIdempotencyRegistry(1_000);
     const now = 1_000_000;
-    registry.claim('k-4', 'req-1', now);
-    registry.complete('k-4', response('req-1'), now + 2_000);
-    const again = registry.claim('k-4', 'req-1', now + 5_000);
+    registry.claim('svc-1', 'k-4', 'req-1', now);
+    registry.complete('svc-1', 'k-4', response('req-1'), now + 2_000);
+    const again = registry.claim('svc-1', 'k-4', 'req-1', now + 5_000);
     expect(again.outcome).toBe('new');
   });
 
   it('releases an in-flight key so a retry is not blocked (Sprint 33)', () => {
     const registry = new AiosIdempotencyRegistry(60_000);
-    registry.claim('k-5', 'req-1');
-    expect(registry.claim('k-5', 'req-2')).toEqual({
+    registry.claim('svc-1', 'k-5', 'req-1');
+    expect(registry.claim('svc-1', 'k-5', 'req-2')).toEqual({
       outcome: 'conflict',
       existingRequestId: 'req-1',
     });
-    registry.release('k-5');
-    expect(registry.claim('k-5', 'req-2')).toEqual({ outcome: 'new' });
+    registry.release('svc-1', 'k-5');
+    expect(registry.claim('svc-1', 'k-5', 'req-2')).toEqual({ outcome: 'new' });
   });
 
   it('does not release a completed key (Sprint 33)', () => {
     const registry = new AiosIdempotencyRegistry(60_000);
-    registry.claim('k-6', 'req-1');
-    registry.complete('k-6', response('req-1'));
-    registry.release('k-6');
-    expect(registry.claim('k-6', 'req-1')).toEqual({
+    registry.claim('svc-1', 'k-6', 'req-1');
+    registry.complete('svc-1', 'k-6', response('req-1'));
+    registry.release('svc-1', 'k-6');
+    expect(registry.claim('svc-1', 'k-6', 'req-1')).toEqual({
       outcome: 'replay',
       response: response('req-1'),
     });
@@ -96,9 +96,9 @@ describe('AIOS idempotency registry (Sprint 26)', () => {
   it('evicts expired entries during a later claim so entryCount stays bounded (Sprint 33)', () => {
     const registry = new AiosIdempotencyRegistry(1_000);
     const now = 1_000_000;
-    registry.claim('k-7', 'req-1', now);
+    registry.claim('svc-1', 'k-7', 'req-1', now);
     expect(registry.entryCount()).toBe(1);
-    registry.claim('k-8', 'req-1', now + 5_000);
+    registry.claim('svc-1', 'k-8', 'req-1', now + 5_000);
     expect(registry.entryCount()).toBe(1);
   });
 });

@@ -1,0 +1,1448 @@
+# SPRINT 26 — PRODUCTION AI OPERATING SYSTEM INTEGRATION & E2E ORCHESTRATION
+
+You are working inside the existing `freelancify-ai` repository.
+
+## IMPORTANT
+
+This is Sprint 26.
+
+Do NOT redesign the architecture.
+Do NOT replace existing infrastructure.
+Do NOT duplicate AG-001, AG-002, AG-003, AG-004, LLM, Agent Platform, Coordination, or any existing AI Team infrastructure.
+
+You MUST inspect the repository and existing Sprint 1–25 implementation before changing anything.
+
+The objective of Sprint 26 is to turn the existing system into a cohesive production-oriented AI Operating System by adding a unified end-to-end execution layer over the already implemented architecture.
+
+Existing major components that MUST be reused:
+
+* AG-001 Master Orchestrator
+* AG-002 Memory Manager
+* AG-003 Knowledge Manager
+* AG-004 Tool Manager
+* LLM Provider / AI Reasoning Layer
+* Agentic Tool Calling / Reasoning Loop
+* Agent Capability Framework
+* Agent Lifecycle
+* Agent Platform Gateway
+* Multi-Agent Coordination
+* Client AI Team
+* Freelancer AI Team
+* Marketplace AI Team
+* Marketing AI Team
+* Admin AI Team
+* Existing runtime/composition root
+* Existing health/readiness infrastructure
+* Existing event/metrics infrastructure
+* Existing security/redaction infrastructure
+* Existing Zod schemas/contracts
+* Existing retry/timeout/cancellation infrastructure
+* Existing Neon/PostgreSQL persistence
+
+---
+
+# 1. SPRINT 26 GOAL
+
+Build a production-oriented:
+
+**AI Operating System Integration Layer**
+
+that provides one consistent execution path:
+
+```text
+Incoming User Request
+        ↓
+Runtime Request Boundary
+        ↓
+AG-001 Master Orchestrator
+        ↓
+Intent Detection
+        ↓
+Context Assembly
+        ↓
+Memory Context (AG-002)
+        ↓
+Knowledge Context (AG-003)
+        ↓
+Tool Capability Discovery (AG-004)
+        ↓
+Agent / Team Routing
+        ↓
+Agent Platform Lifecycle Gate
+        ↓
+Single-Agent OR Multi-Agent Coordination
+        ↓
+LLM Reasoning when required
+        ↓
+Agentic Tool Calling when permitted
+        ↓
+Execution
+        ↓
+Aggregation
+        ↓
+Safety / Policy Validation
+        ↓
+Memory/Event/Metric updates
+        ↓
+Final Response
+```
+
+The key requirement is that this is a REAL integrated execution path, not merely documentation or mocked wiring.
+
+---
+
+# 2. FIRST ACTION — REPOSITORY AUDIT
+
+Before writing code:
+
+Inspect:
+
+* `src/`
+* `tests/`
+* `docs/`
+* `prompts/`
+* `config/`
+* `migrations/`
+* runtime/composition root
+* AG-001
+* AG-002
+* AG-003
+* AG-004
+* LLM
+* agentic loop
+* agent-platform
+* coordination
+* all five AI teams
+
+Identify:
+
+1. Existing integration points
+2. Existing public APIs
+3. Existing execution boundaries
+4. Existing runtime request flow
+5. Existing health endpoints
+6. Existing event systems
+7. Existing metrics systems
+8. Existing authorization/security mechanisms
+9. Existing error taxonomy
+10. Existing test utilities
+11. Existing environment/config patterns
+
+Reuse them.
+
+Do not create duplicate infrastructure if an existing implementation already satisfies the requirement.
+
+---
+
+# 3. NEW DOMAIN: AI OPERATING SYSTEM
+
+Create a focused module, preferably:
+
+```text
+src/ai-operating-system/
+```
+
+Use repository conventions.
+
+Suggested structure:
+
+```text
+src/ai-operating-system/
+├── types.ts
+├── schemas.ts
+├── errors.ts
+├── config.ts
+├── security.ts
+├── request-context.ts
+├── execution-context.ts
+├── execution-result.ts
+├── pipeline.ts
+├── gateway.ts
+├── policy.ts
+├── response.ts
+├── events.ts
+├── metrics.ts
+├── service.ts
+├── index.ts
+└── README.md
+```
+
+Adjust structure if repository conventions require another layout.
+
+Do NOT blindly create every file if an existing equivalent should be reused.
+
+---
+
+# 4. CORE CONTRACT
+
+Create a strongly typed top-level request contract.
+
+Example conceptual shape:
+
+```ts
+interface AIOSRequest {
+  requestId: string;
+  actor: {
+    actorId: string;
+    actorType: string;
+    scopes: string[];
+  };
+  input: string;
+  metadata?: Record<string, unknown>;
+  signal?: AbortSignal;
+  deadlineAt?: number;
+}
+```
+
+Create a corresponding result:
+
+```ts
+interface AIOSResponse {
+  requestId: string;
+  status: "SUCCESS" | "PARTIAL" | "FAILED" | "CANCELLED" | "TIMED_OUT";
+  response: string;
+  intent?: string;
+  agentsUsed: string[];
+  toolsUsed: string[];
+  degraded: boolean;
+  warnings: string[];
+  usage?: {
+    llmCalls: number;
+    toolCalls: number;
+  };
+}
+```
+
+Use repository-specific types wherever possible.
+
+All external/untrusted input MUST be validated through Zod.
+
+Do not expose internal provider SDK types.
+
+---
+
+# 5. UNIFIED EXECUTION PIPELINE
+
+Implement a single top-level pipeline.
+
+Required conceptual phases:
+
+```text
+VALIDATE
+→ CREATE_REQUEST_CONTEXT
+→ DETECT_INTENT
+→ BUILD_CONTEXT
+→ AUTHORIZE
+→ ROUTE
+→ PLAN
+→ EXECUTE
+→ AGGREGATE
+→ SAFETY_CHECK
+→ PERSIST_EVENTS
+→ UPDATE_METRICS
+→ FINALIZE_RESPONSE
+```
+
+Each phase must:
+
+* have explicit boundaries
+* preserve correlation/request IDs
+* support cancellation
+* respect deadlines
+* use bounded resources
+* fail closed where appropriate
+* preserve typed errors
+
+Do not bypass AG-001.
+
+---
+
+# 6. AG-001 MUST REMAIN THE ORCHESTRATOR
+
+The new AI Operating System layer must NOT become a second master orchestrator.
+
+AG-001 remains responsible for:
+
+* intent detection
+* context construction
+* routing
+* planning
+* execution orchestration
+
+The AIOS layer is a production integration boundary around AG-001.
+
+Conceptually:
+
+```text
+AIOS Gateway
+      ↓
+AG-001
+      ↓
+Existing orchestration stack
+```
+
+Not:
+
+```text
+AIOS
+  ↘ AG-001
+  ↘ AG-002
+  ↘ AG-003
+  ↘ AG-004
+```
+
+The AIOS layer must avoid bypassing the established architecture.
+
+---
+
+# 7. UNIFIED CONTEXT
+
+Build one execution context that can carry:
+
+* request ID
+* correlation ID
+* actor identity
+* authorization scopes
+* intent
+* memory context
+* knowledge context
+* available tools
+* available agents
+* routing decision
+* coordination plan
+* deadline
+* cancellation signal
+* security metadata
+* degradation state
+* warnings
+
+Context must be bounded.
+
+Never allow:
+
+* unbounded user input
+* unbounded memory
+* unbounded knowledge
+* unbounded tool output
+* unbounded LLM output
+* unbounded metadata
+
+Reuse existing token/byte budget utilities.
+
+---
+
+# 8. MEMORY INTEGRATION
+
+Use AG-002 through its existing public boundary.
+
+The AIOS layer must NOT directly query PostgreSQL.
+
+Required behavior:
+
+* retrieve relevant memory through AG-002
+* respect actor/group authorization
+* respect memory scopes
+* respect redaction
+* respect lifecycle rules
+* record relevant memory events through existing infrastructure
+* never store secrets accidentally
+
+Memory retrieval failure should support controlled degradation where existing architecture permits.
+
+Do NOT fabricate memory.
+
+---
+
+# 9. KNOWLEDGE INTEGRATION
+
+Use AG-003 through its existing public boundary.
+
+Required:
+
+* retrieve authorized knowledge
+* preserve namespaces/groups
+* preserve document/version metadata
+* preserve security boundaries
+* support insufficient-data behavior
+* never fabricate knowledge
+* maintain existing grounding semantics
+
+If semantic/vector retrieval is still deferred in the repository, do NOT pretend it exists.
+
+Use only currently implemented capabilities.
+
+---
+
+# 10. TOOL INTEGRATION
+
+Use AG-004 only through its existing public API.
+
+Every tool call must remain subject to:
+
+* authorization
+* allowlists
+* lifecycle rules
+* validation
+* timeout
+* cancellation
+* retry policy
+* output limits
+* sanitization
+* audit/event recording
+
+Never allow AIOS to execute arbitrary shell commands or arbitrary external tools.
+
+The AIOS layer must not create a second tool registry.
+
+---
+
+# 11. AGENT PLATFORM INTEGRATION
+
+Every managed agent must continue through:
+
+```text
+AgentPlatformGateway
+```
+
+Preserve:
+
+* READY/RUNNING lifecycle
+* PAUSED rejection
+* DISABLED rejection
+* FAILED behavior
+* concurrency accounting
+* execution leases
+* capability validation
+* allowed-tool validation
+
+No double lifecycle claim.
+
+Do not bypass the Sprint 19 gateway.
+
+---
+
+# 12. MULTI-AGENT COORDINATION
+
+Use Sprint 20 coordination for multi-agent workflows.
+
+Supported modes must remain:
+
+* SINGLE
+* SEQUENTIAL
+* PARALLEL
+* PIPELINE
+* DEBATE
+* HYBRID
+
+Do not implement another coordination engine.
+
+AIOS should simply provide the production boundary that invokes the existing coordinator.
+
+Preserve:
+
+* dependency DAG
+* cycle detection
+* bounded concurrency
+* global deadline
+* AbortSignal cancellation
+* failure policies
+* conflict policies
+* aggregation strategies
+* authorized message bus
+
+---
+
+# 13. TEAM ROUTING
+
+Ensure the AIOS integration can correctly execute requests across:
+
+### Client AI Team
+
+* AG-102
+* AG-103
+* AG-104
+* AG-105
+
+### Freelancer AI Team
+
+* AG-201
+* AG-202
+* AG-206
+* AG-207
+
+### Marketplace AI Team
+
+* AG-301+
+* existing marketplace capability routing
+
+### Marketing AI Team
+
+* AG-401
+* AG-402
+* AG-403
+* AG-404
+* AG-405
+
+### Admin AI Team
+
+* AG-501
+* AG-502
+* AG-503
+* AG-504
+* AG-505
+
+Do not hardcode a second routing table if the existing routing/registry can provide the information.
+
+The integration must be capability-driven.
+
+---
+
+# 14. DETERMINISTIC-FIRST BEHAVIOR
+
+The production AIOS path must work with:
+
+```text
+LLM disabled
+```
+
+for all workflows that are already deterministic.
+
+Deterministic agents must produce zero unnecessary LLM calls.
+
+LLM-dependent behavior must fail safely:
+
+```text
+REASONING_UNAVAILABLE
+REASONING_CANCELLED
+REASONING_FAILED
+```
+
+Use existing error taxonomy.
+
+Do not silently pretend an LLM response exists.
+
+---
+
+# 15. LLM INTEGRATION
+
+Use the existing:
+
+```text
+LLMProvider
+AIReasoningService
+agentic loop
+```
+
+Do not add another provider abstraction.
+
+Preserve:
+
+* provider-independent contracts
+* timeout
+* cancellation
+* bounded retries
+* backoff
+* usage tracking
+* correlation IDs
+* prompt injection defenses
+* secret redaction
+* UTF-8 byte limits
+* context limits
+
+LLM output must never directly execute privileged operations.
+
+---
+
+# 16. SECURITY / TRUST BOUNDARY
+
+Treat these as untrusted:
+
+* user input
+* memory text
+* knowledge text
+* tool results
+* LLM output
+* agent messages
+* metadata
+
+Use explicit boundaries.
+
+Prevent:
+
+* prompt injection
+* tool escalation
+* agent escalation
+* scope escalation
+* secret leakage
+* cross-tenant/context leakage
+* unauthorized mutation
+* arbitrary tool execution
+
+Reuse existing redaction/sanitization utilities.
+
+Do not duplicate security logic unnecessarily.
+
+---
+
+# 17. ADMIN SAFETY
+
+Preserve Sprint 25 rules.
+
+AI must NEVER:
+
+* auto-ban users
+* directly mutate production systems
+* directly execute operational changes
+* bypass approval
+
+Admin AI may:
+
+* analyze
+* classify
+* recommend
+* propose reversible actions
+* surface anomalies
+
+Mutating/admin operational recommendations remain approval-gated.
+
+---
+
+# 18. RESPONSE NORMALIZATION
+
+Create a unified final response layer.
+
+All successful responses should normalize into a consistent structure.
+
+Support:
+
+```text
+SUCCESS
+PARTIAL
+FAILED
+CANCELLED
+TIMED_OUT
+```
+
+For partial/degraded execution:
+
+* clearly indicate degradation
+* do not hide failed agents
+* do not fabricate missing results
+* preserve useful successful outputs
+
+For failures:
+
+* expose safe user-facing error
+* keep internal diagnostics out of the response
+* retain correlation/request ID
+
+---
+
+# 19. OBSERVABILITY
+
+Integrate existing events and metrics.
+
+Every AIOS request should be traceable using:
+
+```text
+requestId
+correlationId
+```
+
+Record lifecycle events such as:
+
+```text
+REQUEST_RECEIVED
+REQUEST_VALIDATED
+INTENT_DETECTED
+CONTEXT_BUILT
+AUTHORIZATION_CHECKED
+ROUTING_COMPLETED
+PLAN_CREATED
+EXECUTION_STARTED
+AGENT_STARTED
+TOOL_CALLED
+LLM_CALLED
+AGENT_COMPLETED
+COORDINATION_COMPLETED
+RESPONSE_AGGREGATED
+REQUEST_COMPLETED
+REQUEST_FAILED
+REQUEST_CANCELLED
+REQUEST_TIMED_OUT
+```
+
+Do not store:
+
+* raw secrets
+* credentials
+* full sensitive payloads
+* unnecessary user data
+
+Reuse existing event abstractions.
+
+---
+
+# 20. METRICS
+
+Expose useful aggregate metrics.
+
+At minimum:
+
+* total requests
+* successful requests
+* partial requests
+* failed requests
+* cancelled requests
+* timed-out requests
+* average latency
+* p95 latency if existing metrics architecture supports it
+* agent executions
+* tool calls
+* LLM calls
+* coordination executions
+* degraded executions
+
+Avoid unbounded in-memory metric growth.
+
+Follow existing metric conventions.
+
+---
+
+# 21. DEADLINE AND CANCELLATION
+
+AIOS must have one global request deadline.
+
+Propagate cancellation to:
+
+* AG-001
+* agents
+* coordination
+* LLM
+* tools
+
+If the deadline expires:
+
+```text
+TIMED_OUT
+```
+
+must be returned.
+
+If AbortSignal is triggered:
+
+```text
+CANCELLED
+```
+
+must be returned.
+
+Ensure cleanup occurs through finally blocks.
+
+No execution leases may remain open.
+
+No dangling timers.
+
+No uncontrolled retries after cancellation.
+
+---
+
+# 22. IDEMPOTENCY
+
+Add request-level idempotency support if the existing architecture can support it safely.
+
+Conceptually:
+
+```text
+idempotencyKey
+```
+
+Repeated requests with the same key must not accidentally execute mutating work multiple times.
+
+Do not create unsafe caching.
+
+If true durable idempotency requires infrastructure that does not yet exist, implement a bounded abstraction and document the limitation rather than pretending durability.
+
+---
+
+# 23. RUNTIME API
+
+Integrate AIOS into the existing runtime.
+
+Prefer an endpoint such as:
+
+```text
+POST /api/ai/request
+```
+
+or the repository's existing runtime request endpoint if it already serves this role.
+
+Do not create duplicate request APIs unnecessarily.
+
+The endpoint must:
+
+* validate request
+* create request context
+* invoke AIOS gateway
+* return normalized response
+* map errors safely
+* preserve correlation/request ID
+
+Add status endpoint if useful:
+
+```text
+GET /api/ai/status
+```
+
+Use existing conventions.
+
+---
+
+# 24. HEALTH / READINESS
+
+Extend `/healthz`.
+
+Add an AIOS block similar to:
+
+```json
+{
+  "aiOperatingSystem": {
+    "healthy": true,
+    "ready": true,
+    "components": {
+      "orchestrator": true,
+      "memory": true,
+      "knowledge": true,
+      "tools": true,
+      "llm": true,
+      "agentPlatform": true,
+      "coordination": true
+    }
+  }
+}
+```
+
+Do not mark the entire system unhealthy merely because optional LLM is disabled if the existing readiness model treats LLM as optional.
+
+Use actual runtime state.
+
+No fake health values.
+
+---
+
+# 25. END-TO-END SCENARIOS
+
+Create real integration tests covering at minimum:
+
+## Scenario 1 — Client
+
+```text
+client request
+→ AG-001
+→ client routing
+→ deterministic client agent
+→ response
+```
+
+## Scenario 2 — Freelancer
+
+```text
+freelancer request
+→ AG-001
+→ freelancer agent
+→ response
+```
+
+## Scenario 3 — Marketplace
+
+```text
+marketplace request
+→ AG-001
+→ marketplace capability
+→ response
+```
+
+## Scenario 4 — Marketing
+
+```text
+marketing request
+→ AG-001
+→ marketing capability
+→ response
+```
+
+## Scenario 5 — Admin
+
+```text
+admin request
+→ authorization
+→ admin agent
+→ safe result
+```
+
+## Scenario 6 — Multi-Agent
+
+```text
+request
+→ AG-001
+→ coordination
+→ multiple agents
+→ aggregation
+→ response
+```
+
+## Scenario 7 — LLM Disabled
+
+Verify deterministic workflows continue working.
+
+## Scenario 8 — LLM Enabled
+
+If the repository has a mock/provider test mechanism, verify reasoning integration without requiring a live external API.
+
+## Scenario 9 — Tool Call
+
+Verify:
+
+```text
+AI
+→ AG-004
+→ allowlisted tool
+→ sanitized result
+→ AI/agent
+```
+
+## Scenario 10 — Unauthorized Tool
+
+Verify:
+
+```text
+TOOL_NOT_ALLOWED
+```
+
+## Scenario 11 — Paused Agent
+
+Verify:
+
+```text
+AGENT_NOT_READY
+```
+
+## Scenario 12 — Cancellation
+
+Abort a running request and verify:
+
+```text
+CANCELLED
+```
+
+## Scenario 13 — Timeout
+
+Verify:
+
+```text
+TIMED_OUT
+```
+
+## Scenario 14 — Partial Failure
+
+One coordinated agent fails while others succeed.
+
+Verify:
+
+```text
+PARTIAL
+```
+
+without fabricated output.
+
+## Scenario 15 — Prompt Injection
+
+Attempt injection through:
+
+* user input
+* memory
+* knowledge
+* tool result
+* agent message
+
+Verify existing defenses remain effective.
+
+## Scenario 16 — Secret Redaction
+
+Inject fake credentials/secrets into context/tool output and verify they never appear in:
+
+* final response
+* event logs
+* metrics
+* prompts where prohibited
+
+## Scenario 17 — Admin Mutation Safety
+
+Verify AI cannot directly perform an admin mutation.
+
+---
+
+# 26. TEST REQUIREMENTS
+
+Follow TDD where practical.
+
+Add unit tests for:
+
+* request validation
+* context creation
+* phase ordering
+* error mapping
+* authorization
+* response normalization
+* deadline handling
+* cancellation
+* idempotency behavior
+* degradation handling
+* observability
+* metrics
+* security boundaries
+
+Add integration tests for:
+
+* AG-001 integration
+* AG-002
+* AG-003
+* AG-004
+* LLM
+* Agent Platform
+* Coordination
+* all five AI teams
+* runtime
+
+Do not weaken existing tests.
+
+Do not increase test timeouts unnecessarily.
+
+Do not modify unrelated tests merely to make the suite pass.
+
+---
+
+# 27. FAILURE INJECTION
+
+Add deterministic tests for:
+
+* memory failure
+* knowledge failure
+* tool failure
+* LLM failure
+* agent failure
+* coordination failure
+* authorization failure
+* timeout
+* cancellation
+
+Verify correct classification and safe recovery/degradation.
+
+---
+
+# 28. NO FABRICATED DATA
+
+This rule is mandatory.
+
+The AIOS must never fabricate:
+
+* metrics
+* marketplace statistics
+* user data
+* memory
+* knowledge
+* tool results
+* agent results
+* health status
+
+If required data is unavailable:
+
+```text
+dataSufficient = false
+```
+
+or the repository's existing equivalent must be used.
+
+---
+
+# 29. CONFIGURATION
+
+Add only required configuration.
+
+Follow existing:
+
+```text
+src/app/env.ts
+```
+
+and configuration conventions.
+
+All configuration must be:
+
+* schema validated
+* bounded
+* documented
+* fail-closed where security-sensitive
+
+Avoid adding unnecessary environment variables.
+
+Provide sensible development defaults where safe.
+
+---
+
+# 30. DOCUMENTATION
+
+Create:
+
+```text
+docs/sprint26-production-ai-operating-system-v1.md
+```
+
+Document:
+
+1. Sprint objective
+2. Existing architecture reused
+3. AIOS architecture
+4. Request lifecycle
+5. AG-001 relationship
+6. Memory integration
+7. Knowledge integration
+8. Tool integration
+9. LLM integration
+10. Agent Platform integration
+11. Coordination integration
+12. Team routing
+13. Security boundaries
+14. Cancellation/deadline
+15. Error model
+16. Observability
+17. Metrics
+18. Runtime API
+19. Health/readiness
+20. Idempotency
+21. Test coverage
+22. Known limitations
+23. Deferred work
+24. Production-readiness assessment
+
+Update relevant README/docs only when genuinely necessary.
+
+---
+
+# 31. ARCHITECTURAL RULES
+
+MUST NOT:
+
+* create another orchestrator
+* create another memory system
+* create another knowledge system
+* create another tool registry
+* create another agent registry
+* create another coordination engine
+* bypass AG-001
+* bypass AgentPlatformGateway
+* bypass AG-004
+* directly access AG-002 database
+* directly access AG-003 database
+* allow arbitrary tools
+* allow AI to perform admin mutations
+* leak secrets
+* fabricate data
+* weaken existing security
+* remove existing tests
+* delete working architecture
+
+---
+
+# 32. PERFORMANCE
+
+Keep the implementation suitable for the existing development machine.
+
+Avoid:
+
+* unnecessary workers
+* unbounded queues
+* excessive parallelism
+* huge in-memory caches
+* huge test fixtures
+* unnecessary external API calls
+
+Use bounded concurrency and existing resource limits.
+
+---
+
+# 33. BACKWARD COMPATIBILITY
+
+All existing functionality must continue to work.
+
+The following must remain green:
+
+```bash
+npx tsc --noEmit
+npx eslint .
+npx prettier --check .
+npx vitest run
+npm run build
+```
+
+Do not introduce breaking changes to existing public contracts unless absolutely necessary.
+
+If a contract must change:
+
+* update all consumers
+* add regression tests
+* document the change
+
+---
+
+# 34. RUNTIME VERIFICATION
+
+After implementation, start the application using the repository's normal development command.
+
+Verify:
+
+```text
+/healthz
+```
+
+and relevant AIOS status endpoint.
+
+Execute real runtime requests for:
+
+* client
+* freelancer
+* marketplace
+* marketing
+* admin
+* multi-agent
+* deterministic/LLM-disabled
+
+Verify the request actually travels through the intended architecture.
+
+Do not merely test mocked service methods.
+
+---
+
+# 35. FINAL TEST MATRIX
+
+Before declaring Sprint 26 complete:
+
+### Static
+
+* TypeScript: PASS
+* ESLint: PASS
+* Prettier: PASS
+
+### Tests
+
+* Existing full suite: PASS
+* New AIOS unit tests: PASS
+* New AIOS integration tests: PASS
+* Runtime tests: PASS
+* Neon tests: PASS where applicable
+
+### Build
+
+```bash
+npm run build
+```
+
+must pass.
+
+### Runtime
+
+* `/healthz`: healthy
+* AIOS status: healthy
+* request endpoint: working
+* deterministic workflow: working
+* multi-agent workflow: working
+* cancellation: working
+* timeout: working
+* authorization: working
+
+---
+
+# 36. TEST COUNT HONESTY
+
+At the end report exact numbers:
+
+```text
+Files:
+Tests:
+Passed:
+Failed:
+Skipped:
+```
+
+Do not estimate.
+
+Do not claim tests passed unless they actually passed.
+
+---
+
+# 37. GIT SAFETY
+
+Do NOT automatically commit or push.
+
+After all implementation and verification is complete, report:
+
+```text
+git status
+git diff --stat
+```
+
+and summarize changed files.
+
+The user will decide whether to commit/push.
+
+---
+
+# 38. IMPLEMENTATION APPROACH
+
+Work directly in the existing repository.
+
+First inspect.
+
+Then implement.
+
+Then test incrementally.
+
+Then run the complete gates.
+
+Fix only real Sprint-26-related issues.
+
+Do not refactor unrelated legacy code.
+
+Do not stop after creating scaffolding.
+
+The feature must be fully wired and executable.
+
+---
+
+# 39. DEFINITION OF DONE
+
+Sprint 26 is complete only when:
+
+* [ ] AIOS module exists
+* [ ] AIOS gateway exists
+* [ ] unified request/response contracts exist
+* [ ] request validation exists
+* [ ] AIOS wraps AG-001 rather than replacing it
+* [ ] AG-002 integration works
+* [ ] AG-003 integration works
+* [ ] AG-004 integration works
+* [ ] LLM integration works
+* [ ] agentic loop remains integrated
+* [ ] Agent Platform gateway remains enforced
+* [ ] Coordination remains enforced
+* [ ] all five AI teams can execute through the unified path
+* [ ] deterministic-first behavior works
+* [ ] authorization works
+* [ ] security boundaries work
+* [ ] cancellation works
+* [ ] timeout works
+* [ ] partial failure works
+* [ ] response normalization works
+* [ ] events work
+* [ ] metrics work
+* [ ] runtime API works
+* [ ] health/readiness works
+* [ ] tests cover the major paths
+* [ ] full test suite passes
+* [ ] typecheck passes
+* [ ] lint passes
+* [ ] prettier passes
+* [ ] build passes
+* [ ] documentation is complete
+* [ ] no fabricated data
+* [ ] no architectural bypasses
+* [ ] no unrelated regressions
+* [ ] git changes are reviewed
+
+---
+
+# 40. FINAL OUTPUT
+
+At the end provide a concise Sprint 26 completion report containing:
+
+## Implementation
+
+* modules/files created
+* modules/files modified
+* major capabilities
+
+## Architecture
+
+Explain the final:
+
+```text
+Runtime
+→ AIOS Gateway
+→ AG-001
+→ Context
+→ Routing
+→ Agent Platform
+→ Coordination
+→ AI Teams
+→ AG-002/003/004
+→ LLM
+→ Response
+```
+
+## Security
+
+List implemented protections.
+
+## Tests
+
+Provide exact:
+
+* test files
+* test count
+* passed
+* failed
+* skipped
+
+## Quality Gates
+
+Report:
+
+```text
+TypeScript:
+ESLint:
+Prettier:
+Vitest:
+Build:
+Runtime:
+```
+
+## Git
+
+Report:
+
+```text
+git status
+git diff --stat
+```
+
+Do not commit or push automatically.
+
+---
+
+# FINAL INSTRUCTION
+
+Implement Sprint 26 completely.
+
+Do not merely explain what should be done.
+
+Do not ask me to manually implement pieces.
+
+Inspect the existing repository, reuse existing architecture, write the code, tests, integration, runtime wiring, documentation, and verification.
+
+If an architectural conflict is discovered, prefer the existing Sprint 1–25 architecture and make the smallest compatible change.
+
+Do not invent infrastructure that already exists.
+
+Do not fabricate test results.
+
+Proceed with implementation now.

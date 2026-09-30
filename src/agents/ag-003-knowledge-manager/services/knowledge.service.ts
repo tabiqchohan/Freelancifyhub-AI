@@ -8,6 +8,7 @@ import type {
   KnowledgeId,
   KnowledgeMetadata,
   KnowledgeNamespace,
+  KnowledgeNamespaceRecord,
   KnowledgePagination,
   KnowledgeSourceMetadata,
   KnowledgeVersion,
@@ -20,6 +21,7 @@ import type {
   KnowledgeSecurityLevel,
 } from '../enums/index.js';
 import { KnowledgeLifecycleState as KnowledgeLifecycleStateValue } from '../enums/index.js';
+import { KnowledgeSecurityLevel as KnowledgeSecurityLevelValue } from '../enums/index.js';
 import { createKnowledgeId, createTraceId, nowIso } from '../utils/ids.js';
 import { normalizeKnowledgeInput } from '../normalization/index.js';
 import { chunkDocument } from '../chunking/index.js';
@@ -29,6 +31,7 @@ import {
   type KnowledgeActor,
   type KnowledgeAuthorizationService,
   DefaultKnowledgeAuthorizationService,
+  knowledgeGroupHasPermission,
 } from '../security/index.js';
 import { KnowledgePermission } from '../enums/index.js';
 import type { KnowledgeEventLog } from '../events/index.js';
@@ -44,6 +47,7 @@ import {
 } from '../errors/index.js';
 import {
   assertContentWithinLimits,
+  assertKnowledgeIdentifier,
   assertMetadataWithinLimits,
   sizeLimitsFromConfig,
 } from '../validators/index.js';
@@ -68,6 +72,30 @@ export interface KnowledgeRepository {
   getChunksByDocumentId(documentId: string): Promise<readonly KnowledgeChunk[]>;
   healthAsync(): Promise<{ healthy: boolean; message: string }>;
   eraseByNamespace(namespace: string): Promise<number>;
+  /**
+   * Sprint 35 F-1 — reads the persisted namespace authorization record.
+   * Returns `undefined` when the namespace has never been claimed.
+   */
+  getNamespaceRecord(namespace: string): Promise<KnowledgeNamespaceRecord | undefined>;
+  /**
+   * Sprint 35 F-1 — atomically claims ownership of an unclaimed namespace.
+   *
+   * Returns the persisted record. When the namespace is already claimed by a
+   * *different* actor the claim is refused (`claimed: false`) so a concurrent
+   * or forged self-grant can never take over an existing namespace. Re-claiming
+   * by the existing owner is idempotent.
+   */
+  claimNamespace(
+    namespace: string,
+    actorId: string,
+    at: string,
+  ): Promise<{ claimed: boolean; record: KnowledgeNamespaceRecord }>;
+  /**
+   * Sprint 35 F-1 — grants an additional member to an existing namespace.
+   * Returns `false` when the namespace does not exist (fail-closed) so a caller
+   * cannot materialize a namespace as a side effect of adding a member.
+   */
+  addNamespaceMember(namespace: string, actorId: string, at: string): Promise<boolean>;
 }
 
 /** Dependencies for the knowledge service. */
@@ -89,7 +117,12 @@ export interface CreateKnowledgeInput {
   readonly source: KnowledgeSourceMetadata;
   readonly metadata?: KnowledgeMetadata;
   readonly actorGroup: KnowledgeActorGroup;
-  readonly actorId?: string;
+  /**
+   * Sprint 35 F-1 — required. The actor id is the key that persisted namespace
+   * ownership/membership is resolved against, so an operation whose actor
+   * cannot be established is denied rather than attributed to a default.
+   */
+  readonly actorId: string;
   readonly traceId?: TraceId;
 }
 
@@ -103,7 +136,8 @@ export interface CreateKnowledgeVersionInput {
   readonly source: KnowledgeSourceMetadata;
   readonly metadata?: KnowledgeMetadata;
   readonly actorGroup: KnowledgeActorGroup;
-  readonly actorId?: string;
+  /** Sprint 35 F-1 — required; see {@link CreateKnowledgeInput.actorId}. */
+  readonly actorId: string;
   readonly traceId?: TraceId;
 }
 
@@ -112,7 +146,8 @@ export interface KnowledgeLifecycleInput {
   readonly documentId: KnowledgeId;
   readonly targetState: KnowledgeLifecycleState;
   readonly actorGroup: KnowledgeActorGroup;
-  readonly actorId?: string;
+  /** Sprint 35 F-1 — required; see {@link CreateKnowledgeInput.actorId}. */
+  readonly actorId: string;
   readonly reason?: string;
   readonly traceId?: TraceId;
 }
@@ -122,7 +157,8 @@ export interface KnowledgeSearchInput {
   readonly query: string;
   readonly namespace: KnowledgeNamespace;
   readonly actorGroup: KnowledgeActorGroup;
-  readonly actorId?: string;
+  /** Sprint 35 F-1 — required; see {@link CreateKnowledgeInput.actorId}. */
+  readonly actorId: string;
   readonly maxResults?: number;
   readonly namespaces?: readonly KnowledgeNamespace[];
 }
@@ -132,6 +168,12 @@ export interface KnowledgeSearchResult {
   readonly documents: readonly KnowledgeDocument[];
   readonly total: number;
 }
+
+/**
+ * Sprint 35 (Phase 14) — hard ceiling on how many namespaces a single search may
+ * span, so a caller cannot force unbounded per-namespace repository work.
+ */
+const MAX_SEARCH_NAMESPACES = 32;
 
 /**
  * The main Knowledge Manager service. Orchestrates CRUD, versioning, lifecycle,
@@ -180,11 +222,12 @@ export class KnowledgeManagerService {
       });
     }
 
-    const actor: KnowledgeActor = {
-      group: input.actorGroup,
-      id: input.actorId,
-      namespaces: [input.namespace],
-    };
+    const actor: KnowledgeActor = await this.claimAndScope(
+      input.actorGroup,
+      input.actorId,
+      input.namespace,
+      nowIso(),
+    );
 
     this.assertAuthorized(actor, KnowledgePermission.Create, {
       namespace: input.namespace,
@@ -207,15 +250,16 @@ export class KnowledgeManagerService {
       contentHash: normalized.contentHash,
       createdAt: at,
       updatedAt: at,
-      createdBy: input.actorId ?? 'system',
-      updatedBy: input.actorId ?? 'system',
+      // Sprint 35 F-1 — attributed to the established actor, never a default.
+      createdBy: input.actorId,
+      updatedBy: input.actorId,
       traceId,
     };
 
     const created = await this.repository.create(document);
 
     // Create initial version
-    const version = createInitialVersion(created, input.actorId ?? 'system');
+    const version = createInitialVersion(created, input.actorId);
     await this.repository.createVersion(version);
 
     // Create chunks
@@ -260,16 +304,16 @@ export class KnowledgeManagerService {
   async getDocument(
     id: KnowledgeId,
     actorGroup: KnowledgeActorGroup,
-    actorId?: string,
+    actorId: string,
   ): Promise<KnowledgeDocument | undefined> {
+    assertKnowledgeIdentifier(id, 'documentId');
     const doc = await this.repository.getById(id);
     if (doc === undefined) return undefined;
 
-    const actor: KnowledgeActor = {
-      group: actorGroup,
-      id: actorId,
-      namespaces: [doc.namespace],
-    };
+    // Sprint 35 F-1 — scope comes from persisted namespace membership, not from
+    // the document being fetched. Fetching a document by (guessed) id therefore
+    // no longer confers access to its namespace.
+    const actor: KnowledgeActor = await this.resolveScopedActor(actorGroup, actorId, doc.namespace);
 
     const decision = this.authorizationService.authorize({
       actor,
@@ -295,21 +339,24 @@ export class KnowledgeManagerService {
   async createVersion(
     input: CreateKnowledgeVersionInput,
   ): Promise<{ document: KnowledgeDocument; version: KnowledgeVersion }> {
+    assertKnowledgeIdentifier(input.documentId, 'documentId');
     const doc = await this.repository.getById(input.documentId);
     if (doc === undefined) {
       throw new KnowledgeNotFoundError(`Document ${input.documentId} not found`);
     }
 
-    const actor: KnowledgeActor = {
-      group: input.actorGroup,
-      id: input.actorId,
-      namespaces: [doc.namespace],
-    };
+    // Sprint 35 F-1 — persisted namespace scope + ownership enforcement.
+    const actor: KnowledgeActor = await this.resolveScopedActor(
+      input.actorGroup,
+      input.actorId,
+      doc.namespace,
+    );
 
     this.assertAuthorized(actor, KnowledgePermission.UpdateVersion, {
       namespace: doc.namespace,
       securityLevel: doc.securityLevel,
       lifecycle: doc.lifecycle,
+      createdBy: doc.createdBy,
     });
 
     const currentVersion = await this.repository.getCurrentVersion(input.documentId);
@@ -343,7 +390,7 @@ export class KnowledgeManagerService {
       normalized.contentType,
       normalized.securityLevel,
       normalized.source,
-      input.actorId ?? 'system',
+      input.actorId,
       at,
       traceId,
     );
@@ -361,7 +408,7 @@ export class KnowledgeManagerService {
       version: newVersion.versionNumber,
       contentHash: normalized.contentHash,
       updatedAt: at,
-      updatedBy: input.actorId ?? 'system',
+      updatedBy: input.actorId,
       traceId,
     };
     await this.repository.updateDocument(updatedDoc);
@@ -401,31 +448,46 @@ export class KnowledgeManagerService {
     return { document: updatedDoc, version: newVersion };
   }
 
-  /** Get all versions for a document. */
-  async listVersions(documentId: KnowledgeId): Promise<readonly KnowledgeVersion[]> {
+  /**
+   * Get all versions for a document.
+   *
+   * Sprint 35 F-1 — version history is knowledge content, so it is authorized
+   * against the same persisted namespace scope as the document itself.
+   */
+  async listVersions(
+    documentId: KnowledgeId,
+    actorGroup: KnowledgeActorGroup,
+    actorId: string,
+  ): Promise<readonly KnowledgeVersion[]> {
+    await this.assertDocumentReadable(documentId, actorGroup, actorId);
     return this.repository.listVersions(documentId);
   }
 
-  /** Get a specific version. */
+  /** Get a specific version. Sprint 35 F-1 — authorized like the document. */
   async getVersion(
     documentId: KnowledgeId,
     versionNumber: number,
+    actorGroup: KnowledgeActorGroup,
+    actorId: string,
   ): Promise<KnowledgeVersion | undefined> {
+    await this.assertDocumentReadable(documentId, actorGroup, actorId);
     return this.repository.getVersion(documentId, versionNumber);
   }
 
   /** Apply a lifecycle transition. */
   async transitionLifecycle(input: KnowledgeLifecycleInput): Promise<KnowledgeDocument> {
+    assertKnowledgeIdentifier(input.documentId, 'documentId');
     const doc = await this.repository.getById(input.documentId);
     if (doc === undefined) {
       throw new KnowledgeNotFoundError(`Document ${input.documentId} not found`);
     }
 
-    const actor: KnowledgeActor = {
-      group: input.actorGroup,
-      id: input.actorId,
-      namespaces: [doc.namespace],
-    };
+    // Sprint 35 F-1 — persisted namespace scope + ownership enforcement.
+    const actor: KnowledgeActor = await this.resolveScopedActor(
+      input.actorGroup,
+      input.actorId,
+      doc.namespace,
+    );
 
     const perm =
       input.targetState === KnowledgeLifecycleStateValue.Archived
@@ -440,6 +502,7 @@ export class KnowledgeManagerService {
       namespace: doc.namespace,
       securityLevel: doc.securityLevel,
       lifecycle: doc.lifecycle,
+      createdBy: doc.createdBy,
     });
 
     const traceId = input.traceId ?? createTraceId();
@@ -490,9 +553,17 @@ export class KnowledgeManagerService {
 
   /** Search knowledge documents with retrieval scoring. */
   async search(input: KnowledgeSearchInput): Promise<KnowledgeSearchResult> {
-    const namespaces = input.namespaces ?? [input.namespace];
+    assertKnowledgeIdentifier(input.namespace, 'namespace');
+    const requested = input.namespaces ?? [input.namespace];
+    // Sprint 35 (Phase 14) — bound and validate every requested namespace so a
+    // caller cannot submit an unbounded/garbage namespace list.
+    const namespaces = requested.slice(0, MAX_SEARCH_NAMESPACES);
+    for (const ns of namespaces) {
+      assertKnowledgeIdentifier(ns, 'namespace');
+    }
 
-    // Collect all documents across allowed namespaces
+    // Collect all documents across the requested namespaces. Membership decides
+    // visibility below; this only bounds the work.
     const allDocs: KnowledgeDocument[] = [];
     for (const ns of namespaces) {
       const page = await this.repository.list(
@@ -502,14 +573,16 @@ export class KnowledgeManagerService {
       allDocs.push(...page.items);
     }
 
-    // Authorization filter: only return docs the actor can read
+    // Sprint 35 F-1 — authorization filter resolves each document's scope from
+    // persisted namespace membership. Previously the actor was granted the whole
+    // requested namespace list, so naming a namespace was enough to read it.
     const authorizedDocs: KnowledgeDocument[] = [];
     for (const doc of allDocs) {
-      const actor: KnowledgeActor = {
-        group: input.actorGroup,
-        id: input.actorId,
-        namespaces,
-      };
+      const actor: KnowledgeActor = await this.resolveScopedActor(
+        input.actorGroup,
+        input.actorId,
+        doc.namespace,
+      );
       const decision = this.authorizationService.authorize({
         actor,
         permission: KnowledgePermission.Read,
@@ -566,16 +639,99 @@ export class KnowledgeManagerService {
     return { documents: results, total: results.length };
   }
 
-  /** List documents with filtering and pagination. */
+  /**
+   * List documents with filtering and pagination.
+   *
+   * Sprint 35 F-1 — listing is authorized against persisted namespace
+   * membership. A filter naming namespaces the actor is not a member of yields
+   * no rows for those namespaces (fail-closed) instead of their contents.
+   */
   async listDocuments(
     filter: KnowledgeDocumentFilter,
     pagination: KnowledgePagination,
+    actorGroup?: KnowledgeActorGroup,
+    actorId?: string,
   ): Promise<KnowledgeDocumentPage> {
-    return this.repository.list(filter, pagination);
+    if (actorGroup === undefined) {
+      // Fail-closed: without a trusted actor no namespace can be authorized.
+      return { items: [], total: 0, offset: 0, limit: 0, hasMore: false };
+    }
+
+    // Sprint 35 F-1 — every returned document is authorized on its *own*
+    // security level and lifecycle. Namespace membership alone is not enough:
+    // a member with Internal clearance must not receive Confidential rows, and
+    // nothing in a `Deleted` state may ever be listed.
+    const visibleIn = async (docs: readonly KnowledgeDocument[]): Promise<KnowledgeDocument[]> => {
+      const visible: KnowledgeDocument[] = [];
+      for (const doc of docs) {
+        const actor = await this.resolveScopedActor(actorGroup, actorId, doc.namespace);
+        const decision = this.authorizationService.authorize({
+          actor,
+          permission: KnowledgePermission.Read,
+          target: {
+            namespace: doc.namespace,
+            securityLevel: doc.securityLevel,
+            lifecycle: doc.lifecycle,
+          },
+        });
+        if (decision.allowed) visible.push(doc);
+      }
+      return visible;
+    };
+
+    const page = await this.repository.list(filter, pagination);
+    const items = await visibleIn(page.items);
+
+    if (filter.namespace !== undefined) {
+      // A namespace-filtered page is authorized per document, so the totals
+      // describe only rows the actor may actually read.
+      const scanned = items.length;
+      return {
+        items,
+        total: scanned,
+        offset: pagination.offset,
+        limit: pagination.limit,
+        hasMore: page.hasMore || scanned < page.items.length,
+      };
+    }
+
+    // Sprint 35 F-1 — unscoped listing. Reporting the repository's `total` or
+    // `hasMore` would disclose the number of documents in namespaces the actor
+    // cannot read, so the count is recomputed from authorized rows only and is
+    // deliberately an under-count when the scan was bounded.
+    const bounded = items.length < page.items.length;
+    return {
+      items,
+      total: items.length,
+      offset: pagination.offset,
+      limit: pagination.limit,
+      hasMore: page.hasMore || bounded,
+    };
   }
 
-  /** Delete a document. */
-  async deleteDocument(id: KnowledgeId): Promise<boolean> {
+  /**
+   * Delete a document.
+   *
+   * Sprint 35 F-1 — this was an unauthenticated delete of any document by id.
+   * It is now authorized against persisted namespace membership and ownership.
+   */
+  async deleteDocument(
+    id: KnowledgeId,
+    actorGroup: KnowledgeActorGroup,
+    actorId: string,
+  ): Promise<boolean> {
+    assertKnowledgeIdentifier(id, 'documentId');
+    const doc = await this.repository.getById(id);
+    if (doc === undefined) return false;
+
+    const actor: KnowledgeActor = await this.resolveScopedActor(actorGroup, actorId, doc.namespace);
+    this.assertAuthorized(actor, KnowledgePermission.DeleteErase, {
+      namespace: doc.namespace,
+      securityLevel: doc.securityLevel,
+      lifecycle: doc.lifecycle,
+      createdBy: doc.createdBy,
+    });
+
     return this.repository.deleteDocument(id);
   }
 
@@ -584,8 +740,25 @@ export class KnowledgeManagerService {
     return this.repository.healthAsync();
   }
 
-  /** Erase all knowledge in a namespace. */
-  async eraseByNamespace(namespace: string): Promise<number> {
+  /**
+   * Erase all knowledge in a namespace.
+   *
+   * Sprint 35 F-1 — destructive bulk operation, previously callable with no
+   * authorization at all. Requires namespace membership plus the erase
+   * capability.
+   */
+  async eraseByNamespace(
+    namespace: string,
+    actorGroup: KnowledgeActorGroup,
+    actorId: string,
+  ): Promise<number> {
+    assertKnowledgeIdentifier(namespace, 'namespace');
+    const actor = await this.resolveScopedActor(actorGroup, actorId, namespace);
+    this.assertAuthorized(actor, KnowledgePermission.DeleteErase, {
+      namespace,
+      securityLevel: KnowledgeSecurityLevelValue.Internal,
+      lifecycle: KnowledgeLifecycleStateValue.Active,
+    });
     return this.repository.eraseByNamespace(namespace);
   }
 
@@ -593,7 +766,7 @@ export class KnowledgeManagerService {
   private assertAuthorized(
     actor: KnowledgeActor,
     permission: KnowledgePermission,
-    target: { namespace: string; securityLevel: string; lifecycle: string },
+    target: { namespace: string; securityLevel: string; lifecycle: string; createdBy?: string },
   ): void {
     const decision = this.authorizationService.authorize({
       actor,
@@ -602,6 +775,7 @@ export class KnowledgeManagerService {
         namespace: target.namespace as KnowledgeNamespace,
         securityLevel: target.securityLevel as KnowledgeSecurityLevel,
         lifecycle: target.lifecycle as KnowledgeLifecycleState,
+        createdBy: target.createdBy,
       },
     });
 
@@ -610,6 +784,108 @@ export class KnowledgeManagerService {
         code: decision.code,
       });
     }
+  }
+
+  /**
+   * Sprint 35 F-1 — asserts read access to a document via persisted namespace
+   * scope. Shared by the version-history read paths.
+   */
+  private async assertDocumentReadable(
+    documentId: KnowledgeId,
+    actorGroup: KnowledgeActorGroup,
+    actorId: string,
+  ): Promise<KnowledgeDocument> {
+    assertKnowledgeIdentifier(documentId, 'documentId');
+    const doc = await this.repository.getById(documentId);
+    if (doc === undefined) {
+      throw new KnowledgeNotFoundError(`Document ${documentId} not found`);
+    }
+    const actor = await this.resolveScopedActor(actorGroup, actorId, doc.namespace);
+    this.assertAuthorized(actor, KnowledgePermission.Read, {
+      namespace: doc.namespace,
+      securityLevel: doc.securityLevel,
+      lifecycle: doc.lifecycle,
+    });
+    return doc;
+  }
+
+  /**
+   * Sprint 35 F-1 — resolves an actor's namespace scope from *persisted*
+   * authorization state instead of from the request being served.
+   *
+   * Before the fix this method's callers assigned `actor.namespaces` to the
+   * namespace they were about to touch, which made
+   * {@link KnowledgeNamespaceScopePolicy} self-satisfying: any caller could
+   * reach any namespace (and any document by guessed id) simply by naming it.
+   *
+   * Now the scope is granted only when the caller is the persisted owner or an
+   * explicit member of the namespace. Anything else resolves to an *empty*
+   * scope, which the existing fail-closed policy turns into a denial. Fail-closed
+   * also covers: malformed identifiers, a missing actor id, and a namespace that
+   * has never been claimed.
+   */
+  private async resolveScopedActor(
+    actorGroup: KnowledgeActorGroup,
+    actorId: string | undefined,
+    targetNamespace: string,
+  ): Promise<KnowledgeActor> {
+    assertKnowledgeIdentifier(targetNamespace, 'namespace');
+
+    // Fail closed: without a trustworthy actor id no scope can be established.
+    if (actorId === undefined || actorId.length === 0) {
+      return { group: actorGroup, id: actorId, namespaces: [] };
+    }
+    try {
+      assertKnowledgeIdentifier(actorId, 'actorId');
+    } catch {
+      return { group: actorGroup, id: actorId, namespaces: [] };
+    }
+
+    const record = await this.repository.getNamespaceRecord(targetNamespace);
+    if (record === undefined) {
+      return { group: actorGroup, id: actorId, namespaces: [] };
+    }
+    const isMember = record.ownerActorId === actorId || record.memberActorIds.includes(actorId);
+    return {
+      group: actorGroup,
+      id: actorId,
+      namespaces: isMember ? [targetNamespace] : [],
+    };
+  }
+
+  /**
+   * Sprint 35 F-1 — claims an unclaimed namespace on behalf of the creating
+   * actor, then resolves scope exactly as any other operation does.
+   *
+   * The claim is atomic in the repository, so a forged or concurrent self-grant
+   * against an *existing* namespace loses and is subsequently denied by
+   * {@link resolveScopedActor}. Claiming is itself permission-gated so a
+   * read-only group cannot materialize namespace state.
+   */
+  private async claimAndScope(
+    actorGroup: KnowledgeActorGroup,
+    actorId: string | undefined,
+    namespace: string,
+    at: string,
+  ): Promise<KnowledgeActor> {
+    assertKnowledgeIdentifier(namespace, 'namespace');
+    if (actorId === undefined || actorId.length === 0) {
+      return { group: actorGroup, id: actorId, namespaces: [] };
+    }
+    assertKnowledgeIdentifier(actorId, 'actorId');
+
+    if (!knowledgeGroupHasPermission(actorGroup, KnowledgePermission.Create)) {
+      return { group: actorGroup, id: actorId, namespaces: [] };
+    }
+
+    const existing = await this.repository.getNamespaceRecord(namespace);
+    if (existing === undefined) {
+      // `claimed` is intentionally ignored here: a refused claim must not grant
+      // scope, and resolveScopedActor re-reads the persisted record so the loser
+      // of a concurrent claim resolves to an empty scope (fail-closed).
+      await this.repository.claimNamespace(namespace, actorId, at);
+    }
+    return this.resolveScopedActor(actorGroup, actorId, namespace);
   }
 
   private emitEvent(event: KnowledgeEvent): void {

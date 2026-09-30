@@ -42,6 +42,13 @@ export class KnowledgeContextProviderAdapter implements KnowledgeContextProvider
       return [];
     }
 
+    // Sprint 35 F-1 — fail closed. AG-003 resolves namespace scope from persisted
+    // membership keyed by actor id, so a load without an established actor must
+    // not reach the knowledge service at all.
+    if (input.actorId === undefined || input.actorId.length === 0) {
+      return [];
+    }
+
     try {
       const searchResult = await this.knowledgeService.search({
         query: input.query ?? '',

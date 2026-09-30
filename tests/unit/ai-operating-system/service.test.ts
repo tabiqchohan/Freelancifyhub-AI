@@ -94,7 +94,10 @@ describe('AIOS execution service error preservation (Sprint 33)', () => {
     const catcher = await service.dispatch(ctx(target), exec(target));
     expect(catcher.status).toBe(AggregationStatus.Failed);
     expect(catcher.error?.code).toBe(AiosErrorCode.ExecutionFailed);
-    expect(catcher.error?.message).toBe('tail exploded');
+    // Sprint 35 F-5 — the internal message 'tail exploded' must not reach the
+    // caller; only the stable code and a bounded safe message are published.
+    expect(catcher.error?.message).toBe('Request failed');
+    expect(catcher.error?.message).not.toContain('tail exploded');
     expect(service.lastResult('req-1')).toBe(catcher);
   });
 
@@ -162,7 +165,11 @@ describe('AIOS execution service team dispatch (Sprint 33)', () => {
     const target = { kind: 'client' } as AiosExecutionTarget;
     const catcher = await service.dispatch(ctx(target), exec(target));
     expect(catcher.status).toBe(AggregationStatus.Failed);
-    expect(catcher.error?.message).toBe('client tail failed');
+    // Sprint 35 F-5 — an arbitrary thrown Error is an internal failure, so the
+    // message is replaced with the bounded safe string rather than echoed.
+    expect(catcher.error?.code).toBe(AiosErrorCode.ExecutionFailed);
+    expect(catcher.error?.message).toBe('Request failed');
+    expect(catcher.error?.message).not.toContain('client tail failed');
     expect(service.lastResult('req-1')).toBe(catcher);
   });
 });
