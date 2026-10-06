@@ -132,7 +132,11 @@ export class AIReasoningService implements AIReasoningServiceContract {
       const bounded = buildReasoningMessages(request, this.config);
 
       const response = await generateWithRetry(
-        () =>
+        // Prompts15 Phase 3 — the guard's clamped per-attempt budget is forwarded
+        // to the provider so its own abort timer fires at the same instant the
+        // retry chain gives up, instead of leaving a fetch running past the
+        // deadline after the guard abandons it.
+        (budget) =>
           this.provider.generate(
             {
               messages: bounded.messages,
@@ -146,7 +150,7 @@ export class AIReasoningService implements AIReasoningServiceContract {
             },
             {
               signal: options.signal,
-              timeoutMs: options.timeoutMs,
+              timeoutMs: budget.timeoutMs,
               requestId: correlationId,
               maxRetries: options.maxRetries,
             },
@@ -159,6 +163,7 @@ export class AIReasoningService implements AIReasoningServiceContract {
           },
           timeoutMs: options.timeoutMs ?? this.config.LLM_TIMEOUT_MS,
           signal: options.signal,
+          deadlineAt: options.deadlineAt,
           sleep: this.retrySleep,
           onRetry: (info) => {
             retries += 1;

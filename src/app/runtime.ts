@@ -37,6 +37,21 @@ import type { AiosRequest } from '../ai-operating-system/index.js';
  * infrastructure health checks (Sprint 34). */
 export const READINESS_PROBE_TIMEOUT_MS = 2_000;
 
+/**
+ * Prompts15 Phase 9 — bounded graceful-shutdown drain window.
+ *
+ * Render (and any orchestrator) sends SIGTERM and then force-kills the process
+ * once its grace period expires. This window keeps shutdown comfortably inside
+ * that budget while still allowing genuinely in-flight agent work to finish.
+ */
+export const SHUTDOWN_DRAIN_TIMEOUT_MS = 10_000;
+
+/** Options for {@link Runtime.shutdown}. */
+export interface ShutdownOptions {
+  /** Milliseconds to wait for in-flight work before forcing sockets closed. */
+  readonly drainTimeoutMs?: number;
+}
+
 /** Options for constructing the production HTTP runtime (Phase 7). */
 export interface ProductionRuntimeOptions {
   readonly composition: ProductionComposition;
@@ -500,17 +515,40 @@ export class ProductionRuntime {
     });
   }
 
-  /** Graceful shutdown: stop accepting, close storage handles. */
-  async shutdown(): Promise<void> {
+  /**
+   * Graceful shutdown: stop accepting, drain in-flight work, close storage handles.
+   *
+   * Prompts15 Phase 9 (Render / container readiness). `server.close()` alone is
+   * not sufficient on Node 18+: it stops new connections but waits indefinitely
+   * for idle keep-alive sockets to close on their own. An orchestrator such as
+   * Render sends SIGTERM and then force-kills the process when its grace window
+   * expires, so a pod held open by idle sockets is killed mid-drain and reports
+   * an unclean exit.
+   *
+   * The sequence is therefore:
+   *   1. `server.close()`          - stop accepting new connections.
+   *   2. `closeIdleConnections()`  - release sockets that are not mid-request.
+   *   3. bounded drain             - let genuinely active work finish.
+   *   4. `closeAllConnections()`   - if the drain window expires, force the rest
+   *                                 so the process can exit inside the window.
+   *   5. close storage handles     - release PostgreSQL pools.
+   */
+  async shutdown(options: ShutdownOptions = {}): Promise<void> {
     if (this.shuttingDown) {
       return;
     }
     this.shuttingDown = true;
-    this.logger.info('runtime shutdown initiated');
+    const drainTimeoutMs = options.drainTimeoutMs ?? SHUTDOWN_DRAIN_TIMEOUT_MS;
+    this.logger.info({ drainTimeoutMs }, 'runtime shutdown initiated');
 
     if (this.server !== undefined) {
-      await new Promise<void>((resolve) => {
-        this.server!.close(() => resolve());
+      const server = this.server;
+      const closed = new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+      server.closeIdleConnections();
+      await withDeadline(closed, drainTimeoutMs, () => {
+        server.closeAllConnections();
       });
     }
 
@@ -522,6 +560,55 @@ export class ProductionRuntime {
     }
   }
 
+  /**
+   * Prompts15 Phase 2 — bridges Node's request/response events to a single
+   * {@link AbortSignal}.
+   *
+   * `res.close` fires for both outcomes, so it is only treated as a disconnect
+   * when the response never finished writing; otherwise a normal completion
+   * would look like a cancellation and abort in-flight work that already
+   * succeeded.
+   */
+  private attachInboundAbort(
+    req: IncomingMessage,
+    res: ServerResponse,
+    requestId: string,
+  ): AbortSignal {
+    const controller = new AbortController();
+    let settled = false;
+
+    const abort = (reason: string): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      this.logger.info({ requestId, reason }, 'http request aborted');
+      controller.abort();
+    };
+
+    const onRequestAborted = (): void => abort('request_aborted');
+    const onResponseClose = (): void => {
+      if (!res.writableEnded) {
+        abort('response_closed');
+      }
+    };
+
+    req.once('aborted', onRequestAborted);
+    res.once('close', onResponseClose);
+    res.once('finish', () => {
+      settled = true;
+      req.removeListener('aborted', onRequestAborted);
+      res.removeListener('close', onResponseClose);
+    });
+    res.once('close', () => {
+      settled = true;
+      req.removeListener('aborted', onRequestAborted);
+      res.removeListener('close', onResponseClose);
+    });
+
+    return controller.signal;
+  }
+
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const startedAtMs = Date.now();
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
@@ -531,6 +618,12 @@ export class ProductionRuntime {
     const requestId =
       sanitizeRequestId(String(req.headers['x-request-id'] ?? '')) ?? `aios-${randomUUID()}`;
     res.setHeader('x-request-id', requestId);
+
+    // Prompts15 Phase 2 — a caller that hangs up must stop consuming provider
+    // budget. The signal fires on an aborted request stream or a response that
+    // closes before it finished, and is detached on every terminal outcome so a
+    // long-lived keep-alive connection never accumulates listeners.
+    const inbound = this.attachInboundAbort(req, res, requestId);
     res.on('finish', () => {
       this.logger.info(
         {
@@ -607,7 +700,7 @@ export class ProductionRuntime {
     }
 
     if (url.pathname === '/api/ai/request') {
-      return this.handleAiosRequest(req, res, caller);
+      return this.handleAiosRequest(req, res, caller, inbound);
     }
 
     if (url.pathname === '/api/ai/status') {
@@ -796,6 +889,7 @@ export class ProductionRuntime {
     req: IncomingMessage,
     res: ServerResponse,
     caller: AuthenticatedCaller,
+    signal: AbortSignal,
   ): Promise<void> {
     const body = await this.readJson<AiosRequestInput>(req);
     if (body === undefined) {
@@ -830,6 +924,10 @@ export class ProductionRuntime {
         idempotencyKey: body.idempotencyKey,
         timeoutMs: body.timeoutMs,
         metadata: body.metadata,
+        // Prompts15 Phase 2 — the disconnect signal travels with the request so
+        // the execution budget (and every downstream provider call) stops as
+        // soon as the caller is gone.
+        signal,
       },
     };
 
@@ -1358,12 +1456,19 @@ function constantTimeEquals(provided: unknown, expected: string): boolean {
  * when the deadline expires first; the in-flight probe is abandoned and its
  * handlers are detached so it cannot keep the process alive.
  */
-async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+async function withDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+  onTimeout?: () => void,
+): Promise<T | undefined> {
   return new Promise<T | undefined>((resolve) => {
     let settled = false;
     const timer = setTimeout(() => {
       if (!settled) {
         settled = true;
+        // Prompts15 Phase 9: let the caller react to an expired deadline, e.g.
+        // force-closing lingering sockets so shutdown can finish in time.
+        onTimeout?.();
         resolve(undefined);
       }
     }, ms);

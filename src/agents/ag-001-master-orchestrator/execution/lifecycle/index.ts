@@ -232,6 +232,9 @@ export class ExecutionLifecycle {
         inputs: resolvedInputs,
         policy: step.policy,
         traceId: this.run.traceId,
+        // Prompts15 Phase 2 — the run's cancellation signal travels with every
+        // step so the executor can abort in-flight provider work.
+        signal: this.run.signal,
       };
 
       let agentResult: Awaited<ReturnType<AgentExecutor['execute']>> | undefined;

@@ -10,6 +10,12 @@ export interface AgentExecutionRequest {
   readonly inputs: Readonly<Record<string, unknown>>;
   readonly policy: ExecutionPolicy;
   readonly traceId?: string;
+  /**
+   * Prompts15 Phase 2 — the owning execution's transport cancellation signal.
+   * Optional so existing callers stay source-compatible; when present the
+   * executor aborts its in-flight provider work on the caller's disconnect.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /** The result an agent executor returns (never external in Sprint 6). */

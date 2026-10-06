@@ -26,6 +26,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "validate:env": "tsx scripts/validate-env.ts",
+    "validate:env-example": "tsx scripts/check-env-example.ts",
     "prepare": "husky"
   },
   "dependencies": {

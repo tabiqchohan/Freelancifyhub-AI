@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { resolveTestDatabase } from '../../../src/lib/test-database-guard.js';
 import type { AddressInfo } from 'node:net';
 
 import { createProductionComposition } from '../../../src/app/composition-root.js';
@@ -7,8 +8,17 @@ import type { ProductionRuntime } from '../../../src/app/runtime.js';
 import type { ProductionComposition } from '../../../src/app/composition-root.js';
 import { parseCompiledEnv } from '../../../src/app/env.js';
 
-const DATABASE_URL = process.env.MEMORY_DATABASE_URL;
-const cn = DATABASE_URL && DATABASE_URL.trim().length > 0 ? describe : describe.skip;
+// Guarded (prompts13 Blocker 2): integration suites may only target an isolated
+// local test database and never fall back to the production MEMORY_DATABASE_URL.
+const testDb = resolveTestDatabase('durable runtime end-to-end integration suite');
+// This suite builds a real composition from parseCompiledEnv(), which reads
+// MEMORY_DATABASE_URL straight from the process environment. Point that at the
+// approved isolated database so the guard actually governs what is opened,
+// rather than only deciding whether to skip.
+if (testDb.enabled && testDb.url !== undefined) {
+  process.env.MEMORY_DATABASE_URL = testDb.url;
+}
+const cn = testDb.enabled ? describe : describe.skip;
 
 cn('Sprint 14 E2E - durable production runtime (Phase 9, Postgres-gated)', () => {
   let runtime: ProductionRuntime;

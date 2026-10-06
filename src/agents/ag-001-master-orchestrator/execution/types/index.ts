@@ -71,6 +71,11 @@ export interface ExecutionRequest {
   readonly traceId?: TraceId;
   /** Local, in-memory value store used to resolve plan references (prompt §10). */
   readonly inputs?: Readonly<Record<string, unknown>>;
+  /**
+   * Prompts15 Phase 2 — the caller's transport cancellation signal. When it
+   * aborts, the engine cancels the run so in-flight agent/provider work stops.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /** The execution-local context handed to the engine (prompt §1/§18). */
@@ -92,6 +97,11 @@ export interface ExecutionRun {
   readonly traceId?: TraceId;
   readonly createdAt: IsoTimestamp;
   readonly state: ExecutionState;
+  /**
+   * Prompts15 Phase 2 — the caller's transport signal, forwarded to every
+   * agent step so a disconnect aborts downstream provider work.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /** Per-step execution state tracked by the state manager (prompt §18). */

@@ -50,6 +50,12 @@ export interface OrchestrationRequest {
   readonly routingConstraints?: RoutingConstraints;
   /** Optional planning constraints honoured by the Execution Planner. */
   readonly planningConstraints?: ExecutionConstraints;
+  /**
+   * Prompts15 Phase 2 — the caller's transport cancellation signal. Never
+   * serialized; forwarded to the execution engine so a disconnect aborts
+   * in-flight agent and provider work.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /**

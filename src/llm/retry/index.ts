@@ -146,6 +146,16 @@ export type LLMRetryObserver = (info: {
   readonly error: unknown;
 }) => void;
 
+/**
+ * Prompts15 Phase 3 — per-attempt budget handed to the guarded attempt so the
+ * provider's own abort timer is clamped to the same value the guard uses.
+ * Without this the guard would abandon a fetch that kept running past the
+ * deadline, leaving the connection open.
+ */
+export interface LLMAttemptBudget {
+  readonly timeoutMs: number;
+}
+
 /** Options for {@link generateWithRetry}. */
 export interface GenerateWithRetryOptions {
   readonly retries: LLMRetryConfig;
@@ -154,6 +164,15 @@ export interface GenerateWithRetryOptions {
   /** Injectable sleep for deterministic tests (default: cancellable timeout). */
   readonly sleep?: (ms: number, signal: AbortSignal | undefined) => Promise<void>;
   readonly onRetry?: LLMRetryObserver;
+  /**
+   * Prompts15 Phase 3 — absolute deadline (epoch ms) covering every attempt and
+   * backoff window. `timeoutMs` then becomes a per-attempt ceiling rather than
+   * the total budget. When omitted the behaviour is unchanged (total budget =
+   * `timeoutMs` per attempt, retries bounded only by `maxRetries`).
+   */
+  readonly deadlineAt?: number;
+  /** Injectable clock for deterministic deadline tests. */
+  readonly now?: () => number;
 }
 
 /**
@@ -163,22 +182,48 @@ export interface GenerateWithRetryOptions {
  * retried with exponential backoff up to `maxRetries`. Cancellation during
  * backoff aborts with {@link LLMCancelledError}. Returns the first successful
  * value or rethrows the final classified {@link LLMError}.
+ *
+ * Prompts15 Phase 3/4 — when `deadlineAt` is set the whole chain is bounded:
+ * a new attempt is never started after the deadline, each attempt's timeout is
+ * clamped to the remaining budget, and a backoff that cannot fit before the
+ * deadline fails immediately instead of sleeping into it. Caller cancellation
+ * still wins over the deadline whenever it fires first.
  */
 export async function generateWithRetry<T>(
-  attempt: () => Promise<T>,
+  attempt: (budget: LLMAttemptBudget) => Promise<T>,
   options: GenerateWithRetryOptions,
 ): Promise<T> {
   const { retries, timeoutMs, signal } = options;
   const sleep = options.sleep ?? cancellableDelay;
+  const now = options.now ?? Date.now;
+  const deadlineAt = options.deadlineAt;
 
   let lastError: unknown | undefined;
 
   for (let attemptNumber = 1; ; attemptNumber += 1) {
+    // Caller cancellation is checked first so a disconnect is never reported as
+    // a deadline timeout (Prompts15 Phase 4).
     if (signal !== undefined && signal.aborted) {
       throw new LLMCancelledError('LLM request cancelled');
     }
 
-    const outcome = await runGuardedAttempt(attempt, timeoutMs, signal);
+    const remaining = deadlineAt === undefined ? undefined : Math.max(0, deadlineAt - now());
+    if (remaining !== undefined && remaining <= 0) {
+      throw new LLMTimeoutError('LLM request exceeded its deadline before another attempt', {
+        details: { deadlineAt },
+        cause: lastError,
+      });
+    }
+
+    // Per-attempt ceiling = configured timeout clamped to the remaining budget.
+    const effectiveTimeoutMs =
+      remaining === undefined ? timeoutMs : Math.max(1, Math.min(timeoutMs, remaining));
+
+    const outcome = await runGuardedAttempt(
+      () => attempt({ timeoutMs: effectiveTimeoutMs }),
+      effectiveTimeoutMs,
+      signal,
+    );
 
     if (outcome.outcome === 'ok') {
       return outcome.value;
@@ -190,8 +235,8 @@ export async function generateWithRetry<T>(
 
     let error: unknown;
     if (outcome.outcome === 'timeout') {
-      error = new LLMTimeoutError(`LLM request exceeded ${timeoutMs}ms timeout`, {
-        details: { timeoutMs },
+      error = new LLMTimeoutError(`LLM request exceeded ${effectiveTimeoutMs}ms timeout`, {
+        details: { timeoutMs: effectiveTimeoutMs },
       });
     } else {
       error = outcome.error;
@@ -208,6 +253,14 @@ export async function generateWithRetry<T>(
     }
 
     const delayMs = computeBackoffDelay(attemptNumber, retries.backoffBaseMs, retries.backoffMaxMs);
+    const budgetAfterBackoff = deadlineAt === undefined ? undefined : deadlineAt - now();
+    // Prompts15 Phase 3 — never sleep past the deadline; the chain ends here.
+    if (budgetAfterBackoff !== undefined && delayMs >= budgetAfterBackoff) {
+      throw new LLMTimeoutError('LLM request exceeded its deadline during retry backoff', {
+        details: { deadlineAt, delayMs },
+        cause: error,
+      });
+    }
     options.onRetry?.({ attempt: attemptNumber, delayMs, error });
     await sleep(delayMs, signal);
   }

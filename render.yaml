@@ -1,0 +1,65 @@
+services:
+  # Prompts15 Phase 11 — Render blueprint for the AI Operating System.
+  #
+  # Secrets are intentionally NOT given values here. Set them in the Render
+  # dashboard (or via `render` CLI secrets), never in this file. The service is
+  # fail-closed: with no AIOS_SERVICE_TOKEN every business endpoint is denied.
+  - type: web
+    name: freelancify-ai
+    runtime: node
+    plan: starter
+    region: oregon # keep colocated with the Neon primary region
+    branch: master
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /readyz
+    # Shutdown contract: src/index.ts installs SIGTERM/SIGINT handlers that drain
+    # for at most SHUTDOWN_DRAIN_TIMEOUT_MS (10s) and then force-exit, so the
+    # service terminates well inside Render's grace period.
+    autoDeploy: false
+    envVars:
+      # --- Required, set as secrets in the dashboard ----------------------------
+      - key: AIOS_SERVICE_TOKEN
+        sync: false
+      - key: AIOS_ADMIN_TOKEN
+        sync: false
+
+      # --- Runtime ----------------------------------------------------------------
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      # Render injects PORT automatically; do not pin it here.
+      - key: LOG_LEVEL
+        value: info
+      # Structured JSON in production. `pino-pretty` is a dev-only dependency and
+      # is pruned from the runtime image; src/lib/logger.ts also forces JSON when
+      # NODE_ENV=production, so this is belt-and-braces.
+      - key: LOG_PRETTY
+        value: 'false'
+
+      # --- Auth posture -----------------------------------------------------------
+      # Fail-closed escape hatch. Always ignored when NODE_ENV=production, but
+      # pinned false so the intent is explicit in the deployment manifest.
+      - key: AIOS_ALLOW_UNAUTHENTICATED
+        value: 'false'
+
+      # --- Durable storage --------------------------------------------------------
+      # Accepted values are exactly `in-memory` and `durable` (NOT `postgres`);
+      # src/app/composition-root.ts rejects anything else at boot.
+      - key: MEMORY_STORAGE_BACKEND
+        value: durable
+      - key: KNOWLEDGE_STORAGE_BACKEND
+        value: durable
+      - key: TOOLS_STORAGE_BACKEND
+        value: durable
+      - key: MEMORY_DATABASE_URL
+        sync: false
+
+      # --- LLM (fail-closed when disabled) ---------------------------------------
+      - key: LLM_ENABLED
+        value: 'false'
+      - key: LLM_PROVIDER
+        value: mock
+      - key: LLM_API_KEY
+        sync: false

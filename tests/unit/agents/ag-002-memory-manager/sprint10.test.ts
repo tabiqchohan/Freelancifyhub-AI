@@ -46,6 +46,38 @@ import {
 
 const S = MemoryLifecycleState;
 
+/**
+ * Prompts15 Phase 5/7 — production-database containment.
+ *
+ * `resolvePostgresConnectionString` accepts whatever string it finds in
+ * `MEMORY_DATABASE_URL` with no allowlist, so a test that builds a durable
+ * adapter will happily construct a pool aimed at the real production Neon
+ * database. `pg.Pool` connects lazily, so the current assertions open no socket
+ * — but the adapter returned by `createDurableStorageAdapter` / `createStorageAdapter`
+ * exposes `healthAsync`, `durableWrite`, `clearAsync` and `sizeAsync`, each of which
+ * issues real SQL. One added assertion would turn this into a production write.
+ *
+ * These tests assert adapter *construction*, never I/O, so pointing the factory at
+ * a synthetic loopback URL keeps the assertions meaningful while making it
+ * structurally impossible for them to reach production. Integration coverage for
+ * real Postgres behaviour belongs in the guarded `*.integration.test.ts` suites.
+ */
+const SYNTHETIC_LOOPBACK_URL = 'postgresql://aios:nosuchpassword@127.0.0.1:1/aios_never_connected';
+
+function withSyntheticDatabaseUrl<T>(run: () => T): T {
+  const saved = process.env.MEMORY_DATABASE_URL;
+  try {
+    process.env.MEMORY_DATABASE_URL = SYNTHETIC_LOOPBACK_URL;
+    return run();
+  } finally {
+    if (saved === undefined) {
+      delete process.env.MEMORY_DATABASE_URL;
+    } else {
+      process.env.MEMORY_DATABASE_URL = saved;
+    }
+  }
+}
+
 function configWith(partial: Partial<MemoryConfig>): MemoryConfig {
   return { ...createTestConfig(), ...partial };
 }
@@ -198,11 +230,14 @@ describe('Sprint 10 - durable storage contract', () => {
   });
 
   it('registers the real postgres backend and succeeds when the URL is available', () => {
-    // postgres is wired as a real backend and the URL is present in .env,
-    // so creating the adapter succeeds without throwing.
-    expect(listDurableBackends()).toContain('postgres');
-    const adapter = createDurableStorageAdapter('postgres');
-    expect(adapter.durable).toBe(true);
+    // postgres is wired as a real backend, so creating the adapter succeeds
+    // without throwing. The URL is pinned to a synthetic loopback address so
+    // this can never construct a pool aimed at the production database.
+    withSyntheticDatabaseUrl(() => {
+      expect(listDurableBackends()).toContain('postgres');
+      const adapter = createDurableStorageAdapter('postgres');
+      expect(adapter.durable).toBe(true);
+    });
   });
 
   it('fails closed for postgres when the URL is removed', () => {
@@ -248,12 +283,15 @@ describe('Sprint 10 - backend capability detection', () => {
   });
 
   it('createStorageAdapter resolves the durable postgres backend from the factory default', () => {
-    // durable defaults to the real postgres backend (MEMORY_DATABASE_URL present
-    // in .env), producing a genuinely durable adapter.
-    const adapter = createStorageAdapter({
-      MEMORY_STORAGE_BACKEND: 'durable',
+    // durable defaults to the real postgres backend, producing a genuinely
+    // durable adapter. URL pinned to synthetic loopback: see
+    // withSyntheticDatabaseUrl above.
+    withSyntheticDatabaseUrl(() => {
+      const adapter = createStorageAdapter({
+        MEMORY_STORAGE_BACKEND: 'durable',
+      });
+      expect(adapter.capabilities().supports?.('durable')).toBe(true);
     });
-    expect(adapter.capabilities().supports?.('durable')).toBe(true);
   });
 
   it('createStorageAdapter fails closed for postgres when the URL is removed', () => {

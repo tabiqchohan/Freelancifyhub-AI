@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { resolveTestDatabase } from '../../../../src/lib/test-database-guard.js';
 import {
   InMemoryEventLog,
   MemoryConflictError,
@@ -19,20 +20,25 @@ import type {
 import { makeRecord } from '../../../unit/agents/ag-002-memory-manager/fixtures.js';
 
 /**
- * Sprint 13 — real PostgreSQL (Neon) integration tests.
+ * Sprint 13 — real PostgreSQL integration tests.
  *
- * These tests run ONLY when MEMORY_DATABASE_URL is configured (present in the
- * repo .env). They exercise the genuine PostgreSQL durable backend: schema
- * migrations, adapter CRUD, durable write + reload, repository semantics,
- * real transaction commit/rollback, and cross-connection restart durability.
+ * These tests run ONLY when the dedicated AIOS_TEST_DATABASE_URL is configured
+ * (an isolated local test database; prompts13 Blocker 2 removed the production
+ * MEMORY_DATABASE_URL fallback entirely). They exercise the genuine PostgreSQL
+ * durable backend: schema migrations, adapter CRUD, durable write + reload,
+ * repository semantics, real transaction commit/rollback, and cross-connection
+ * restart durability.
  *
- * They are skipped in CI or any environment without a database URL, so the
- * committed suite never depends on a live network database.
+ * They are skipped in CI or any environment without an isolated test database
+ * URL, so the committed suite never depends on a live network database.
  */
 
-const DATABASE_URL = process.env.MEMORY_DATABASE_URL;
+// Guarded (prompts13 Blocker 2): integration suites may only target an isolated
+// local test database and never fall back to the production MEMORY_DATABASE_URL.
+const testDb = resolveTestDatabase('AG-002 memory-manager postgres integration suite');
+const DATABASE_URL = testDb.url;
 
-const suite = DATABASE_URL && DATABASE_URL.trim().length > 0 ? describe : describe.skip;
+const suite = testDb.enabled ? describe : describe.skip;
 
 const ns = `int-postgres-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 

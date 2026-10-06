@@ -76,6 +76,12 @@ export interface AiosRequestOptions {
   readonly idempotencyKey?: string;
   readonly timeoutMs?: number;
   readonly metadata?: Readonly<Record<string, unknown>>;
+  /**
+   * Prompts15 Phase 2 — transport-level cancellation carried in-process (never
+   * serialized). Set by the HTTP boundary when the caller disconnects so the
+   * execution budget and every downstream provider call stop immediately.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /** A validated request accepted by the AIOS boundary. */

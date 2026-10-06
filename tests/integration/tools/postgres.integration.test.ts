@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { resolveTestDatabase } from '../../../src/lib/test-database-guard.js';
 import type pg from 'pg';
 
 import {
@@ -18,17 +19,22 @@ import type {
 } from '../../../src/agents/ag-004-tool-manager/types/index.js';
 
 /**
- * AG-004 real PostgreSQL (Neon) integration tests.
+ * AG-004 real PostgreSQL integration tests.
  *
- * Runs ONLY when MEMORY_DATABASE_URL is configured (the shared Neon pool AG-004
- * tool_* tables are created on). Exercises genuine durable tool storage: schema
- * migrations, register/persist, version persistence, enable/disable persistence,
- * restart durability, and uniqueness constraints. Skipped without the DB URL.
+ * Runs ONLY when the dedicated AIOS_TEST_DATABASE_URL is configured (an isolated
+ * local test database; prompts13 Blocker 2 removed the production
+ * MEMORY_DATABASE_URL fallback entirely). Exercises genuine durable tool
+ * storage: schema migrations, register/persist, version persistence,
+ * enable/disable persistence, restart durability, and uniqueness constraints.
+ * Skipped when no isolated test database is configured.
  */
 
-const DATABASE_URL = process.env.MEMORY_DATABASE_URL;
+// Guarded (prompts13 Blocker 2): integration suites may only target an isolated
+// local test database and never fall back to the production MEMORY_DATABASE_URL.
+const testDb = resolveTestDatabase('AG-004 tool-manager postgres integration suite');
+const DATABASE_URL = testDb.url;
 
-const suite = DATABASE_URL && DATABASE_URL.trim().length > 0 ? describe : describe.skip;
+const suite = testDb.enabled ? describe : describe.skip;
 
 const ns = `int-tools-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 

@@ -473,6 +473,10 @@ export class AgenticLoopService {
       signal: run.signal,
       timeoutMs: remainingMs > 0 ? Math.min(remainingMs, this.config.AGENTIC_MAX_TOTAL_MS) : 1,
       requestId: run.correlationId,
+      // Prompts15 Phase 3 — clamping only the per-attempt timeout still let the
+      // retry chain (attempts + backoff) run past this turn's deadline. The
+      // loop deadline is now the hard ceiling for the whole chain.
+      deadlineAt: run.deadline,
     };
 
     let result: ReasoningResult;

@@ -9,7 +9,10 @@ import type { MemoryRepository } from '../repositories/index.js';
  */
 export interface CandidateRetriever {
   readonly name: string;
-  retrieve(query: MemoryRetrievalQuery, callerScope: readonly string[]): Promise<readonly MemoryRecord[]>;
+  retrieve(
+    query: MemoryRetrievalQuery,
+    callerScope: readonly string[],
+  ): Promise<readonly MemoryRecord[]>;
 }
 
 /**
@@ -25,12 +28,13 @@ export class RepositoryCandidateRetriever implements CandidateRetriever {
     this.repository = repository;
   }
 
-  async retrieve(query: MemoryRetrievalQuery, callerScope: readonly string[]): Promise<readonly MemoryRecord[]> {
+  async retrieve(
+    query: MemoryRetrievalQuery,
+    callerScope: readonly string[],
+  ): Promise<readonly MemoryRecord[]> {
     const filter = { ...query.filters, namespace: query.namespace };
     const all = await this.repository.list(filter);
 
-    return all.filter(
-      (record) => callerScope.includes(record.namespace)
-    );
+    return all.filter((record) => callerScope.includes(record.namespace));
   }
 }

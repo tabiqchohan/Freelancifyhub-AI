@@ -84,6 +84,8 @@ export class MasterOrchestratorService implements MasterOrchestratorServiceContr
   private readonly activeExecutions = new Map<string, string>();
   private readonly cancellations = new Map<string, boolean>();
   private readonly traceIds = new Map<string, string>();
+  /** Prompts15 Phase 2 — per-request caller disconnect signals (never serialized). */
+  private readonly requestSignals = new Map<string, AbortSignal>();
 
   constructor(options: MasterOrchestratorServiceOptions) {
     this.assertDependencies(options);
@@ -128,16 +130,23 @@ export class MasterOrchestratorService implements MasterOrchestratorServiceContr
     const normalized = normalizeOrchestrationRequest(input);
     const { requestId, traceId } = normalized;
     this.traceIds.set(requestId, traceId);
+    // Prompts15 Phase 2 — the transport signal is deliberately kept out of the
+    // validated/normalized request (it is not serializable) and is tracked
+    // request-scoped instead, released in the same finally as the other maps.
+    if (input.signal !== undefined) {
+      this.requestSignals.set(requestId, input.signal);
+    }
 
     try {
       return await this.executeRequest(normalized);
     } finally {
-      // Sprint 34 — release the request-scoped maps in every path (success,
+      // Sprint 34 �?" release the request-scoped maps in every path (success,
       // stage failure, escalation, cancellation) so the orchestrator cannot
       // grow without bound under sustained traffic.
       this.activeExecutions.delete(requestId);
       this.cancellations.delete(requestId);
       this.traceIds.delete(requestId);
+      this.requestSignals.delete(requestId);
     }
   }
 
@@ -313,6 +322,11 @@ export class MasterOrchestratorService implements MasterOrchestratorServiceContr
         requestId,
         traceId,
         inputs: { 'request.input': normalized.text },
+        // Prompts15 Phase 2 — carry the caller's disconnect signal into the
+        // engine so agent/provider work is cancelled, not merely abandoned.
+        // Held request-scoped (never validated/serialized) alongside
+        // `cancellations`/`traceIds`.
+        signal: this.requestSignals.get(requestId),
       });
     } catch (error) {
       this.activeExecutions.delete(requestId);

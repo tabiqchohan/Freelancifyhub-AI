@@ -15,12 +15,12 @@ export class DefaultQueryNormalizer implements QueryNormalizer {
     if (!query || typeof query !== 'string') {
       return '';
     }
-    
+
     return query
       .trim()
       .toLowerCase()
       .replace(/\s+/g, ' ')
-      .replace(/[^\w\s]/g, '')  // Remove punctuation but keep alphanumeric and whitespace
+      .replace(/[^\w\s]/g, '') // Remove punctuation but keep alphanumeric and whitespace
       .trim();
   }
 }
@@ -28,7 +28,10 @@ export class DefaultQueryNormalizer implements QueryNormalizer {
 /**
  * Creates a normalized query or returns undefined if empty after normalization.
  */
-export function normalizeQuery(query: string | undefined, normalizer: QueryNormalizer = new DefaultQueryNormalizer()): string | undefined {
+export function normalizeQuery(
+  query: string | undefined,
+  normalizer: QueryNormalizer = new DefaultQueryNormalizer(),
+): string | undefined {
   if (!query) return undefined;
   const normalized = normalizer.normalize(query);
   return normalized.length > 0 ? normalized : undefined;

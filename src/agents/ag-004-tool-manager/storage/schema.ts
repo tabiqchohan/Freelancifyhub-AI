@@ -1,4 +1,5 @@
 import type pg from 'pg';
+import { SCHEMA_MIGRATION_LOCK_KEY } from '../../ag-002-memory-manager/storage/schema.js';
 import { ToolStorageError } from '../errors/index.js';
 
 /**
@@ -137,6 +138,10 @@ function parseAppliedVersion(value: unknown): number | undefined {
 export async function migrateToolSchema(pool: pg.Pool): Promise<number> {
   const client = await pool.connect();
   try {
+    // Same lock key as AG-002/AG-003: all three write the shared schema_migrations
+    // table, and concurrent DDL would otherwise collide on the pg catalog.
+    await client.query('SELECT pg_advisory_lock($1::bigint)', [SCHEMA_MIGRATION_LOCK_KEY]);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version     INTEGER PRIMARY KEY,
@@ -183,6 +188,9 @@ export async function migrateToolSchema(pool: pg.Pool): Promise<number> {
     }
     return appliedCount;
   } finally {
+    await client
+      .query('SELECT pg_advisory_unlock($1::bigint)', [SCHEMA_MIGRATION_LOCK_KEY])
+      .catch(() => undefined);
     client.release();
   }
 }

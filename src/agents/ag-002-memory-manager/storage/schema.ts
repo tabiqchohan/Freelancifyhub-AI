@@ -18,6 +18,18 @@ export interface SchemaMigration {
   readonly sql: string;
 }
 
+/**
+ * Advisory-lock key that serialises schema migrations across processes.
+ *
+ * AG-002 and AG-003 record into the same `schema_migrations` table, so both
+ * migration helpers MUST use this identical key. Concurrent
+ * `CREATE TABLE ... IF NOT EXISTS` statements in PostgreSQL can still collide on
+ * the catalog (`duplicate key value violates unique constraint
+ * "pg_type_typname_nsp_index"`), so migrations are serialised rather than merely
+ * written idempotently.
+ */
+export const SCHEMA_MIGRATION_LOCK_KEY = 8021976134501;
+
 /** The ordered, deterministic migration set for AG-002 memory persistence. */
 export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
   {
@@ -125,6 +137,9 @@ function parseAppliedVersion(value: unknown): number | undefined {
 export async function migrateSchema(pool: pg.Pool): Promise<number> {
   const client = await acquireClient(pool);
   try {
+    // Serialise against any other process migrating this database.
+    await client.query('SELECT pg_advisory_lock($1::bigint)', [SCHEMA_MIGRATION_LOCK_KEY]);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version     INTEGER PRIMARY KEY,
@@ -171,6 +186,9 @@ export async function migrateSchema(pool: pg.Pool): Promise<number> {
     }
     return appliedCount;
   } finally {
+    await client
+      .query('SELECT pg_advisory_unlock($1::bigint)', [SCHEMA_MIGRATION_LOCK_KEY])
+      .catch(() => undefined);
     client.release();
   }
 }

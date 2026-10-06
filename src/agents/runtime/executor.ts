@@ -30,6 +30,7 @@ import { classifyLLMError } from '../../llm/errors/index.js';
 import type { AIReasoningServiceContract } from '../../llm/types/index.js';
 import type { LLMUsage } from '../../llm/types/index.js';
 import { AgenticLoopStatus } from './agentic/contracts.js';
+import { linkAbort } from '../../lib/abort.js';
 import type { AgenticLoopService } from './agentic/loop.js';
 import type { ToolActor } from '../ag-004-tool-manager/index.js';
 import { ToolActorGroup } from '../ag-004-tool-manager/index.js';
@@ -126,6 +127,8 @@ export class ProductionAgentExecutor implements AgentExecutor {
   private readonly agentPlatform: AgentPlatformGateway | undefined;
   private readonly attemptCounters = new Map<string, number>();
   private readonly signals = new Map<string, CancellationSignalImpl>();
+  /** Prompts15 Phase 2 — detach handles for inbound-signal links, per execution. */
+  private readonly signalLinks = new Map<string, () => void>();
 
   constructor(options: ProductionAgentExecutorOptions) {
     this.registry = options.registry;
@@ -179,7 +182,6 @@ export class ProductionAgentExecutor implements AgentExecutor {
     const traceId = request.traceId ?? `runtime:${request.executionId}`;
     const requestId = parseRequestId(request.executionId);
     const attempt = this.nextAttempt(request.executionId, request.stepId);
-    const signal = this.acquireSignal(request.executionId);
 
     const agent = this.registry.get(agentId);
 
@@ -207,6 +209,10 @@ export class ProductionAgentExecutor implements AgentExecutor {
         { executionId: request.executionId, traceId, requestId },
       );
     }
+
+    // Acquired only past every early return so each acquisition is paired with
+    // the release in the finally below (Prompts15 Phase 5: no leaked link).
+    const signal = this.acquireSignal(request.executionId, request.signal);
 
     // --- Sprint 19 platform gate (managed agents only) ----------------------
     const startedAtMs = performance.now();
@@ -264,6 +270,18 @@ export class ProductionAgentExecutor implements AgentExecutor {
 
       const timeoutMs = this.timeoutFor(request);
 
+      // Prompts15 Phase 3 — the step's own budget becomes an absolute deadline so
+      // the LLM retry chain (all attempts + all backoff) is bounded by the same
+      // window the agent guard enforces.
+      const attemptStartedAtMs = Date.now();
+      const effectiveTimeoutMs = Math.min(
+        timeoutMs > 0 ? timeoutMs : Infinity,
+        this.defaultTimeoutMs,
+      );
+      const deadlineAt = Number.isFinite(effectiveTimeoutMs)
+        ? attemptStartedAtMs + effectiveTimeoutMs
+        : undefined;
+
       const reasoning = await this.resolveReasoning(request, agent, {
         executionId: request.executionId,
         stepId: request.stepId,
@@ -272,6 +290,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
         requestId,
         memory,
         signal,
+        deadlineAt,
         allowedTools: lease?.allowedTools,
       });
 
@@ -328,7 +347,7 @@ export class ProductionAgentExecutor implements AgentExecutor {
         agentResult = await this.guard(
           Promise.resolve().then(() => agent.execute(context)),
           signal,
-          Math.min(timeoutMs > 0 ? timeoutMs : Infinity, this.defaultTimeoutMs),
+          effectiveTimeoutMs,
         );
       } catch (error) {
         agentResult = {
@@ -371,6 +390,10 @@ export class ProductionAgentExecutor implements AgentExecutor {
       this.releaseSignal(request.executionId);
       return result;
     } finally {
+      // Prompts15 Phase 5 — the release is a single choke point so a throw in
+      // memory provisioning or reasoning cannot leave the inbound-signal link
+      // (and the caller's signal it closes over) attached to this executor.
+      this.releaseSignal(request.executionId);
       this.closeGate(lease, agentId, request.executionId, requestId, traceId, startedAtMs);
     }
   }
@@ -386,6 +409,8 @@ export class ProductionAgentExecutor implements AgentExecutor {
       requestId: string;
       memory: readonly RuntimeMemoryItem[];
       signal: CancellationSignal;
+      /** Prompts15 Phase 3 — absolute budget for the whole LLM retry chain. */
+      deadlineAt?: number;
       allowedTools?: readonly string[];
     },
   ): Promise<ReasoningOutcome> {
@@ -425,7 +450,12 @@ export class ProductionAgentExecutor implements AgentExecutor {
           memoryContext: info.memory.map(toReasoningContextItem),
           correlationId: info.requestId,
         },
-        { signal: toAbortSignal(info.signal), requestId: info.requestId },
+        {
+          signal: toAbortSignal(info.signal),
+          requestId: info.requestId,
+          // Prompts15 Phase 3 — bind the entire retry chain to the step budget.
+          deadlineAt: info.deadlineAt,
+        },
       );
       return {
         failed: false,
@@ -473,6 +503,8 @@ export class ProductionAgentExecutor implements AgentExecutor {
       requestId: string;
       memory: readonly RuntimeMemoryItem[];
       signal: CancellationSignal;
+      /** Prompts15 Phase 3 — absolute budget for the whole LLM retry chain. */
+      deadlineAt?: number;
       allowedTools?: readonly string[];
     },
   ): Promise<ReasoningOutcome> {
@@ -815,17 +847,34 @@ export class ProductionAgentExecutor implements AgentExecutor {
     return next;
   }
 
-  private acquireSignal(executionId: string): CancellationSignalImpl {
+  /**
+   * Prompts15 Phase 2 — returns this execution's cooperative signal and, when
+   * the caller supplied a transport signal, bridges it so a disconnect cancels
+   * the execution exactly like `executor.cancel()`.
+   *
+   * The link is stored per execution id (steps of one run share it) and released
+   * in {@link releaseSignal}, so a long-lived execution cannot accumulate one
+   * listener per step.
+   */
+  private acquireSignal(executionId: string, inbound?: AbortSignal): CancellationSignalImpl {
     let signal = this.signals.get(executionId);
     if (signal === undefined) {
       signal = new CancellationSignalImpl();
       this.signals.set(executionId, signal);
+    }
+    if (inbound !== undefined && !this.signalLinks.has(executionId)) {
+      this.signalLinks.set(
+        executionId,
+        linkAbort(inbound, () => signal?.requestCancellation()),
+      );
     }
     return signal;
   }
 
   private releaseSignal(executionId: string): void {
     this.signals.delete(executionId);
+    this.signalLinks.get(executionId)?.();
+    this.signalLinks.delete(executionId);
     // Sprint 33 — release per-execution attempt counters alongside signals so
     // the map cannot grow without bound under sustained traffic.
     for (const key of this.attemptCounters.keys()) {

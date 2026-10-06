@@ -9,6 +9,7 @@
 
 import type { RequestContext } from './request-context.js';
 import type { AiosExecutionDetail } from './types.js';
+import { anyAbortSignal } from '../lib/abort.js';
 
 /** Per-request knob keys consumed only by the AIOS boundary. */
 export const KNOB_DELAY_MS = 'aios.delayMs';
@@ -52,12 +53,32 @@ export interface CreateExecutionContextOptions {
   readonly plan: AiosPlan;
   readonly metadata: Readonly<Record<string, unknown>>;
   readonly now?: () => Date;
+  /**
+   * Prompts15 Phase 2 — the transport signal (caller disconnected). When it
+   * aborts, `controller` aborts exactly as an explicit `/api/ai/cancel` would,
+   * so every downstream consumer observes one cancellation semantics.
+   */
+  readonly signal?: AbortSignal;
 }
 
 /** Builds an {@link ExecutionContext} for the EXECUTE phase. */
 export function createExecutionContext(options: CreateExecutionContextOptions): ExecutionContext {
   const controller = new AbortController();
   const startedAtMs = Date.now();
+
+  // Prompts15 Phase 2/4 — cancellation is the union of the explicit AIOS cancel
+  // controller and the transport signal. `service.cancel()` still aborts the
+  // controller; a hung-up caller aborts the same composite, so a provider fetch
+  // can never outlive the request that started it.
+  const signal =
+    options.signal === undefined
+      ? controller.signal
+      : (anyAbortSignal([controller.signal, options.signal]) ?? controller.signal);
+
+  if (options.signal !== undefined && options.signal.aborted) {
+    controller.abort();
+  }
+
   return {
     requestId: options.requestId,
     traceId: options.traceId,
@@ -67,7 +88,15 @@ export function createExecutionContext(options: CreateExecutionContextOptions): 
     deadlineAt: startedAtMs + options.timeoutMs,
     startedAtMs,
     controller,
-    cancellation: { requested: false, signal: controller.signal },
+    cancellation: {
+      // Getters (not a snapshot) so `requested` reflects a disconnect that lands
+      // mid-execution: downstream tails check it after their work returns and
+      // must still see the cancellation.
+      get requested(): boolean {
+        return signal.aborted;
+      },
+      signal,
+    },
     plan: options.plan,
     metadata: options.metadata,
   };

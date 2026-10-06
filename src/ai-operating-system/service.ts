@@ -177,6 +177,12 @@ export class AiosService {
         requestId: ctx.requestId,
         traceId: ctx.traceId,
         origin: 'ai-operating-system',
+        // Prompts15 Phase 2 — the composed execution signal (caller
+        // disconnect OR explicit cancel) reaches the engine and its executor.
+        // Optional read keeps dispatch tolerant of a partially-populated
+        // context, matching `raceDeadline` (which also tolerates a missing
+        // `deadlineAt`).
+        signal: exec.cancellation?.signal ?? exec.controller?.signal,
       }),
     );
     const outcome = await raceDeadline(run, exec);

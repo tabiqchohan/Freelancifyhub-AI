@@ -131,6 +131,9 @@ export class AiosPipeline {
         timeoutMs: this.timeoutFor(ctx, input.options?.timeoutMs),
         plan,
         metadata: ctx.metadata,
+        // Prompts15 Phase 2 — the caller disconnect aborts the execution
+        // budget itself, so no downstream provider call outlives the socket.
+        signal: input.options?.signal,
       });
       metrics.recordPoint(`intent.${ctx.route.intentId}`);
       metrics.recordPoint(`target.${ctx.target.kind}`);

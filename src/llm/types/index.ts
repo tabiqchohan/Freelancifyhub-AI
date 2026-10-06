@@ -50,6 +50,13 @@ export interface LLMRequestOptions {
   readonly maxRetries?: number;
   readonly backoffBaseMs?: number;
   readonly backoffMaxMs?: number;
+  /**
+   * Prompts15 Phase 3 — absolute deadline (epoch ms) for the *whole* retry
+   * chain, including every attempt and backoff window. When supplied it is the
+   * hard ceiling: per-attempt timeouts and backoff delays are clamped to the
+   * remaining budget so total LLM time can never exceed the caller's deadline.
+   */
+  readonly deadlineAt?: number;
 }
 
 /** A normalized provider response. */

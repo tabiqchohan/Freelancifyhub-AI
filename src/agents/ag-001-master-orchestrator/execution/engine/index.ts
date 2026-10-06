@@ -22,6 +22,7 @@ import { ExecutionLifecycle, toExecutionError } from '../lifecycle/index.js';
 import { resolveExecutionStrategy } from '../strategies/index.js';
 import { validateExecutionPlan, validateExecutionRequest } from '../validators/index.js';
 import { createDeadline } from '../timeout/index.js';
+import { linkAbort } from '../../../../lib/abort.js';
 import { ConcurrencyLimiter } from '../concurrency/index.js';
 import type {
   ExecutionRequest,
@@ -96,6 +97,15 @@ export class ExecutionEngine implements ExecutionEngineContract {
     const resultStore = new ExecutionResultStore();
     const events = new InMemoryExecutionEventEmitter();
     this.active.set(request.executionId, cancellation);
+
+    // Prompts15 Phase 2 — a caller disconnect cancels this run exactly like
+    // `engine.cancel()`, which is what makes the abort reach the agent executor
+    // and its outbound provider fetch. Detached in the finally so a completed
+    // execution never keeps the caller's signal alive.
+    const detachInbound =
+      request.signal === undefined
+        ? undefined
+        : linkAbort(request.signal, () => cancellation.cancel('caller connection closed'));
 
     const run = this.createRun(request);
     const lifecycle = new ExecutionLifecycle({
@@ -205,6 +215,8 @@ export class ExecutionEngine implements ExecutionEngineContract {
       finalState = stateManager.settle(ExecutionStateValue.Failed);
       const structured = toExecutionError(error);
       terminalError = structured;
+    } finally {
+      detachInbound?.();
     }
 
     const completedAt = new Date().toISOString();
@@ -302,6 +314,7 @@ export class ExecutionEngine implements ExecutionEngineContract {
       traceId: request.traceId,
       createdAt: new Date().toISOString(),
       state: ExecutionStateValue.Pending,
+      signal: request.signal,
     };
   }
 

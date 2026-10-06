@@ -1,7 +1,7 @@
 import { env } from './config/index.js';
 import { logger } from './lib/logger.js';
 import { createProductionComposition } from './app/composition-root.js';
-import { createProductionRuntime } from './app/runtime.js';
+import { createProductionRuntime, SHUTDOWN_DRAIN_TIMEOUT_MS } from './app/runtime.js';
 import { DiagnosticError } from './app/errors.js';
 
 async function main(): Promise<void> {
@@ -37,11 +37,25 @@ async function main(): Promise<void> {
     }
     shuttingDown = true;
     logger.info({ signal }, 'Shutdown signal received, closing runtime');
+    // Prompts15 Phase 9: never let a stuck socket hold the process past the
+    // orchestrator's grace window. If the drain has not completed in time, exit
+    // anyway - the supervisor will restart the instance, which is preferable to
+    // being SIGKILLed and reported as an unclean shutdown.
+    const forceTimer = setTimeout(() => {
+      logger.error(
+        { signal, drainTimeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS },
+        'Graceful shutdown exceeded its drain window; exiting',
+      );
+      process.exit(1);
+    }, SHUTDOWN_DRAIN_TIMEOUT_MS + 5_000);
+    forceTimer.unref();
     try {
-      await runtime.shutdown();
+      await runtime.shutdown({ drainTimeoutMs: SHUTDOWN_DRAIN_TIMEOUT_MS });
+      clearTimeout(forceTimer);
       logger.info('Server closed gracefully');
       process.exit(0);
     } catch (error) {
+      clearTimeout(forceTimer);
       logger.error({ error }, 'Failed to close server cleanly');
       process.exit(1);
     }
