@@ -36,3 +36,6 @@ Thumbs.db
 
 # OpenClaw runtime state
 workspace/
+
+# AI Employee (AG-701) generated workspaces + review artifacts
+.employee-workspaces/

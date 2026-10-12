@@ -1,5 +1,6 @@
 import type { Logger } from 'pino';
 
+import { resolve } from 'node:path';
 import { ExecutionEngine } from '../agents/ag-001-master-orchestrator/execution/engine/index.js';
 import { parseExecutionConfig } from '../agents/ag-001-master-orchestrator/execution/config/index.js';
 import { parseOrchestratorConfig } from '../agents/ag-001-master-orchestrator/config/index.js';
@@ -144,6 +145,19 @@ import { RuntimeAgentEventType } from '../agents/runtime/types.js';
 import { createRuntimeAgent } from '../agents/runtime/runtime-agent.js';
 import { createKnowledgeRuntimeAgent } from '../agents/runtime/knowledge-runtime-agent.js';
 import type { RuntimeAgent } from '../agents/runtime/types.js';
+import {
+  EmployeeService,
+  EmployeeExecutor,
+  TaskToolBudget,
+  createEmployeeToolSpecifications,
+  parseEmployeeConfig,
+  pinoEmployeeEventSink,
+  resolveEmployeeStorageBackend,
+  InMemoryEmployeeTaskRepository,
+  PostgresEmployeeTaskRepository,
+  EmployeeReaper,
+  type EmployeeTaskRepository,
+} from '../agents/employee-ai/index.js';
 import { RuntimeEventBridge } from './runtime-event-bridge.js';
 import { RequestActorRegistry } from './request-actors.js';
 import { MemoryAwareContextInputBuilder } from './memory-context-builder.js';
@@ -233,6 +247,8 @@ export interface ProductionComposition {
     /** Sprint 26 AI Operating System gateway (single AIOS boundary). */
     readonly aios: AiosGateway;
     readonly requestActors: RequestActorRegistry;
+    /** Prompts17 AI Employee (AG-701 Website Developer) service. */
+    readonly employee: EmployeeService;
   };
   /** Storage handles for graceful shutdown. Not part of the public contract. */
   readonly storage: {
@@ -256,6 +272,8 @@ export interface ProductionComposition {
     readonly probeAdminTeam: () => Promise<{ healthy: boolean }>;
     /** Sprint 26 AI Operating System readiness probe. */
     readonly probeAios: () => Promise<{ healthy: boolean }>;
+    /** Prompts17 AI Employee readiness probe. */
+    readonly probeEmployee: () => Promise<{ healthy: boolean }>;
   };
 }
 
@@ -956,6 +974,92 @@ export async function createProductionComposition(
     metrics: aiosMetrics,
   });
 
+  // ---- Prompts17 AI Employee (AG-701 Website Developer) --------------------
+  // First commercial AI employee: receives a static-website task, plans,
+  // executes through AG-004-registered tools inside a fail-closed workspace,
+  // validates with a bounded repair loop, packages a real zip artifact and
+  // returns it READY_FOR_REVIEW. Disabled by config -> every endpoint 403s.
+  const employeeConfig = parseEmployeeConfig(process.env);
+  const employeeWorkspacesRoot = resolve(process.cwd(), employeeConfig.EMPLOYEE_WORKSPACE_ROOT);
+  const employeeEventSink = pinoEmployeeEventSink(logger);
+  const employeeToolBudget = new TaskToolBudget();
+  const employeeTools = createEmployeeToolSpecifications({
+    config: employeeConfig,
+    workspacesRoot: employeeWorkspacesRoot,
+    trackToolCall: (taskId) =>
+      employeeToolBudget.track(taskId, employeeConfig.EMPLOYEE_MAX_TOOL_CALLS),
+  });
+  if (toolsEnabled) {
+    const employeeBootstrapActor: ToolActor = {
+      group: ToolActorGroup.ToolManager,
+      id: 'composition-root-employee',
+      namespaces: ['default'],
+    };
+    for (const specification of employeeTools) {
+      if (!toolManager.exists(specification.name)) {
+        await toolManager.register(specification, employeeBootstrapActor, 'default');
+      }
+    }
+  }
+  const employeeExecutor = new EmployeeExecutor({
+    config: employeeConfig,
+    workspacesRoot: employeeWorkspacesRoot,
+    toolManager,
+    budget: employeeToolBudget,
+    events: employeeEventSink,
+  });
+  // Prompts19 Phase 2 — durable task/artifact storage. Disabled subsystem uses
+  // in-memory only (no state to keep); enabled in production is fail-closed to
+  // durable so status/artifacts survive a restart.
+  const employeeBackend = employeeConfig.EMPLOYEE_ENABLED
+    ? resolveEmployeeStorageBackend(employeeConfig)
+    : 'in-memory';
+  let employeeRepository: EmployeeTaskRepository;
+  let employeeStorageClose: () => Promise<void> = async () => undefined;
+  let employeeDurable = false;
+  if (employeeBackend === 'durable') {
+    const connection =
+      employeeConfig.EMPLOYEE_DATABASE_URL.trim().length > 0
+        ? employeeConfig.EMPLOYEE_DATABASE_URL
+        : env.memory.MEMORY_DATABASE_URL;
+    if (typeof connection !== 'string' || connection.trim().length === 0) {
+      throw new DiagnosticError('Missing required configuration: EMPLOYEE_DATABASE_URL', {
+        code: 'MISSING_REQUIRED_CONFIG',
+        details: { key: 'EMPLOYEE_DATABASE_URL' },
+      });
+    }
+    const employeePool = createPostgresPool(connection);
+    const postgresEmployeeRepo = new PostgresEmployeeTaskRepository({ pool: employeePool });
+    await postgresEmployeeRepo.migrate();
+    employeeRepository = postgresEmployeeRepo;
+    employeeStorageClose = () => employeePool.end();
+    employeeDurable = true;
+  } else {
+    employeeRepository = new InMemoryEmployeeTaskRepository();
+  }
+  const employee = new EmployeeService(
+    employeeConfig,
+    employeeExecutor,
+    employeeEventSink,
+    employeeRepository,
+    logger,
+  );
+  // Recover interrupted tasks and load retained terminal state before serving.
+  await employee.hydrate();
+  const employeeReaper = new EmployeeReaper({
+    repository: employeeRepository,
+    workspacesRoot: employeeWorkspacesRoot,
+    intervalMs: employeeConfig.EMPLOYEE_REAP_INTERVAL_MS,
+    logger,
+  });
+  if (employeeConfig.EMPLOYEE_ENABLED) {
+    employeeReaper.start();
+  }
+  const probeEmployee = async () => {
+    const storageHealth = await employeeRepository.health();
+    return { healthy: employee.enabled() && storageHealth.healthy };
+  };
+
   return {
     env,
     logger,
@@ -994,14 +1098,17 @@ export async function createProductionComposition(
       adminAi,
       aios,
       requestActors,
+      employee,
     },
     storage: {
       close: async () => {
+        employeeReaper.stop();
         await storageClose();
         await knowledgeStorageClose();
         await toolStorageClose();
+        await employeeStorageClose();
       },
-      durable: durable || knowledgeDurable || toolDurable,
+      durable: durable || knowledgeDurable || toolDurable || employeeDurable,
     },
     health: {
       probeStorage,
@@ -1013,6 +1120,7 @@ export async function createProductionComposition(
       probeMarketingTeam: async () => ({ healthy: marketingAi.status().healthy }),
       probeAdminTeam: async () => ({ healthy: adminAi.status().healthy }),
       probeAios: async () => ({ healthy: aios.status().healthy }),
+      probeEmployee,
     },
   };
 }

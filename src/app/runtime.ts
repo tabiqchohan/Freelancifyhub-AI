@@ -102,6 +102,16 @@ export interface HealthPayload {
   readonly adminTeam: AdminTeamHealthSnapshot;
   /** Sprint 26 AI Operating System status (safe aggregate; never secrets). */
   readonly aiOperatingSystem: AiosHealthSnapshot;
+  /**
+   * Prompts20 — AI Employee (AG-701) status. Reports whether the subsystem is
+   * enabled and whether its storage (durable in production) is healthy. Safe
+   * aggregate only; never exposes task content or credentials.
+   */
+  readonly employee?: {
+    readonly enabled: boolean;
+    readonly healthy: boolean;
+    readonly storage: string;
+  };
 }
 
 /** Safe AI Operating System snapshot for the runtime health block. */
@@ -191,13 +201,24 @@ export async function defaultHealth(
   marketingTeamInfo?: () => MarketingTeamHealthSnapshot,
   adminTeamInfo?: () => AdminTeamHealthSnapshot,
   aiosInfo?: () => AiosHealthSnapshot,
+  employeeInfo?: () => Promise<{ enabled: boolean; healthy: boolean; storage: string }>,
 ): Promise<HealthPayload> {
   const storageHealth = await checkStorage();
   const knowledgeHealth = checkKnowledge !== undefined ? await checkKnowledge() : { healthy: true };
   const toolsHealth = checkTools !== undefined ? await checkTools() : { healthy: true };
+  const employee =
+    employeeInfo !== undefined
+      ? await employeeInfo()
+      : { enabled: false, healthy: true, storage: 'in-memory' };
+  // The AI Employee is an optional subsystem: when it is disabled it never
+  // degrades the whole service, but an *enabled* employee with unhealthy storage
+  // is a real dependency failure and must be reflected in the aggregate status.
+  const employeeDegrades = employeeInfo !== undefined && employee.enabled && !employee.healthy;
   return {
     status:
-      storageHealth.healthy && knowledgeHealth.healthy && toolsHealth.healthy ? 'ok' : 'degraded',
+      storageHealth.healthy && knowledgeHealth.healthy && toolsHealth.healthy && !employeeDegrades
+        ? 'ok'
+        : 'degraded',
     uptime: process.uptime(),
     storage: { healthy: storageHealth.healthy },
     knowledge: { healthy: knowledgeHealth.healthy },
@@ -222,6 +243,7 @@ export async function defaultHealth(
     marketingTeam: marketingTeamInfo?.() ?? defaultMarketingTeamHealth(),
     adminTeam: adminTeamInfo?.() ?? defaultAdminTeamHealth(),
     aiOperatingSystem: aiosInfo?.() ?? defaultAiosHealth(),
+    employee,
   };
 }
 
@@ -499,6 +521,18 @@ export class ProductionRuntime {
               statusCounts: status.statusCounts,
             };
           },
+          // Prompts20 — surface the AI Employee dependency in health/readiness so
+          // an enabled employee backed by unhealthy (durable) storage degrades the
+          // report instead of hiding behind an "ok" storage check.
+          async () => {
+            const { healthy } = await options.composition.health.probeEmployee();
+            const employeeService = options.composition.services.employee;
+            return {
+              enabled: employeeService.enabled(),
+              healthy,
+              storage: employeeService.durable() ? 'durable' : 'in-memory',
+            };
+          },
         ));
   }
 
@@ -709,6 +743,20 @@ export class ProductionRuntime {
 
     if (url.pathname === '/api/ai/cancel') {
       return this.handleAiosCancel(req, res);
+    }
+
+    // Prompts17 — AI Employee (AG-701) endpoints.
+    if (req.method === 'POST' && url.pathname === '/api/ai/employee') {
+      return this.handleEmployeeRun(req, res, inbound);
+    }
+    if (req.method === 'GET' && url.pathname === '/api/ai/employee/status') {
+      return this.handleEmployeeStatus(res, url);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/ai/employee/cancel') {
+      return this.handleEmployeeCancel(req, res);
+    }
+    if (req.method === 'GET' && url.pathname === '/api/ai/employee/artifact') {
+      return this.handleEmployeeArtifact(res, url);
     }
 
     return this.sendJson(res, 404, { status: 'not_found', path: url.pathname });
@@ -960,6 +1008,138 @@ export class ProductionRuntime {
     }
     this.composition.services.aios.cancel(requestId);
     return this.sendJson(res, 200, { status: 'cancelled', requestId });
+  }
+
+  /**
+   * Prompts17 — run an AI Employee task. Returns immediately with the task's
+   * initial status; the pipeline (requirements -> plan -> execute -> validate ->
+   * repair -> package) runs on the runtime. The Hub polls status and pulls the
+   * artifact with its owner-scoped credentials.
+   */
+  private async handleEmployeeRun(
+    req: IncomingMessage,
+    res: ServerResponse,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const employee = this.composition.services.employee;
+    if (!employee.enabled()) {
+      return this.sendJson(res, 403, { status: 'error', error: 'employee_disabled' });
+    }
+    const body = await this.readJson<{
+      readonly projectId?: string;
+      readonly clientId?: string;
+      readonly requestText?: string;
+      readonly requestId?: string;
+      readonly traceId?: string;
+    }>(req);
+    if (body === undefined) {
+      return this.sendJson(res, 400, { status: 'error', error: 'invalid_json' });
+    }
+    const projectId = typeof body.projectId === 'string' ? body.projectId.trim() : '';
+    const clientId = typeof body.clientId === 'string' ? body.clientId.trim() : '';
+    const requestText = typeof body.requestText === 'string' ? body.requestText.trim() : '';
+    if (projectId.length === 0 || clientId.length === 0 || requestText.length === 0) {
+      return this.sendJson(res, 400, {
+        status: 'error',
+        error: 'projectId_clientId_requestText_required',
+      });
+    }
+    if (projectId.length > 128 || clientId.length > 128) {
+      return this.sendJson(res, 400, { status: 'error', error: 'ids_too_long' });
+    }
+    if (requestText.length > 8_000) {
+      return this.sendJson(res, 429, {
+        status: 'error',
+        error: 'request_too_large',
+        code: 'AI_EMPLOYEE_REQUEST_TOO_LARGE',
+      });
+    }
+    const requestId = body.requestId ? sanitizeRequestId(body.requestId) : `emp-${randomUUID()}`;
+
+    try {
+      const response = await employee.execute({
+        projectId,
+        clientId,
+        requestText,
+        requestId,
+        traceId: body.traceId ?? `trace-${requestId}`,
+      });
+      void signal;
+      return this.sendJson(res, 202, response);
+    } catch (error) {
+      return this.sendEmployeeError(res, error, requestId);
+    }
+  }
+
+  /** Prompts17 — poll a task's status. */
+  private async handleEmployeeStatus(res: ServerResponse, url: URL): Promise<void> {
+    const taskId = url.searchParams.get('taskId') ?? '';
+    if (taskId.length === 0) {
+      return this.sendJson(res, 400, { status: 'error', error: 'taskId_required' });
+    }
+    return this.sendJson(res, 200, this.composition.services.employee.status(taskId));
+  }
+
+  /** Prompts17 — cooperative cancellation of an in-flight employee task. */
+  private async handleEmployeeCancel(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await this.readJson<{ readonly taskId?: string }>(req);
+    const taskId = body?.taskId;
+    if (taskId === undefined || taskId.length === 0) {
+      return this.sendJson(res, 400, { status: 'error', error: 'taskId_required' });
+    }
+    const cancelled = this.composition.services.employee.cancel(taskId);
+    return cancelled
+      ? this.sendJson(res, 200, { status: 'cancelled', taskId })
+      : this.sendJson(res, 404, { status: 'not_found', taskId });
+  }
+
+  /** Prompts17 — owner-scoped artifact download (base64 zip). */
+  private async handleEmployeeArtifact(res: ServerResponse, url: URL): Promise<void> {
+    const taskId = url.searchParams.get('taskId') ?? '';
+    const projectId = url.searchParams.get('projectId') ?? '';
+    const clientId = url.searchParams.get('clientId') ?? '';
+    if (taskId.length === 0 || projectId.length === 0 || clientId.length === 0) {
+      return this.sendJson(res, 400, {
+        status: 'error',
+        error: 'taskId_projectId_clientId_required',
+      });
+    }
+    try {
+      const artifact = await this.composition.services.employee.artifact(
+        taskId,
+        projectId,
+        clientId,
+      );
+      if (artifact === undefined) {
+        return this.sendJson(res, 404, { status: 'not_found', taskId });
+      }
+      return this.sendJson(res, 200, artifact);
+    } catch (error) {
+      return this.sendEmployeeError(res, error, taskId);
+    }
+  }
+
+  /** Stable, non-leaking error mapping for AI Employee failures. */
+  private sendEmployeeError(res: ServerResponse, error: unknown, requestId: string): void {
+    const code = (error as { readonly code?: string })?.code;
+    const message = (error as { readonly message?: string })?.message ?? 'employee request failed';
+    const status =
+      code === 'AI_EMPLOYEE_DISABLED'
+        ? 403
+        : code === 'AI_EMPLOYEE_RESOURCE_LIMIT'
+          ? 429
+          : code === 'AI_EMPLOYEE_NOT_FOUND'
+            ? 404
+            : code === 'AI_EMPLOYEE_INTERNAL'
+              ? 500
+              : 400;
+    this.logger.warn({ requestId, code, status }, 'employee request failed');
+    return this.sendJson(res, status, {
+      status: 'error',
+      error: 'employee_request_failed',
+      code,
+      message: message.slice(0, 300),
+    });
   }
 
   private sendAiosError(res: ServerResponse, error: unknown, requestId: string): void {
