@@ -56,6 +56,19 @@ The final image contains no dev tooling (`typescript`, `eslint`, `pino-pretty`,
 `husky` are all absent) and does contain the runtime deps (`pino`, `pg`,
 `dotenv`, `zod`).
 
+3. **The container runs as the non-root `node` user (uid 1000)**, and the AI
+   Employee writes generated sites under `EMPLOYEE_WORKSPACE_ROOT` (default
+   `.employee-workspaces`, i.e. `/app/.employee-workspaces`). Every directory the
+   process must write is therefore created **and chown'd to `node`** in the
+   runtime stage (`/app/logs`, `/app/memory`, `/app/knowledge`,
+   `/app/.employee-workspaces`); without that, employee tasks fail with `EACCES`
+   on the first `mkdir`. Verified by writing a probe file as uid 1000 inside a
+   production-mode container (`NODE_ENV=production`).
+
+`.dockerignore` excludes `.env`, `.env.*` (only `.env.example` is re-included)
+and `.employee-workspaces`, so no secret or generated workspace can enter the
+build context or the image.
+
 ### Health probe
 
 ```
@@ -82,6 +95,27 @@ Business endpoints (`/api/**`, `/runtime/request`) require
 `x-aios-service-token`. Liveness and readiness stay open so the platform can
 probe them without credentials — they expose no user data, no secrets and no
 prompt content.
+
+### Payload blocks worth watching
+
+`/readyz` returns `status: ok | degraded` plus one safe aggregate per subsystem
+(no values, no connection strings, no prompt content):
+
+| Block                                                    | Meaning                                                                                                                                                                                                                                              |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `storage`/`knowledge`/`tools`                            | The three durable storage backends. Any `healthy: false` flips `status` to `degraded`.                                                                                                                                                               |
+| `llm`                                                    | `{ enabled, configured, provider, model }` — **never a live probe**. `llm.provider` is `disabled` while `LLM_ENABLED=false` and `mock` when the mock provider is selected, so a mock/disabled deployment can never be mistaken for a production LLM. |
+| `employee`                                               | Prompts20 addition: `{ enabled, healthy, storage }` where `storage` is `durable` or `in-memory`. An **enabled** employee whose task/artifact storage is unhealthy degrades the aggregate status; a disabled employee never does.                     |
+| `platform`, `coordination`, `*Team`, `aiOperatingSystem` | Per-subsystem aggregates.                                                                                                                                                                                                                            |
+
+Readiness is bounded by `READINESS_PROBE_TIMEOUT_MS` — a hung dependency
+degrades the report instead of hanging the platform probe.
+
+> **LLM readiness is honestly false today.** `render.yaml` ships
+> `LLM_ENABLED=false`, so `/healthz` reports `llm.enabled=false`,
+> `llm.provider=disabled`. The reasoning agent teams are unavailable until a real
+> provider is configured (see §4). The AI Employee does **not** depend on the LLM
+> — it is a deterministic generator — so it runs correctly with the LLM disabled.
 
 ---
 
@@ -143,6 +177,29 @@ Any other value fails closed at boot with `UNSUPPORTED_STORAGE_BACKEND`.
 PostgreSQL. This was previously documented incorrectly in `.env.example`, which
 would have turned a correct-looking config into an immediate crash.
 
+### AI Employee (AG-701) — durable storage and retention
+
+Introduced by Prompts19, deployed by `render.yaml` (Prompts20). Names only; set
+secrets in the dashboard, never in a file.
+
+| Variable                                                                                   | Class      | Production value            | Notes                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------------ | ---------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EMPLOYEE_ENABLED`                                                                         | non-secret | `true`                      | Master flag. Disabled subsystem keeps no state and starts no reaper.                                                                                                                  |
+| `EMPLOYEE_STORAGE_BACKEND`                                                                 | non-secret | `durable`                   | Exactly `in-memory` or `durable`. **In production the default is `durable` and an explicit `in-memory` is rejected at boot** — task state can never silently live only in RAM.        |
+| `EMPLOYEE_DATABASE_URL`                                                                    | **secret** | (falls back)                | Optional: when empty the composition root reuses `MEMORY_DATABASE_URL`, so the credential is never duplicated. Required (directly or via the fallback) when the backend is `durable`. |
+| `EMPLOYEE_WORKSPACE_ROOT`                                                                  | non-secret | `/app/.employee-workspaces` | Must be writable by the runtime user (see §2). Ephemeral scratch space only.                                                                                                          |
+| `EMPLOYEE_MAX_ACTIVE_TASKS` / `EMPLOYEE_MAX_USER_ACTIVE_TASKS` / `EMPLOYEE_QUEUE_CAPACITY` | non-secret | `4` / `1` / `16`            | Concurrency caps and bounded backlog. Beyond them requests fail closed with a resource-limit error (backpressure, never unbounded queuing).                                           |
+| `EMPLOYEE_ARTIFACT_TTL_MS`                                                                 | non-secret | `86400000` (24 h)           | Review artifact retention before the reaper deletes it.                                                                                                                               |
+| `EMPLOYEE_REAP_INTERVAL_MS`                                                                | non-secret | `600000` (10 min)           | Sweep interval. The reaper also deletes the task's workspace path (path-confined).                                                                                                    |
+| `EMPLOYEE_MAX_REQUEST_TEXT` and the other `EMPLOYEE_MAX_*` bounds                          | non-secret | see `.env.example`          | Per-execution resource limits (wall clock, tool calls, workspace/file/artifact bytes).                                                                                                |
+
+**Retention behavior:** artifact bytes live in PostgreSQL
+(`employee_artifacts`, migrations `300`/`301`) and are deleted after
+`EMPLOYEE_ARTIFACT_TTL_MS`. Generated workspaces are scratch and are removed
+with the task; they are never part of a backup that matters. Migrations run
+automatically at boot (advisory-locked, idempotent) — there is no separate
+employee migration command to remember.
+
 ---
 
 ## 5. Logging in production
@@ -173,6 +230,16 @@ Render sends `SIGTERM` before replacing an instance.
 - `src/index.ts` also arms a `SHUTDOWN_DRAIN_TIMEOUT_MS + 5 s` force-exit
   watchdog, so the process always terminates well inside the platform's grace
   period rather than being `SIGKILL`ed and reported as an unclean shutdown.
+- `ProductionRuntime.shutdown()` then calls `composition.storage.close()`, which
+  **stops the AI Employee reaper** and closes every storage pool (memory,
+  knowledge, tools, employee). Running employee tasks were already marked
+  `FAILED` ("interrupted by a restart") by the start-up hydration pass, so
+  in-flight work is safely preserved rather than left dangling; queued tasks are
+  re-read as terminal state on the next boot.
+
+**Verified:** a production-mode container receiving `SIGTERM` logged
+`Shutdown signal received` → `runtime shutdown initiated` →
+`Server closed gracefully` and exited with code **0**.
 
 ---
 
@@ -194,6 +261,12 @@ npm run validate:env-example    # detects .env.example <-> schema drift
 same compiled parser the composition root uses at boot and asserts every
 documented backend value is one the root accepts. Add it to CI so the two cannot
 diverge again.
+
+Prompts20 extended `validate:env` to cover the AI Employee as well: when
+`EMPLOYEE_ENABLED=true` it resolves the backend (and therefore fails closed on
+an explicit `in-memory` under `NODE_ENV=production`) and requires a connection
+string (`EMPLOYEE_DATABASE_URL` or the `MEMORY_DATABASE_URL` fallback) whenever
+the backend is `durable`.
 
 ---
 
@@ -283,11 +356,70 @@ Observed shapes worth knowing:
 ## 10. Known gaps
 
 - **[UNVERIFIED IN PRODUCTION]** No live Render deployment has been performed.
+  (Prompts20 verified the _image_ end-to-end locally: build, production-mode
+  boot, health/readiness, durable employee migrations, non-root workspace
+  writes, fail-closed auth, graceful `SIGTERM` exit 0 — but not Render itself.)
 - **[UNVERIFIED IN PRODUCTION]** No connection to the production Neon database;
   no migration has been applied or verified there.
-- **[UNVERIFIED IN PRODUCTION]** `LLM_PROVIDER=http` has not been exercised
-  against a real provider. `LLM_ENABLED=false` is the safe default.
+- **[BLOCKED — no credentials]** `LLM_PROVIDER=http` has not been exercised
+  against a real provider. No `LLM_API_KEY` was available, so **no live LLM
+  smoke test was run** (nothing was simulated or faked). `LLM_ENABLED=false`
+  and `llm.provider=disabled` are the honest state until real credentials exist.
 - Neon credential rotation still requires manual confirmation; the repository
   contains no evidence that it happened.
 - `docs/final-launch-readiness.md` is referenced by the test-database guard but
   does not exist in this repository. Either create it or drop the reference.
+
+---
+
+## 11. Migrations, rollback and LLM smoke test (Prompts20)
+
+### Migration procedure (AIOS)
+
+There is no manual migration command. The employee schema migrates **at boot**:
+
+1. `createProductionComposition()` opens the employee pool and runs
+   `PostgresEmployeeTaskRepository.migrate()` before the server accepts traffic.
+2. `src/agents/employee-ai/storage/schema.ts` applies migrations `300`
+   (`employee_tasks`) and `301` (`employee_artifacts`) under the AG-002 advisory
+   lock `SCHEMA_MIGRATION_LOCK_KEY`, each recorded in `employee_schema_migrations`.
+   The operation is idempotent and additive — safe to run on every deploy.
+3. If the connection string is missing while the backend is `durable`, boot
+   fails closed (`Missing required configuration: EMPLOYEE_DATABASE_URL`).
+
+Hub migrations are separate and manual: `npm run db:migrate:deploy`
+(`prisma migrate deploy`), which applies `20261009000000_prompts17_ai_employee_task`
+among others. Never `db push` against production.
+
+### Rollback procedure
+
+- **App rollback:** redeploy the previous image / previous commit. `autoDeploy`
+  is `false`, so rollbacks are explicit.
+- **Schema:** both the Prisma baseline and the employee schema migrations are
+  recorded, so a rollback only needs the app rollback; migrations are additive
+  and forward-compatible with the previous release (the previous code simply
+  ignores the new tables/columns). Destructive down-migrations are deliberately
+  not implemented — restoring older data is a DBA decision from backups.
+- **Storage:** durable tasks/artifacts live in PostgreSQL; a rollback that drops
+  the app version does not lose them. Retention is enforced by the reaper, not
+  by the deploy.
+
+### LLM provider smoke test
+
+Procedure (run only when real credentials are injected as `LLM_API_KEY`):
+
+1. Set `LLM_ENABLED=true`, `LLM_PROVIDER=http`, `LLM_MODEL=<verified model>`,
+   `LLM_BASE_URL=<https provider URL>` and the key via the secret manager.
+2. `npm run validate:env` — must pass (it fails closed when http is enabled
+   without a key).
+3. Boot and confirm `/healthz` reports `llm: { enabled: true, configured: true,
+provider: "http", model: "<model>" }`.
+4. Issue **one** minimal, non-sensitive reasoning call (e.g. a single-token
+   prompt through a local reasoning entry point), bounded by `LLM_TIMEOUT_MS`.
+   Verify the response validates and that `llmMetrics` records one success.
+5. Confirm no log line contains the key (the provider never logs the payload,
+   the Authorization header, or the raw body).
+
+**Prompts20 result: NOT RUN — blocked.** No LLM credentials were available, so
+the smoke test was skipped rather than simulated. Readiness stays
+`llm.provider=disabled`.

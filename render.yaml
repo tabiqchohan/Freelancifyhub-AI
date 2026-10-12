@@ -56,10 +56,49 @@ services:
       - key: MEMORY_DATABASE_URL
         sync: false
 
-      # --- LLM (fail-closed when disabled) ---------------------------------------
+      # --- AI Employee (AG-701) durable storage + retention -----------------------
+      # Prompts19 added PostgreSQL-backed task/artifact storage, restart recovery,
+      # a TTL reaper and bounded concurrency. In production the employee storage
+      # backend MUST be durable (an explicit `in-memory` is rejected at boot), so
+      # status and review artifacts survive a restart. When EMPLOYEE_DATABASE_URL
+      # is left unset it falls back to MEMORY_DATABASE_URL (never a second secret).
+      - key: EMPLOYEE_ENABLED
+        value: 'true'
+      - key: EMPLOYEE_STORAGE_BACKEND
+        value: durable
+      - key: EMPLOYEE_DATABASE_URL
+        sync: false
+      # Writable scratch root owned by the runtime user (see Dockerfile).
+      - key: EMPLOYEE_WORKSPACE_ROOT
+        value: /app/.employee-workspaces
+      # Explicit retention + resource limits (env-driven, never hard-coded).
+      - key: EMPLOYEE_MAX_ACTIVE_TASKS
+        value: '4'
+      - key: EMPLOYEE_MAX_USER_ACTIVE_TASKS
+        value: '1'
+      - key: EMPLOYEE_QUEUE_CAPACITY
+        value: '16'
+      - key: EMPLOYEE_ARTIFACT_TTL_MS
+        value: '86400000'
+      - key: EMPLOYEE_REAP_INTERVAL_MS
+        value: '600000'
+
+      # --- LLM (fail-closed) ------------------------------------------------------
+      # LLM reasoning is DISABLED until a real provider is configured. The AI
+      # Employee (AG-701) is deterministic and does NOT use the LLM, so it runs
+      # with LLM_ENABLED=false. The reasoning agent teams stay unavailable, and
+      # /healthz reports llm.provider=disabled (never a false "ready").
+      #
+      # To enable real reasoning: set LLM_ENABLED=true, LLM_PROVIDER=http,
+      # LLM_MODEL to a model verified against the provider, and LLM_API_KEY as a
+      # dashboard secret. Startup fails closed when http is enabled without a key.
+      # Do NOT enable `mock` in production: it performs no network call and must
+      # never be presented as a production LLM provider.
       - key: LLM_ENABLED
         value: 'false'
       - key: LLM_PROVIDER
         value: mock
+      - key: LLM_MODEL
+        value: mock-model-1.0
       - key: LLM_API_KEY
         sync: false

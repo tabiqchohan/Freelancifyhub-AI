@@ -2,7 +2,13 @@ node_modules
 dist
 coverage
 logs
+# Never ship secrets or local env files into the build context/image. The
+# runtime image only copies `.env.example` explicitly.
 .env
+.env.*
+!.env.example
+# Ephemeral AI Employee scratch space (never baked into an image).
+.employee-workspaces
 .git
 .github
 docs

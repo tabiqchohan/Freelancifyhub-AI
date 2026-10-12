@@ -1,5 +1,9 @@
 import { parseEnv } from '../src/config/env.js';
 import { parseCompiledEnv } from '../src/app/env.js';
+import {
+  parseEmployeeConfig,
+  resolveEmployeeStorageBackend,
+} from '../src/agents/employee-ai/index.js';
 
 /**
  * Prompts15 Phase 6 — deployment gate.
@@ -65,6 +69,27 @@ if (!failed) {
         }
       }
     }
+    // Prompts20 — the AI Employee backend is resolved from its own schema and
+    // fail-closed in production (in-memory is rejected at boot). Validate it here
+    // too so a misconfigured employee storage surfaces at deploy time rather than
+    // only during the first employee request.
+    const employeeConfig = parseEmployeeConfig();
+    if (employeeConfig.EMPLOYEE_ENABLED) {
+      const employeeBackend = resolveEmployeeStorageBackend(employeeConfig);
+      console.info(`AI Employee storage backend = ${employeeBackend}`);
+      if (employeeBackend === 'durable') {
+        const employeeUrl =
+          employeeConfig.EMPLOYEE_DATABASE_URL.trim() || env.memory.MEMORY_DATABASE_URL;
+        if (employeeUrl === undefined || employeeUrl.trim() === '') {
+          console.error(
+            'Invalid environment configuration: EMPLOYEE_STORAGE_BACKEND is durable but neither ' +
+              'EMPLOYEE_DATABASE_URL nor MEMORY_DATABASE_URL is set.',
+          );
+          failed = true;
+        }
+      }
+    }
+
     if (env.base.NODE_ENV === 'production') {
       const warnings: string[] = [];
       if (env.base.AIOS_SERVICE_TOKEN === '') {

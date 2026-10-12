@@ -40,8 +40,13 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package.json ./
 COPY --from=build /app/.env.example ./.env.example
 
-# Runtime directories consumed by the AI ecosystem layers
-RUN mkdir -p /app/logs /app/memory /app/knowledge
+# Runtime directories consumed by the AI ecosystem layers. The AI Employee
+# writes generated sites under EMPLOYEE_WORKSPACE_ROOT (default
+# `.employee-workspaces`, i.e. /app/.employee-workspaces). The container runs as
+# the non-root `node` user, so every directory it must write has to be owned by
+# that user or employee tasks fail with EACCES on the first mkdir.
+RUN mkdir -p /app/logs /app/memory /app/knowledge /app/.employee-workspaces \
+    && chown -R node:node /app/logs /app/memory /app/knowledge /app/.employee-workspaces
 
 EXPOSE 3000
 USER node
