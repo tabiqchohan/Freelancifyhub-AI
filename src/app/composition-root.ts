@@ -289,6 +289,23 @@ function requiredString(env: Environment, key: string): string {
 }
 
 /**
+ * Resolves the PostgreSQL URL for durable knowledge storage (AG-003).
+ *
+ * A dedicated `KNOWLEDGE_DATABASE_URL` wins when set; otherwise the shared
+ * `MEMORY_DATABASE_URL` is reused so durable deployments only need one secret.
+ * Returns `undefined` when neither is configured, letting the caller fail closed
+ * with `MISSING_REQUIRED_CONFIG`.
+ */
+export function resolveKnowledgeDatabaseUrl(env: Environment): string | undefined {
+  const dedicated = env.knowledge.KNOWLEDGE_DATABASE_URL;
+  if (typeof dedicated === 'string' && dedicated.trim().length > 0) {
+    return dedicated;
+  }
+  const shared = env.memory.MEMORY_DATABASE_URL;
+  return typeof shared === 'string' && shared.trim().length > 0 ? shared : undefined;
+}
+
+/**
  * Derives a Sprint 19 platform definition that mirrors a registered runtime
  * agent (Sprint 19 §24). The definition is validated at registration time; the
  * executor claims exactly these capability/permission ids at the gate, so the
@@ -511,7 +528,11 @@ export async function createProductionComposition(
   let knowledgeDurable = false;
 
   if (knowledgeBackend === 'durable') {
-    const connection = env.knowledge.KNOWLEDGE_DATABASE_URL;
+    // The database URL is reused from the shared memory config when a dedicated
+    // knowledge URL is not provided (never duplicated), matching the tools and
+    // employee backends and the documented contract that `durable` requires
+    // `MEMORY_DATABASE_URL`.
+    const connection = resolveKnowledgeDatabaseUrl(env);
     if (typeof connection !== 'string' || connection.trim().length === 0) {
       throw new DiagnosticError('Missing required configuration: KNOWLEDGE_DATABASE_URL', {
         code: 'MISSING_REQUIRED_CONFIG',
