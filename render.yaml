@@ -10,7 +10,12 @@ services:
     plan: starter
     region: oregon # keep colocated with the Neon primary region
     branch: master
-    buildCommand: npm ci && npm run build
+    # NODE_ENV=production (below) applies to the build too, so a plain `npm ci`
+    # omits devDependencies: the `prepare` script then fails (husky: exit 127)
+    # and `npm run build` has no tsc. Force dev deps for the build and skip
+    # install scripts (husky hooks are meaningless in Render's build checkout),
+    # mirroring the Dockerfile's `npm ci --ignore-scripts`.
+    buildCommand: npm ci --include=dev --ignore-scripts && npm run build
     startCommand: npm start
     healthCheckPath: /readyz
     # Shutdown contract: src/index.ts installs SIGTERM/SIGINT handlers that drain
