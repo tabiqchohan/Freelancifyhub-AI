@@ -612,7 +612,7 @@ export async function createProductionComposition(
       id: 'composition-root',
       namespaces: ['default'],
     };
-    await toolManager.register(createCalculatorSpecification(), bootstrapActor, 'default');
+    await toolManager.bootstrap(createCalculatorSpecification(), bootstrapActor, 'default');
   }
 
   const probeToolStorage: () => Promise<{ healthy: boolean }> = async () => {
@@ -1018,7 +1018,7 @@ export async function createProductionComposition(
     };
     for (const specification of employeeTools) {
       if (!toolManager.exists(specification.name)) {
-        await toolManager.register(specification, employeeBootstrapActor, 'default');
+        await toolManager.bootstrap(specification, employeeBootstrapActor, 'default');
       }
     }
   }

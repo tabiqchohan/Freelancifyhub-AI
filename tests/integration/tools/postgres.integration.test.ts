@@ -106,6 +106,36 @@ suite(
       expect(record?.enabled).toBe(true);
     });
 
+    it('bootstraps successfully on restart when calculator definition already exists in Postgres (restart recovery)', async () => {
+      const service1 = new ToolManagerService({
+        repository: repo,
+        config: ToolConfigSchema.parse({ TOOLS_STORAGE_BACKEND: 'durable' }),
+        eventLog: new ToolEventLog(),
+      });
+      await service1.bootstrap(createCalculatorSpecification(), mgr, ns).catch(() => undefined);
+
+      const service2 = new ToolManagerService({
+        repository: repo,
+        config: ToolConfigSchema.parse({ TOOLS_STORAGE_BACKEND: 'durable' }),
+        eventLog: new ToolEventLog(),
+      });
+
+      const def = await service2.bootstrap(createCalculatorSpecification(), mgr, ns);
+      expect(def.name).toBe('calculator');
+
+      const result = await service2.execute(
+        'calculator',
+        { expression: '7 * 6' },
+        {
+          executionId: 'exec-restart',
+          actor: { group: ToolActorGroup.ToolManager, id: 'test', namespaces: [ns] },
+          namespace: ns,
+        },
+      );
+      expect(result.status).toBe('SUCCESS');
+      expect((result.output as { result: number }).result).toBe(42);
+    });
+
     it('enforces the unique (name, version) constraint - fail closed', async () => {
       const name = `dup-${ns}`;
       await repo.save({

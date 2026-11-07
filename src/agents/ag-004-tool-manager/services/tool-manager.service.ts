@@ -158,6 +158,41 @@ export class ToolManagerService {
     }
   }
 
+  /**
+   * Bootstraps a built-in tool specification safely on startup:
+   * - If already registered in memory, returns the definition.
+   * - If already persisted in the repository (e.g. durable database after a restart),
+   *   loads the definition, binds the live handler in memory, without duplicate insert.
+   * - If not present anywhere, registers normally.
+   */
+  async bootstrap(
+    specification: ToolSpecification,
+    actor: ToolActor,
+    namespace: string,
+  ): Promise<ToolDefinition> {
+    this.assertManaged(actor, ToolPermission.Register, namespace);
+    const name = normalizeToolName(specification.name);
+    const version = normalizeToolVersion(specification.version);
+
+    if (this.registry.exists(name)) {
+      const existing = this.registry.get(name);
+      if (existing !== undefined) {
+        return existing;
+      }
+    }
+
+    const live = this.buildLiveTool(specification, name, version);
+    const persisted = await this.repository.getById(live.definition.id);
+
+    if (persisted !== undefined) {
+      await this.registry.register(live);
+      this.emitRegistryEvent(ToolEventType.Registered, live.definition, actor, namespace);
+      return live.definition;
+    }
+
+    return await this.register(specification, actor, namespace);
+  }
+
   /** Updates/replaces an existing tool by name. */
   async update(
     specification: ToolSpecification,
